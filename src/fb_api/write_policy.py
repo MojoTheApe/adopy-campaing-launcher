@@ -592,6 +592,9 @@ def _check_website_labelled_feed(spec: dict, media_kind: str, refuse: Any) -> No
     want = "SINGLE_IMAGE" if media_kind == "images" else "SINGLE_VIDEO"
     if spec.get("ad_formats") != [want]:
         refuse(f"ad_formats must be exactly [{want!r}]")
+    if spec.get(INSTANT_OPTIMIZATION_KEY) != INSTANT_OPTIMIZATION:
+        # ACL-2845 (live 20.11): without it Meta treats Arabic texts as a language asset feed (2490266).
+        refuse(f"a labelled Website feed needs {INSTANT_OPTIMIZATION_KEY} {INSTANT_OPTIMIZATION}")
     rules = spec.get("asset_customization_rules")
     if not (isinstance(rules, list) and len(rules) == 2):
         refuse("two files need exactly two rules")
@@ -711,7 +714,7 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
         refuse("must be an object")
     if not on_ad:
         allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls",
-                   "call_to_action_types", "ad_formats", "asset_customization_rules"}
+                   "call_to_action_types", "ad_formats", "asset_customization_rules", INSTANT_OPTIMIZATION_KEY}
         extra = sorted(set(spec) - allowed)
         if extra:
             refuse(f"key {extra[0]!r} is not allowed")
@@ -732,6 +735,8 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     if len(media) > 1 and any(_has_labelled_text(spec, k) for k in ("bodies", "titles", "descriptions")):
         _check_website_labelled_feed(spec, kind, refuse)  # ACL-2611: тексты с метками правил + два файла
         return
+    if INSTANT_OPTIMIZATION_KEY in spec:
+        refuse(f"key {INSTANT_OPTIMIZATION_KEY!r} is not allowed")  # ACL-2845: only the labelled Website feed sends it
     cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
     for kind_name in ("bodies", "titles", "descriptions"):
         # Длина - отдельная причина: «1-N текстов» скрыла бы её (ACL-1774).

@@ -112,7 +112,7 @@ def _assert_labelled(fs, kind, n_texts, *, instant_form):
     assert "story" not in (main["customization_spec"].get("facebook_positions") or [])
     assert fs["ad_formats"] == [("SINGLE_VIDEO" if kind == "video" else "SINGLE_IMAGE")]
     assert ("call_to_actions" in fs) == instant_form
-    assert (fs.get("optimization_type") == "PLACEMENT") == instant_form
+    assert fs.get("optimization_type") == "PLACEMENT"  # ACL-2845: both labelled feeds, as Ads Manager sends it
 
 
 @pytest.mark.parametrize("extra", [1, 4], ids=["2 texts", "5 texts"])
@@ -150,6 +150,22 @@ def test_website_labelled_main_rule_is_the_empty_catch_all(tmp_path, video):
     rules = _creative(meta)["asset_feed_spec"]["asset_customization_rules"]
     assert rules[0]["customization_spec"] == {}
     assert "story" in rules[1]["customization_spec"]["facebook_positions"]
+
+
+@pytest.mark.parametrize("video", [False, True], ids=["image", "video"])
+def test_website_labelled_feed_sends_optimization_type_placement(tmp_path, video):
+    """ACL-2845, live 20.11 (I03): with the empty default rule Meta still refused 3 Arabic texts + a vertical file
+    with 2490266. Ads Manager (HAR) and the Instant Form send `optimization_type: PLACEMENT`; without it Meta takes
+    the texts for a language asset feed. The policy refuses a labelled Website feed without it."""
+    meta, out = run_website(website(tmp_path, extra=2, video=video), video)
+    assert out.error == "" and out.readback["ok"], out.error or out.mismatches
+    creative = {k: v for k, v in _creative(meta).items() if k in ("name", "object_story_spec", "asset_feed_spec")}
+    assert creative["asset_feed_spec"]["optimization_type"] == "PLACEMENT"
+    assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", creative, on_ad=False) == "adcreatives"
+    bad = copy.deepcopy(creative)
+    del bad["asset_feed_spec"]["optimization_type"]
+    with pytest.raises(wp.WriteRefused, match="optimization_type"):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives", bad, on_ad=False)
 
 
 def test_the_plan_has_no_texts_vertical_refusal(tmp_path):
@@ -304,6 +320,10 @@ def _mutations(cre):
         "thumbnail_not_https": mut(lambda s: s[media][1].__setitem__("thumbnail_url", "http://x")
                                    if media == "videos" else s[media][1].__setitem__("hash", "not-a-hash")),
         "empty_text": mut(lambda s: s["bodies"][1].__setitem__("text", "  ")),
+        # ACL-2845: the Arabic-safe shape - optimization_type PLACEMENT and the empty default rule.
+        "no_optimization_type": mut(lambda s: s.pop("optimization_type")),
+        "main_rule_explicit_placements": mut(lambda s: s["asset_customization_rules"][0].__setitem__(
+            "customization_spec", {"publisher_platforms": ["facebook"], "facebook_positions": ["feed"]})),
     }
 
 

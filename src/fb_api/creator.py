@@ -4555,7 +4555,9 @@ class CampaignCreator:
         первый текст каждого вида - ещё и вертикальная; ссылка несёт обе метки. Площадки правил - как у Website с
         двумя файлами (`rule_positions`). Набор не Dynamic Creative.
         """
-        spec: dict[str, Any] = {}
+        # Live 20.11 (KLD_BFL_I03): without `optimization_type: PLACEMENT` Meta takes Arabic texts for a language
+        # asset feed and refuses with 2490266 "Missing Default Rule"; Ads Manager (HAR) and the Instant Form send it.
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
         media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
         main_l, vert_l = _wpol.instant_labels("link_urls")
         spec["link_urls"] = [{"website_url": plan.link, "adlabels": [{"name": main_l}, {"name": vert_l}]}]
@@ -6236,8 +6238,7 @@ class CampaignCreator:
 
         if labelled:
             # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
-            if instant:
-                check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
             for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
                 if not nonblank(list(base)):
                     continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
