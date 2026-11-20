@@ -955,9 +955,11 @@ def _failure(account: str, exc: BaseException) -> tuple[str, str]:
 
 
 def _telemetry(kind: str, account: str, ok: bool, took_s: float, sess_notes: dict,
-               error: str = "", stop: str = "") -> None:
+               error: str = "", stop: str = "", extra: dict | None = None) -> None:
     event = {"event": "fb_api_read", "kind": kind, "source": "api", "ok": ok,
              "took_s": round(took_s, 1), "calls": sess_notes.get("calls", 0)}
+    if extra:
+        event.update(extra)    # ACL-2850: wait_s / capture_s / call_s у чтений списков
     if error:
         event["error"] = error[:200]
     if stop:

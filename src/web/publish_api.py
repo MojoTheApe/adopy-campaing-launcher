@@ -656,6 +656,7 @@ class ApiPublisher:
                                   stage="while checking the ad account") from exc
         self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
                                            act=self.act)
+        _fill_pixel_cache(account_label, self._facts)      # ACL-2850
         self.progress("ad account verified")
         self._settle_auth_probe()
 
@@ -1228,6 +1229,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account", stage="while checking the ad account") from exc
+        _fill_pixel_cache(account_label, pub._facts)
         pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
                                           act=sess.act)
         try:
@@ -1257,6 +1259,13 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             # управляет вытеснение по простою; таймер `plan_keep_open_s()` — только при выключенном.
             sess.keep_convenience = _keep_profiles_open()
     return results
+
+
+def _fill_pixel_cache(account_label: str, facts: Any) -> None:
+    """ACL-2850: the pixel list was just read in this session; an empty/expired cache takes it (no extra call)."""
+    from src.web.account_pixels import fill_from_facts
+
+    fill_from_facts(account_label, facts)
 
 
 def _record_facts(resolver: Any) -> None:
