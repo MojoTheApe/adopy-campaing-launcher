@@ -350,7 +350,7 @@ def _open_read(key, account):
     from src.analysis_agent import campaign_inventory as ci
 
     blocks.mark_person_open(key)
-    assert ar._held_blocks(account, "open") is False, "the queue lets a person's Open pass a code-31 hold"
+    assert ar._held_blocks(account, "open", True) is False, "a person's forced Open passes the hold"
     with blocks.problem_action("attention"):
         return ci._run_read(account, trigger="open", persist=False)
 
@@ -387,12 +387,14 @@ def test_open_that_meta_still_refuses_restores_the_hold(world, monkeypatch):  # 
 def test_an_open_that_nobody_pressed_and_other_holds_stay_held(world, monkeypatch):  # noqa: F811
     key = api._as._profile_key(ACCOUNT)
     _hold(key=key)
-    assert ar._held_blocks(ACCOUNT, "open") is True, "no press, no pass"
+    assert ar._held_blocks(ACCOUNT, "open") is True, "an unforced open passes no hold"
+    assert ar._held_blocks(ACCOUNT, "open", force=True) is False, "a person's Open acts as Retry"
     api._COOLDOWN.clear()
     blocks.clear(key)
     _hold(g.PolicyBlocked("p", code=368), key=key)
     blocks.mark_person_open(key)
-    assert ar._held_blocks(ACCOUNT, "open") is True, "a policy block is never passed by Open"
+    assert ar._held_blocks(ACCOUNT, "open") is True, "an unforced open passes no hold"
+    assert ar._held_blocks(ACCOUNT, "open", force=True) is False, "a person's forced Open reads through a policy block too"
     blocks._PERSON_OPEN.clear()
 
 
@@ -503,7 +505,8 @@ def test_open_profile_lifts_only_the_frozen_tab_hold(monkeypatch, keyed):
     blocks._PERSON_OPEN.clear()
     _hold(g.PolicyBlocked("p", code=368))
     warm_api.request_status_read(LABEL)
-    assert blocks.is_held(KEY), "Open never lifts a policy block"
+    # ACL-2661: the stub queue never reads; the hold stays until a read passes (a real forced Open acts as Retry)
+    assert blocks.is_held(KEY), "the request alone lifts nothing; a healthy read does"
     blocks._PERSON_OPEN.clear()
 
 

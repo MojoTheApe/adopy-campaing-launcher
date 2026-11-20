@@ -216,3 +216,31 @@ def test_pixel_picker_failed_then_refresh(page):
     page.route('**/api/account-pixels', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pixels': PIXELS}))
     page.evaluate("cbRefreshPixels(document.querySelector('.cb-slot'), true)")
     page.wait_for_function("document.querySelector('[data-pixel-note]').textContent.includes('2 pixels')")
+
+
+def test_empty_answer_is_not_cached_and_next_read_rereads(monkeypatch, tmp_path):
+    from src.web import account_pixels as px
+    from src.analysis_agent import account_spend as accounts
+    monkeypatch.setattr(accounts, 'serialized_browser', lambda **kw: lambda fn: fn)
+    monkeypatch.setattr(px, '_cache_path', lambda: tmp_path / 'account_pixels_cache.json')
+    calls = []
+
+    def reader(account):
+        calls.append(account)
+        return {'ok': True, 'state': 'empty', 'pixels': []}
+    monkeypatch.setattr(px, '_read_in_session', reader)
+    assert px.read_pixels('Demo')['state'] == 'empty'
+    assert px.cached_only('Demo')['state'] == 'not_loaded'
+    # Пиксель подключили в Business Settings: следующее чтение идёт в профиль заново.
+    monkeypatch.setattr(px, '_read_in_session', lambda a: {'ok': True, 'state': 'ready', 'pixels': [{'id': '1', 'name': 'A'}]})
+    assert px.read_pixels('Demo')['state'] == 'ready'
+    assert len(calls) == 1
+    assert px.cached_only('Demo')['state'] == 'ready'
+
+
+def test_pixel_picker_empty_list_says_no_pixel_found(page):
+    _install(page, {'ok': True, 'state': 'empty', 'pixels': [], 'message': 'This ad account has no pixel/dataset.'})
+    page.wait_for_function("document.querySelector('[data-pixel-note]').textContent.includes('no pixel')")
+    first = page.locator('.cb-pixel-select').first.locator('option').first.inner_text()
+    assert first == 'No pixel found on this account'
+    assert 'only pixel' not in first

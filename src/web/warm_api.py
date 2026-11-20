@@ -472,6 +472,33 @@ def _run_open(job_id: str, labels: list[str], confirm_reopen: bool = False) -> N
                 _ACTIVE_JOB = ""
 
 
+def note_tab_lock(label: str, *, urls=None) -> bool:
+    """ACL-2653: a just-opened (or adopted) profile whose tab is on facebook.com/checkpoint/... is a Facebook lock.
+
+    Reads only the tab addresses from the profile's local debugging port; no Graph call. Writes a hold
+    (person-level, no Graph code) and returns True. This also covers a profile the owner opened by hand."""
+    try:
+        from src.analysis_agent import account_spend
+        from src.fb_api import account_blocks, warm
+
+        pid = _profile_id(label)
+        if urls is None:
+            sess = _registry().session(pid) if pid else None
+            urls = warm.local_page_targets(getattr(sess, "port", 0)) if sess is not None else []
+        key = account_spend._profile_key(label)  # noqa: SLF001
+        # ACL-2841: a tab is an address or an `(address, title)` pair; the title is Meta's own text for the lock.
+        pairs = [(u, "") if isinstance(u, str) else (str(u[0]), str(u[1])) for u in urls]
+        return any([account_blocks.note_tab_url(key, label, u, "Open profile", t) for u, t in pairs])
+    except Exception:  # noqa: BLE001 - the open already worked; a failed look is only "not detected"
+        log.debug("The profile tab was not checked for a Facebook lock", exc_info=True)
+        return False
+
+
+#: label -> why the Open's status read was not queued (empty: it was). Read once by `_on_open_result`.
+_SKIP_REASON: dict[str, str] = {}
+_SKIP_LOCK = threading.Lock()
+
+
 def request_status_read(label: str) -> str:
     """ACL-2419: после удачного Open — одна заявка в существующую очередь обновления.
 
@@ -492,7 +519,11 @@ def request_status_read(label: str) -> str:
         except Exception:  # noqa: BLE001
             log.debug("could not mark the person's open", exc_info=True)
         got = account_refresh.queue().request(label, "open", force=True)
-        return "queued" if got.get("queued") else "skipped"
+        reason = str(got.get("reason") or "")
+        with _SKIP_LOCK:
+            _SKIP_REASON[label] = "" if got.get("queued") else reason
+        # A read that is already running for this account answers the Open as well.
+        return "queued" if got.get("queued") or reason == "running" else "skipped"
     except Exception:  # noqa: BLE001 — открытие профиля уже удалось, статус вторичен
         log.exception("Could not queue the status read after opening %s", label)
         return "skipped"
@@ -502,7 +533,12 @@ def _on_open_result(job_id: str, label: str, result: dict) -> None:
     result = dict(result)
     # Только удачное «окно поднято»: открытие руками, закрытие и отказ ничего не ставят в очередь.
     if result.get("ok"):
+        # ACL-2653: a person pressed Open: the account's status is read now, whatever the queue, a halt or a hold.
+        # A tab on a Facebook lock is recorded from its address first; the read then shows Meta's refusal and its time.
+        result["locked"] = bool(note_tab_lock(label))
         result["status_read"] = request_status_read(label)
+        with _SKIP_LOCK:
+            result["status_reason"] = _SKIP_REASON.pop(label, "")
     else:
         result["status_read"] = "n/a"
     _set_result(job_id, label, result)

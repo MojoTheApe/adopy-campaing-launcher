@@ -160,7 +160,7 @@ def test_action_names_and_nesting():
     assert blocks.current_action() == "a read"
     assert [blocks.ACTION_TEXT[k] for k in ("schedule", "action", "retry", "check_plan", "command")] == [
         "a scheduled read", "a refresh after your action", "Retry", "Check plan", "a campaign change"]
-    assert blocks.action_for_trigger("open") == "attention" and blocks.action_for_trigger("schedule:08:00".split(":")[0]) == "schedule"
+    assert blocks.action_for_trigger("open") == "open" and blocks.action_for_trigger("schedule:08:00".split(":")[0]) == "schedule"
 
 
 def test_the_1732_case_a_background_read_froze_and_a_publish_at_1734_explains_itself(monkeypatch):

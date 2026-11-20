@@ -142,7 +142,7 @@ def classify_stop_url(path: str) -> str:
     low = str(path or "").lower()
     if low.startswith(("/login", "/recover")):
         return "login"
-    if "/checkpoint" in low or "two_step" in low or "two_factor" in low or "/hacked-protection" in low:
+    if low == "/checkpoint" or low.startswith("/checkpoint/") or "two_step" in low or "two_factor" in low or "/hacked-protection" in low:
         return "checkpoint"
     return ""
 
