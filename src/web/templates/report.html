@@ -959,6 +959,28 @@
     .cb-field-save-btn:hover { background: var(--accent-strong); }
     .cb-field-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .cb-field-status { font-size: var(--adopy-text-sm); min-width: 4rem; }
+    /* Лендинги аккаунта из JCloudFront (ACL-2852) */
+    .cb-landings-val { flex-direction: column; align-items: stretch; gap: 0.4rem; position: relative; }
+    .cb-landing-chosen { display: flex; align-items: center; gap: 0.5rem; font-size: var(--adopy-text-table); }
+    .cb-landing-chosen-name { font-weight: 600; min-width: 9rem; }
+    .cb-landing-chosen-meta { color: var(--muted); font-size: var(--adopy-text-sm); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cb-landing-chosen-path { flex: 1; }
+    .cb-landing-chosen .cb-landing-pct { width: 4rem; flex: 0 0 4rem; text-align: right; }
+    .cb-landing-remove { background: none; border: none; color: var(--bad); cursor: pointer; font-size: var(--adopy-text-sm); }
+    .cb-landings-actions, .cb-landing-search-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .cb-landing-secondary { background: transparent; color: var(--text); border: 1px solid var(--border-strong); }
+    .cb-landing-secondary:hover { background: var(--bg-elev); }
+    .cb-landing-popup { max-width: 34rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); max-height: 18rem; overflow-y: auto; }
+    .cb-landing-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); font-size: var(--adopy-text-table); }
+    .cb-landing-row:last-child { border-bottom: none; }
+    .cb-landing-row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .cb-landing-main { flex: 1; min-width: 0; }
+    .cb-landing-title { font-weight: 600; }
+    .cb-landing-sub { color: var(--muted); font-size: var(--adopy-text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cb-landing-note { color: var(--muted); font-size: var(--adopy-text-sm); padding: 0.35rem 0.6rem; }
+    /* Справа от списка, а не поверх него: иначе закрывает кнопки Select и Open. */
+    .cb-landing-preview { position: absolute; left: 35rem; top: 4.2rem; z-index: 30; width: 22rem; height: 30rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); box-shadow: 0 8px 24px rgba(0,0,0,.25); overflow: hidden; pointer-events: none; }
+    .cb-landing-preview iframe { width: 100%; height: 100%; border: 0; background: #fff; }
     /* Account map field rows */
     .cb-map-field-row {
       display: flex; align-items: center; gap: 0.4rem; flex-wrap: nowrap;
@@ -5626,6 +5648,30 @@ function dashRefreshUpdateCheck() {
         </div>
       </div>
 
+      {# Landings row (ACL-2852): pick up to 3 landings from JCloudFront for this account #}
+      <div class="cb-preflight-row cb-landings" data-landings-account="{{ acc_label | e }}">
+        <span class="cb-preflight-label">Landings</span>
+        <div class="cb-preflight-val cb-landings-val">
+          <div data-landings-list></div>
+          <div class="cb-landings-actions">
+            <button type="button" class="cb-field-save-btn" data-landings-open>Pick landing</button>
+            <button type="button" class="cb-field-save-btn cb-landing-secondary" disabled
+                    title="Generating a landing comes with the Keitaro connection">Generate</button>
+            <span class="cb-field-status" data-landings-status></span>
+          </div>
+          <div data-landings-search hidden>
+            <div class="cb-landing-search-row">
+              <input type="text" class="cb-input cb-input-url" data-landings-query
+                     placeholder="Variant, /path or full URL">
+              <button type="button" class="cb-field-save-btn" data-landings-go>Search</button>
+              <button type="button" class="cb-field-save-btn cb-landing-secondary" data-landings-close>Close</button>
+            </div>
+            <div class="cb-landing-popup" data-landings-results hidden></div>
+          </div>
+          <div class="cb-landing-preview" data-landings-preview hidden></div>
+        </div>
+      </div>
+
       {# Account config row #}
       <div class="cb-preflight-row" style="align-items:center">
         <span class="cb-preflight-label">Account config</span>
@@ -5789,7 +5835,8 @@ function dashRefreshUpdateCheck() {
   {% for row in c.variants %}
     {% set breakdown_prev = compare.breakdown(c.country, 'variants', row) if compare else false %}
     <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
-      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% if c.open_recs %} <button type="button" class="cb-field-save-btn" style="margin-left:0.4rem"
+          onclick="cbUseLandingFromStats({{ cid | tojson | forceescape }}, {{ row.variant | tojson | forceescape }})">Use landing</button>{% endif %}{% endif %}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
       {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else ''), prev=breakdown_prev) }}
       <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, breakdown_prev.get('net') if breakdown_prev else none)) }}{% endif %}</td>
     </tr>
@@ -27228,6 +27275,7 @@ window.cwWorkbench = (function () {
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
 <script src="/static/account_pages.js"></script>
 <script src="/static/account_pixels.js"></script>
+<script src="/static/account_landings.js"></script>
 <script src="/static/warm_sessions.js"></script>
 <script src="/static/warm_auto.js"></script>
 <script src="/static/recent_runs.js"></script>
