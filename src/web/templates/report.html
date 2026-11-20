@@ -15550,6 +15550,12 @@ async function amapSend(body, msgEl, errorAnchor, onOk) {
   });
   var data = null;
   try { data = await r.json(); } catch (e) { data = null; }
+  if (data && data.ok && data.changed === false && data.reason && body.action === 'add') {
+    /* ACL-2853: добавление ничего не изменило — причина рядом с кнопкой, без перезагрузки того же экрана */
+    if (msgEl) { msgEl.textContent = data.reason; msgEl.className = 'amap-msg bad'; }
+    else if (errorAnchor) aclInlineError(errorAnchor, data.reason);
+    return false;
+  }
   if (data && data.ok) {
     /* ACL-2560: Home перерисовывает себя сам (onOk), остальные места — перезагрузка как раньше */
     if (typeof onOk === 'function') { await onOk(); return true; }

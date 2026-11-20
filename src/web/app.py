@@ -615,6 +615,8 @@ def _build_account_map_view(
     # stay whole (profiles, ids) for lookups; only the lists below are narrowed.
     from src.web import account_buyer as _ab
 
+    from src.web.buyer import get_selected_cm as _selected_cm
+
     _tags = _ab.tags()
     _mine = lambda label: _ab.is_visible(label, tag_map=_tags)  # noqa: E731
     known = [k for k in map_entries if _mine(k)]
@@ -704,8 +706,9 @@ def _build_account_map_view(
         rows = []
         _placed = account_links.accounts_for("country", stored)
         _own = [a for a in _placed if _mine(a)]
-        if _placed and not _own:
-            # The country holds only other buyers' accounts: not this buyer's map.
+        if _placed and not _own and not account_links.country_marked_for(stored, _selected_cm()):
+            # The country holds only other buyers' accounts: not this buyer's map,
+            # unless this buyer added the country themselves (ACL-2853).
             continue
         for label in _own:
             excel = _numbers(country_name, label) or stats.get(label) or {}
@@ -5934,6 +5937,7 @@ async def account_links_edit(request: Request) -> JSONResponse:
     also how somebody notices that a country still has money running through it.
     """
     from src.web import account_links
+    from src.web.buyer import get_selected_cm
 
     try:
         data = await request.json()
@@ -5956,18 +5960,27 @@ async def account_links_edit(request: Request) -> JSONResponse:
             # Страна без аккаунтов: сначала заводим место, потом подключаем в
             # него аккаунт из Multilogin. Обратный порядок требовал выбрать
             # аккаунт из уже известных — то есть до подключения нового.
-            return JSONResponse({"ok": True, "changed": account_links.add_value(kind, value)})
+            changed = account_links.add_value(kind, value, buyer=get_selected_cm())
+            if changed:
+                return JSONResponse({"ok": True, "changed": True})
+            # ACL-2853: «ничего не изменилось» не должно кончаться молчаливой
+            # перезагрузкой того же экрана — страница покажет причину у кнопки.
+            return JSONResponse({
+                "ok": True, "changed": False,
+                "reason": f"{value} is already on your account map. Nothing was added.",
+            })
 
         if action == "link":
             if not account:
                 return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
-            added = account_links.link(account, kind, value)
+            added = account_links.link(account, kind, value, buyer=get_selected_cm())
             return JSONResponse({"ok": True, "changed": added})
 
         if action in ("unlink", "close"):
             spending = await _in_report_pool(
                 _accounts_spending_today,
-                [account] if action == "unlink" else account_links.accounts_for(kind, value),
+                [account] if action == "unlink"
+                else account_links.accounts_visible_for(kind, value, get_selected_cm()),
             )
             if spending and not confirm:
                 names = ", ".join(spending[:4]) + ("…" if len(spending) > 4 else "")
@@ -5988,7 +6001,7 @@ async def account_links_edit(request: Request) -> JSONResponse:
             # у пустой страны их нет, и ответ «ничего не поменялось» после
             # её удаления был бы неправдой.
             existed = any(v.lower() == value.lower() for v in account_links.all_values(kind))
-            freed = account_links.unlink_all_for(kind, value)
+            freed = account_links.unlink_all_for(kind, value, buyer=get_selected_cm())
             return JSONResponse({"ok": True, "changed": existed, "freed": freed})
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)

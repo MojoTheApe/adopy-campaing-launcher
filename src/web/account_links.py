@@ -38,6 +38,8 @@ from config.paths import _replace_when_free, get_ad_account_map_path, get_local_
 
 FIELDNAMES = ["account_name", "kind", "value"]
 KINDS = ("country", "asset")
+#: ACL-2853: необязательная четвёртая колонка — чей байер завёл пустую страну.
+BUYER_COLUMN = "buyer"
 
 _SEEDED_MARK = ".account_links.seeded"
 
@@ -73,12 +75,22 @@ def load() -> list[dict[str, str]]:
             # аккаунтов в ней пока нет. Без неё пустой стране негде лежать, и
             # завести её можно было только вместе с первым аккаунтом.
             if kind in KINDS and value:
-                rows.append({"account_name": account, "kind": kind, "value": value})
+                item = {"account_name": account, "kind": kind, "value": value}
+                # ACL-2853: метка байера есть только у пустой страны, которую
+                # он завёл сам; у старых файлов колонки нет, и строка выглядит
+                # как раньше.
+                buyer = _norm(row.get(BUYER_COLUMN))
+                if buyer:
+                    item["buyer"] = buyer
+                rows.append(item)
         return rows
 
 
 def _write(rows: list[dict[str, str]]) -> None:
-    _write_csv(links_path(), FIELDNAMES, rows)
+    # Колонку buyer пишем только когда есть что в ней хранить: файл без меток
+    # остаётся байт в байт таким, каким его писали раньше.
+    fields = FIELDNAMES + [BUYER_COLUMN] if any(r.get(BUYER_COLUMN) for r in rows) else FIELDNAMES
+    _write_csv(links_path(), fields, rows)
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -111,7 +123,51 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) ->
         temp.unlink(missing_ok=True)
 
 
-def add_value(kind: str, value: str) -> bool:
+def _same_country(a: str, b: str) -> bool:
+    """«KW» и «Kuwait» — одна страна; регистр не важен."""
+    a, b = _norm(a).casefold(), _norm(b).casefold()
+    if a == b:
+        return True
+    try:
+        from src.web.app import _country_code
+
+        ca, cb = _country_code(a).casefold(), _country_code(b).casefold()
+        return bool(ca) and ca == cb
+    except Exception:  # pragma: no cover - без таблицы кодов сравниваем имена
+        return False
+
+
+def _shown_to(row: dict[str, str], buyer: str) -> bool:
+    """Видна ли эта строка на карте байера: его аккаунт или его пустая страна."""
+    from src.web import account_buyer
+
+    if row["account_name"]:
+        return account_buyer.is_visible(row["account_name"], selected=buyer)
+    return not row.get(BUYER_COLUMN) or _norm(row[BUYER_COLUMN]).casefold() == buyer.casefold()
+
+
+def country_marked_for(value: str, buyer: str) -> bool:
+    """Заведена ли страна именно этим байером (явная метка, не старая безымянная)."""
+    buyer = _norm(buyer).casefold()
+    return bool(buyer) and any(
+        r["kind"] == "country" and not r["account_name"]
+        and _norm(r.get(BUYER_COLUMN)).casefold() == buyer
+        and r["value"].lower() == _norm(value).lower()
+        for r in load()
+    )
+
+
+def accounts_visible_for(kind: str, value: str, buyer: str | None) -> list[str]:
+    """Аккаунты страны, видимые байеру (все, если байер не задан)."""
+    names = accounts_for(kind, value)
+    if not buyer or _norm(kind).lower() != "country":
+        return names
+    from src.web import account_buyer
+
+    return [a for a in names if account_buyer.is_visible(a, selected=buyer)]
+
+
+def add_value(kind: str, value: str, buyer: str | None = None) -> bool:
     """Завести страну (или ассет) без аккаунтов. False — если уже есть.
 
     Пустая группа копится и забывается — довод, по которому раньше страну
@@ -120,6 +176,11 @@ def add_value(kind: str, value: str) -> bool:
     Multilogin, то есть порядок «сначала страна, потом аккаунт» был запрещён
     без всякой на то причины. Пустая страна видна на экране и закрывается
     одной кнопкой — этого достаточно, чтобы она не потерялась.
+
+    ACL-2853: с ``buyer`` вопрос «уже есть?» задаётся про карту этого байера.
+    Страна, где лежат только чужие аккаунты (в любом написании — KW и Kuwait),
+    для него ещё не заведена: ей записывается метка с его именем. Чужие
+    аккаунты и карты других байеров от этого не меняются.
     """
     kind = _norm(kind).lower()
     if kind not in KINDS:
@@ -128,15 +189,24 @@ def add_value(kind: str, value: str) -> bool:
     if not value:
         raise ValueError("value is required")
     rows = load()
-    if any(r["kind"] == kind and r["value"].lower() == value.lower() for r in rows):
-        return False
-    rows.append({"account_name": "", "kind": kind, "value": value})
+    buyer = _norm(buyer)
+    if kind != "country" or not buyer:
+        if any(r["kind"] == kind and r["value"].lower() == value.lower() for r in rows):
+            return False
+        rows.append({"account_name": "", "kind": kind, "value": value})
+    else:
+        if any(r["kind"] == "country" and _same_country(r["value"], value) and _shown_to(r, buyer)
+               for r in rows):
+            return False
+        rows.append({"account_name": "", "kind": kind, "value": value, BUYER_COLUMN: buyer})
     _write(rows)
     return True
 
 
-def link(account: str, kind: str, value: str) -> bool:
-    """Add one link. Returns False if it was already there."""
+def link(account: str, kind: str, value: str, buyer: str | None = None) -> bool:
+    """Add one link. Returns False if it was already there.
+
+    ``buyer`` (ACL-2853): пустую страну другого байера новый аккаунт не стирает."""
     kind = _norm(kind).lower()
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
@@ -148,9 +218,12 @@ def link(account: str, kind: str, value: str) -> bool:
         return False
     rows.append({"account_name": account, "kind": kind, "value": value})
     # Заглушка больше не нужна: у страны появился настоящий аккаунт.
+    mine = _norm(buyer).casefold()
     rows = [
         r for r in rows
-        if r["account_name"] or not (r["kind"] == kind and r["value"].lower() == value.lower())
+        if r["account_name"]
+        or not (r["kind"] == kind and r["value"].lower() == value.lower())
+        or (mine and _norm(r.get(BUYER_COLUMN)).casefold() not in ("", mine))
     ]
     _write(rows)
     return True
@@ -178,21 +251,26 @@ def unlink(account: str, kind: str, value: str) -> bool:
     return True
 
 
-def unlink_all_for(kind: str, value: str) -> list[str]:
+def unlink_all_for(kind: str, value: str, buyer: str | None = None) -> list[str]:
     """Drop a country or asset entirely. Returns the accounts that were on it.
 
     They are what falls into Available accounts — still configured, still
     connected to their Multilogin profile, just not placed anywhere. The caller
     is expected to have warned about any that are still running campaigns.
+
+    ACL-2853: с ``buyer`` закрывается только карта этого байера — его аккаунты
+    и его пустая страна. Аккаунты других байеров в той же стране остаются.
     """
     kind, value = _norm(kind).lower(), _norm(value)
     rows = load()
-    freed = [
-        r["account_name"]
-        for r in rows
-        if r["kind"] == kind and _norm(r["value"]).lower() == value.lower() and r["account_name"]
-    ]
-    kept = [r for r in rows if not (r["kind"] == kind and _norm(r["value"]).lower() == value.lower())]
+
+    def _goes(r: dict[str, str]) -> bool:
+        if not (r["kind"] == kind and _norm(r["value"]).lower() == value.lower()):
+            return False
+        return _shown_to(r, buyer) if (buyer and kind == "country") else True
+
+    freed = [r["account_name"] for r in rows if _goes(r) and r["account_name"]]
+    kept = [r for r in rows if not _goes(r)]
     if len(kept) != len(rows):
         _write(kept)
     return sorted(set(freed))
