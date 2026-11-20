@@ -472,23 +472,47 @@ def _run_open(job_id: str, labels: list[str], confirm_reopen: bool = False) -> N
                 _ACTIVE_JOB = ""
 
 
-def note_tab_lock(label: str, *, urls=None) -> bool:
-    """ACL-2653: a just-opened (or adopted) profile whose tab is on facebook.com/checkpoint/... is a Facebook lock.
+def _local_tabs(label: str, pid: str):
+    """ACL-2847: `(address, title)` of the open tabs of an already running profile, from its local debugging port only.
 
-    Reads only the tab addresses from the profile's local debugging port; no Graph call. Writes a hold
-    (person-level, no Graph code) and returns True. This also covers a profile the owner opened by hand."""
+    The registered session's port, else one local process look (no network). A profile that is not running: nothing."""
+    from src.fb_api import warm
+
+    reg = _registry()
+    sess = reg.session(pid) if pid else None
+    port = getattr(sess, "port", 0) if sess is not None else 0
+    if not port and pid:
+        try:
+            kind, found = reg._scan([pid]).get(pid, ("unknown", None))  # noqa: SLF001
+            port = int(found or 0) if kind == "port" else 0
+        except Exception:  # noqa: BLE001 - no look is "not detected"
+            port = 0
+    return warm.local_page_targets(port) if port else []
+
+
+def note_tab_lock(label: str, *, urls=None, action: str = "Open profile") -> bool:
+    """ACL-2653/2847: a running profile whose tab is on facebook.com/checkpoint/... or the login page is held.
+
+    Reads only the tab addresses and titles from the profile's local debugging port; no Graph call, no navigation.
+    Writes a hold (person-level, no Graph code) and returns True. This also covers a profile the owner opened by hand
+    or that fell to the login page while it stayed open. When the tabs are readable and none is a lock any more, a
+    login-page hold ends (the person logged in): the next Publish goes on without a separate Retry."""
     try:
         from src.analysis_agent import account_spend
-        from src.fb_api import account_blocks, warm
+        from src.fb_api import account_blocks
 
         pid = _profile_id(label)
         if urls is None:
-            sess = _registry().session(pid) if pid else None
-            urls = warm.local_page_targets(getattr(sess, "port", 0)) if sess is not None else []
+            urls = _local_tabs(label, pid)
         key = account_spend._profile_key(label)  # noqa: SLF001
         # ACL-2841: a tab is an address or an `(address, title)` pair; the title is Meta's own text for the lock.
         pairs = [(u, "") if isinstance(u, str) else (str(u[0]), str(u[1])) for u in urls]
-        return any([account_blocks.note_tab_url(key, label, u, "Open profile", t) for u, t in pairs])
+        found = any([account_blocks.note_tab_url(key, label, u, action, t) for u, t in pairs])
+        if not found and pairs:
+            held = account_blocks.hold_of(key)
+            if held and held.get("kind") == "checkpoint" and held.get("page") == "login":
+                account_blocks.clear(key, "relogin", kind="checkpoint")
+        return found
     except Exception:  # noqa: BLE001 - the open already worked; a failed look is only "not detected"
         log.debug("The profile tab was not checked for a Facebook lock", exc_info=True)
         return False
@@ -590,6 +614,21 @@ def close_profiles(labels: Any, confirm: bool) -> tuple[dict, int]:
     return {"results": results}, 200
 
 
+def login_refusal(label: str) -> str:
+    """ACL-2847: the refusal text when the profile of this account is held as logged out of Facebook, else an empty string."""
+    try:
+        from src.analysis_agent import account_spend
+        from src.fb_api import account_blocks
+
+        key = account_spend._profile_key(label)  # noqa: SLF001
+        if not account_blocks.is_login_hold(account_blocks.hold_of(key)):
+            return ""
+        got = account_blocks.refusal(key, label, "publish")
+        return got[0] if got else ""
+    except Exception:  # noqa: BLE001 - an unreadable hold file never stops an action
+        return ""
+
+
 def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,int]:
     """Prepare only the physical profile; the original read/write action has not started."""
     refused = _guard()
@@ -617,6 +656,11 @@ def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,i
                 return {"account":label,**result},200 if result.get("ok") else 409
             with opening_closed_profile():     # ACL-2262: /connection/prepare comes before Publish only
                 prepare_existing(reg,entry,label)
+            # ACL-2847: a profile that is open but sits on the Facebook login page stops the action here, at once.
+            note_tab_lock(label, action="Publish")
+            stop = login_refusal(label)
+            if stop:
+                return {"ok":False,"account":label,"code":"account_blocked","error":stop},409
         return {"ok":True,"account":label},200
     except Exception as exc:
         from src.fb_ads_rpa.profile_lease import ProfileLeaseError
