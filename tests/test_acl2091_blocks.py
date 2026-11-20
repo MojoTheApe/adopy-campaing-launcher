@@ -51,7 +51,12 @@ def test_stops_that_need_a_person_become_persisted_holds_without_a_timer(stop, k
     held = blocks.hold_of(KEY)
     assert held["kind"] == kind and held["code"] == code and held["label"] == "B97"
     msg, err = blocks.refusal(KEY, "B97", "publish")
-    assert err == "account_blocked" and "Nothing was created." in msg
+    assert err == "account_blocked"
+    # ACL-2847: a logged-out profile has one text everywhere and no "Nothing was created." suffix.
+    if kind == "logged_out":
+        assert msg == "Logged out of Facebook. Open the profile, log in to Ads Manager, then publish again."
+    else:
+        assert "Nothing was created." in msg
     assert "min" not in msg.lower().replace("minutes", "") or kind == "policy_block"   # no "waiting about N min"
     assert "waiting" not in msg.lower()
     if kind == "policy_block":
