@@ -21262,7 +21262,11 @@ window.aclPrepareConnection = function (account) {
     // Not an API-bound dashboard, or the profile is busy with another operation: the action
     // itself (queue / duplicate answer / its own wait) deals with it as it did before preparation.
     if (data && (data.code === 'not_loopback' || data.code === 'busy')) return {ok: true, skipped: data.code};
-    if (!data.ok) throw new Error(data.error || data.message || 'Connection preparation failed');
+    if (!data.ok) {
+      var refused = new Error(data.error || data.message || 'Connection preparation failed');
+      refused.code = data.code || '';   // ACL-2847: an account stop is shown in the server's own words
+      throw refused;
+    }
     return data;
   });
 };
@@ -22226,7 +22230,9 @@ function cbPostPublish(fd, onPrepared) {
     (window.aclPrepareConnection ? window.aclPrepareConnection(fd.get('account_label')) : Promise.resolve());
   // A refused or unanswered preparation means nothing was sent: say so for this account only.
   prepare = prepare.catch(function (err) {
-    var stop = new Error('Not submitted: ' + String((err && err.message) || 'the connection could not be prepared'));
+    // ACL-2847: a profile logged out of Facebook says so in the same words as the account row, nothing added.
+    var plain = err && err.code === 'account_blocked';
+    var stop = new Error((plain ? '' : 'Not submitted: ') + String((err && err.message) || 'the connection could not be prepared'));
     stop.cbNotSubmitted = true;
     throw stop;
   });
@@ -23781,7 +23787,14 @@ function _doCbPublish(form) {
       preparing = false;
       if (window.cbPublishPending) window.cbPublishPending.end();
       open({ entries: entries, running: running, pf: r[1], opts: opts, reselect: reselect, openedAt: Date.now() });
-    }, function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); });
+    }, function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); cbReviewFailed(); })
+      .catch(function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); cbReviewFailed(); });
+  }
+
+  /* ACL-2847: Publish never ends silently: if the review could not be prepared or opened, the buyer is told. */
+  function cbReviewFailed() {
+    aclInlineError(document.querySelector('.cbd-publish-all') || document.querySelector('.cb-publish-btn'),
+      'The review could not be opened. Press Publish again; if it repeats, reload the page (F5).');
   }
 
   function open(m) {
@@ -23884,7 +23897,12 @@ function _doCbPublish(form) {
       return;
     }
     var run = cbPublishRun(model.opts.onProgress || (window.cbTree ? window.cbTree.showQueue : null));
-    if (!run) return;
+    if (!run) {
+      // ACL-2847: the tab lost the status of its previous run: say so instead of doing nothing.
+      aclAlert('The dashboard may have restarted. Reload the page (F5) and press Publish again.',
+        { title: 'The status of the previous run in this tab is unknown' });
+      return;
+    }
     var m = model;
     m.closeReason = 'confirm';
     if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], null);

@@ -439,6 +439,17 @@ def _next_step(kind: str, code: int | None, *, mins: int = 0, replaceable: bool 
     return f"Waiting about {max(1, mins)} min."
 
 
+#: ACL-2847: the one text of a profile that is logged out of Facebook (a login-page tab or a Graph logout).
+LOGIN_REASON = "Logged out of Facebook."
+LOGIN_NEXT = "Open the profile, log in to Ads Manager, then publish again."
+
+
+def is_login_hold(held: dict[str, Any] | None) -> bool:
+    """ACL-2847: a hold of a profile that is logged out (login-page tab, or a Graph answer that said so)."""
+    return bool(held) and (held.get("kind") == "logged_out"
+                           or (held.get("kind") == "checkpoint" and held.get("page") == "login"))
+
+
 def _suffix(verb: str) -> str:
     return {"publish": " Nothing was created.", "read": " Nothing was called."}.get(verb, "")
 
@@ -460,6 +471,10 @@ def refusal(key: str, label: str, verb: str = "", *, timed: tuple[float, str] | 
     explained with the same texts (the old "waiting about 10 min" lines are gone).
     """
     held = _load().get(key) if key else None
+    # ACL-2847: Publish and Check plan quote the one text; a read keeps its own wording for a Graph logout.
+    if is_login_hold(held) and (held.get("kind") != "logged_out" or verb == "publish"):
+        _event("profile_block_refused", kind=held["kind"], verb=verb, action_of_block=held.get("action"))
+        return f"{LOGIN_REASON} {LOGIN_NEXT}", ACCOUNT_BLOCKED_CODE     # ACL-2847: the same words everywhere, no suffix
     if held:
         reason, step = describe(held["kind"], held.get("label") or label, held.get("action") or _FALLBACK_ACTION,
                                 held.get("code"), same_profile=bool(label and held.get("label") not in ("", label)))
@@ -495,11 +510,14 @@ def view(labels: dict[str, str] | list[str]) -> dict[str, dict[str, Any]]:
             continue
         reason, step = describe(held["kind"], held.get("label") or label, held.get("action") or _FALLBACK_ACTION,
                                 held.get("code"), same_profile=held.get("label") not in ("", label))
+        login = is_login_hold(held)
+        if login:
+            reason, step = LOGIN_REASON, LOGIN_NEXT
         out[label] = {"kind": held["kind"], "code": held.get("code"), "reason": reason, "next": step,
                       "action": held.get("action") or "", "at": held.get("at"), "left_s": None,
                       "window_open": None, "can_retry": True, "needs_confirm": held["kind"] == "policy_block",
-                      "person_lock": is_person_lock(held), "seen": held.get("seen") or held.get("at"),
-                      "page": held.get("page") or "", "title": held.get("title") or ""}
+                      "person_lock": is_person_lock(held) or login, "seen": held.get("seen") or held.get("at"),
+                      "page": "login" if login else (held.get("page") or ""), "title": held.get("title") or ""}
     return out
 
 
