@@ -78,43 +78,32 @@ def test_pixel_discovery_reads_id_and_name_in_order():
 
 def test_read_in_session_is_read_only_and_inside_the_profile(monkeypatch):
     from src.web import account_pixels as px
-    from src.analysis_agent import account_spend_api as api
-    import contextlib
-
     client = SimpleNamespace(allow_writes=False, reset_budget=lambda n: None,
                              get_all=lambda *a, **k: [{'id': '1', 'name': 'A'}, {'id': '2', 'name': 'B'}])
-    opened = []
-
-    @contextlib.contextmanager
-    def session(account):
-        opened.append(account)
-        yield SimpleNamespace(client=client, act=ACT)
-
-    monkeypatch.setattr(api, '_session', session)
-    out = px._read_in_session('Demo')
-    assert opened == ['Demo']
+    sess = SimpleNamespace(client=client, act=ACT)
+    out = px._read_in_session(sess, 'Demo')
     assert out['state'] == 'ready' and [p['id'] for p in out['pixels']] == ['1', '2']
     assert 'Choose the one' in out['message']
     client.allow_writes = True
     with pytest.raises(AssertionError):
-        px._read_in_session('Demo')
+        px._read_in_session(sess, 'Demo')
 
 
 def test_failed_read_differs_from_empty_and_is_not_cached(monkeypatch, tmp_path):
     from src.web import account_pixels as px
-    from src.analysis_agent import account_spend as accounts, account_spend_api as api
-    monkeypatch.setattr(accounts, 'serialized_browser', lambda **kw: lambda fn: fn)
-    monkeypatch.setattr(api, '_failure', lambda account, exc: ('Session unavailable', 'failed'))
+    from acl2850_fakes import fake_session, quiet, reader
+    fake_session(monkeypatch)
+    quiet(monkeypatch, 'pages')
     monkeypatch.setattr(px, '_cache_path', lambda: tmp_path / 'account_pixels_cache.json')
 
     def failed(account):
         raise RuntimeError('failed')
-    monkeypatch.setattr(px, '_read_in_session', failed)
+    monkeypatch.setattr(px, '_read_in_session', reader(failed))
     assert px.read_pixels('Demo')['state'] == 'failed'
     assert px.cached_only('Demo')['state'] == 'not_loaded'
-    monkeypatch.setattr(px, '_read_in_session', lambda a: {'ok': True, 'state': 'ready', 'pixels': [{'id': '1', 'name': 'A'}]})
+    monkeypatch.setattr(px, '_read_in_session', reader(lambda a: {'ok': True, 'state': 'ready', 'pixels': [{'id': '1', 'name': 'A'}]}))
     assert px.read_pixels('Demo')['state'] == 'ready'
-    monkeypatch.setattr(px, '_read_in_session', failed)
+    monkeypatch.setattr(px, '_read_in_session', reader(failed))
     assert px.read_pixels('Demo')['state'] == 'ready', 'second read comes from the machine cache'
     assert px.cached_only('Demo')['pixels'] == [{'id': '1', 'name': 'A'}]
 
@@ -220,19 +209,20 @@ def test_pixel_picker_failed_then_refresh(page):
 
 def test_empty_answer_is_not_cached_and_next_read_rereads(monkeypatch, tmp_path):
     from src.web import account_pixels as px
-    from src.analysis_agent import account_spend as accounts
-    monkeypatch.setattr(accounts, 'serialized_browser', lambda **kw: lambda fn: fn)
+    from acl2850_fakes import fake_session, quiet, reader
+    fake_session(monkeypatch)
+    quiet(monkeypatch, 'pages')
     monkeypatch.setattr(px, '_cache_path', lambda: tmp_path / 'account_pixels_cache.json')
     calls = []
 
-    def reader(account):
+    def empty(account):
         calls.append(account)
         return {'ok': True, 'state': 'empty', 'pixels': []}
-    monkeypatch.setattr(px, '_read_in_session', reader)
+    monkeypatch.setattr(px, '_read_in_session', reader(empty))
     assert px.read_pixels('Demo')['state'] == 'empty'
     assert px.cached_only('Demo')['state'] == 'not_loaded'
     # Пиксель подключили в Business Settings: следующее чтение идёт в профиль заново.
-    monkeypatch.setattr(px, '_read_in_session', lambda a: {'ok': True, 'state': 'ready', 'pixels': [{'id': '1', 'name': 'A'}]})
+    monkeypatch.setattr(px, '_read_in_session', reader(lambda a: {'ok': True, 'state': 'ready', 'pixels': [{'id': '1', 'name': 'A'}]}))
     assert px.read_pixels('Demo')['state'] == 'ready'
     assert len(calls) == 1
     assert px.cached_only('Demo')['state'] == 'ready'

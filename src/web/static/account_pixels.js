@@ -46,7 +46,7 @@
     select.disabled = !!state && state.state === 'loading';
     if (!key) note.textContent = 'Connect an account to load its pixels.';
     else if (!state) note.textContent = '';
-    else if (state.state === 'loading') note.textContent = 'Loading pixels…';
+    else if (state.state === 'loading') note.textContent = state.progress || 'Loading pixels…';
     else if (state.state !== 'ready') note.textContent = state.message || 'No pixels are available.';
     else if (hidden.value && !chosen) note.textContent = 'This pixel is not on this ad account. Choose another pixel.';
     else if (chosen) note.textContent = 'Selected: ' + label(chosen);
@@ -68,17 +68,51 @@
     body.append('account_label', key);
     if (cachedOnly) body.append('cached', '1');
     if (force) body.append('force', '1');
+    // ACL-2850: чтение с профилем идёт потоком строк JSON: {progress} по ходу ожидания, затем {result}.
+    // Строка ожидания та же, что у Pages и Read spend; опроса и таймеров нет.
+    if (!cachedOnly) body.append('stream', '1');
+    var fail = 'Could not load pixels. Refresh pixels to retry.';
+    function progress(text) {
+      if (states[key] !== request || !text) return;
+      request = {state: 'loading', pixels: [], progress: text};
+      states[key] = request;
+      paintAccount(key);
+    }
+    function finish(data) {
+      if (states[key] !== request) return;
+      states[key] = data;
+      paintAccount(key);
+    }
     fetch('/api/account-pixels', {method: 'POST', body: body})
-      .then(function (r) { return r.json().then(function (data) {
-        if (!r.ok || !data.ok) throw new Error(data.message || 'Could not load pixels. Refresh pixels to retry.');
-        return data;
-      }); })
-      .catch(function (err) { return {state: 'failed', pixels: [], message: err.message || 'Could not load pixels. Refresh pixels to retry.'}; })
-      .then(function (data) {
-        if (states[key] !== request) return;
-        states[key] = data;
-        paintAccount(key);
-      });
+      .then(function (r) {
+        var type = r.headers.get('content-type') || '';
+        if (type.indexOf('ndjson') < 0 || !r.body || !r.body.getReader) {
+          return r.json().then(function (data) {
+            if (!r.ok || !data.ok) throw new Error(data.message || fail);
+            return data;
+          });
+        }
+        var reader = r.body.getReader(), decoder = new TextDecoder(), buffer = '', result = null;
+        function take(line) {
+          if (!line.trim()) return;
+          var item = JSON.parse(line);
+          if (item.progress) progress(item.progress);
+          if (item.result) result = item.result;
+        }
+        return reader.read().then(function pump(chunk) {
+          buffer += decoder.decode(chunk.value || new Uint8Array(), {stream: !chunk.done});
+          var lines = buffer.split('\n');
+          buffer = lines.pop();
+          lines.forEach(take);
+          if (!chunk.done) return reader.read().then(pump);
+          take(buffer);
+          if (!result) throw new Error(fail);
+          if (!result.ok) throw new Error(result.message || fail);
+          return result;
+        });
+      })
+      .catch(function (err) { return {state: 'failed', pixels: [], message: err.message || fail}; })
+      .then(finish);
   };
   window.cbSyncPixels = function (slot) {
     if (!slot) return;

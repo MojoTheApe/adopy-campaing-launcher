@@ -862,6 +862,8 @@ def _hand_refusal(exc: BaseException, account_label: str) -> bool:
 #: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
 _HAND_WAIT: dict[str, str] = {}
 _HAND_WAIT_LOCK = threading.Lock()
+#: ACL-2850: тот же замок + условие: экран, ждущий чтения, получает смену строки сразу, без опроса.
+_HAND_WAIT_CHANGED = threading.Condition(_HAND_WAIT_LOCK)
 
 
 def hand_wait_note(account: str) -> str:
@@ -944,6 +946,30 @@ def _set_wait_note(account: str, note: str) -> None:
             _HAND_WAIT[str(account or "")] = note
         else:
             _HAND_WAIT.pop(str(account or ""), None)
+        _HAND_WAIT_CHANGED.notify_all()
+
+
+def wait_note_changes(account: str, finished):
+    """ACL-2850: строки ожидания аккаунта по мере их смены, пока `finished()` не вернёт True.
+
+    Без таймеров и опроса: поток спит на условии, его будит `_set_wait_note` или `wake_wait_watchers`.
+    Читает только память сервера — ни MLX, ни Meta."""
+    key, last = str(account or ""), ""
+    while True:
+        with _HAND_WAIT_CHANGED:
+            _HAND_WAIT_CHANGED.wait_for(lambda: finished() or _HAND_WAIT.get(key, "") != last)
+            note, done = _HAND_WAIT.get(key, ""), finished()
+        if note != last:
+            last = note
+            if note:
+                yield note
+        if done:
+            return
+
+
+def wake_wait_watchers() -> None:
+    with _HAND_WAIT_CHANGED:
+        _HAND_WAIT_CHANGED.notify_all()
 
 
 def _slot_queue():
