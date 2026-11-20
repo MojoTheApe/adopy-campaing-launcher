@@ -30,8 +30,8 @@ def rig(tmp_path, monkeypatch):
     tabs: dict = {}
     current = {"label": ""}
     monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: "key-" + label)
-    monkeypatch.setattr(warm_api, "_profile_id", lambda label: "pid-" + label)
-    monkeypatch.setattr(warm_api, "_entry", lambda label: SimpleNamespace(profile_id="pid-" + label))
+    monkeypatch.setattr(warm_api, "_profile_id", lambda label: pid_of(label))
+    monkeypatch.setattr(warm_api, "_entry", lambda label: SimpleNamespace(profile_id=pid_of(label)))
     monkeypatch.setattr(warm_api, "_guard", lambda: None)
     reg = SimpleNamespace(session=lambda pid: SimpleNamespace(port=9222),
                           _scan=lambda pids: {p: ("port", 9222) for p in pids})
@@ -50,6 +50,12 @@ def rig(tmp_path, monkeypatch):
     tabs["__current__"] = current
     yield tabs
     blocks._TIMED_META.clear()
+
+
+def pid_of(label):
+    import uuid
+
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, "acl2847-" + label))
 
 
 def _open(tabs, label, targets):
@@ -95,22 +101,64 @@ def test_another_account_in_the_same_run_goes_on(rig):
     assert code == 200 and data == {"ok": True, "account": "B"}
 
 
-def test_check_plan_open_reads_the_tabs_and_stops_before_any_graph_call(rig, monkeypatch):
-    from src.web import publish_api
+def _check_plan_rig(rig, monkeypatch, label="A"):
+    """The real Check plan path (`publish_api.check_plan`) with one open profile; no session, no Graph, no browser."""
+    from src.fb_ads_rpa.profile_lease import physical_profile_key
+    from src.analysis_agent import account_spend_api as api
+    from src.web import plan_cache, publish_api
 
+    monkeypatch.setattr(account_spend, "_entry_for", lambda account: SimpleNamespace(
+        profile_id=pid_of(account), ad_account_id="act_1234567890", folder_id="", multilogin_instance="A"))
+    monkeypatch.setattr(account_spend, "_profile_key", lambda account, *a, **k: physical_profile_key(pid_of(account)))
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **k: [SimpleNamespace(name="c1", errors=[], warnings=[])])
+    monkeypatch.setattr(plan_cache, "Partition", lambda drafts, *a, **k: SimpleNamespace(
+        todo=list(drafts), hits={}, rejected={}, store=lambda rows, skip=False: None,
+        merge=lambda rows: rows, info=lambda n: {}))
+    reached = []
+    monkeypatch.setattr(api, "_warm_registry", lambda: reached.append("registry") or None)
+    monkeypatch.setattr("src.fb_api.connection.prepare_existing", lambda *a, **k: reached.append("prepare") or True)
+    return publish_api, reached
+
+
+def test_check_plan_reads_the_tabs_and_stops_at_once_with_the_text(rig, monkeypatch):
+    publish_api, reached = _check_plan_rig(rig, monkeypatch)
     _open(rig, "A", [(LOGIN_URL, "Log in to Facebook")])
-    monkeypatch.setattr(publish_api, "_resolve_entry",
-                        lambda label: SimpleNamespace(ad_account_id="act_1234567890", profile_id="pid-A"))
-    monkeypatch.setattr(publish_api, "_cooldown", lambda label: (0.0, ""))
-    monkeypatch.setattr(publish_api, "_frozen_api", lambda label: (None, "key-A"))
-    session = publish_api.ApiPublisher.__new__(publish_api.ApiPublisher)
-    session.dry_run = True
-    opened = []
-    monkeypatch.setattr(session, "_open_warm", lambda *a: opened.append(a) or True, raising=False)
+    result = publish_api.check_plan([{}], account_label="A", country="US")
+    assert result["error"] == TEXT and not reached            # refused before any profile or Graph step
+    assert blocks.hold_of(physical_key("A"))["action"] == "Check plan"
+    # Another account in the same run is not touched by it.
+    _open(rig, "B", [(ADS_URL, "Ads Manager")])
+    assert blocks.hold_of(physical_key("B")) is None
+
+
+def physical_key(label):
+    from src.fb_ads_rpa.profile_lease import physical_profile_key
+
+    return physical_profile_key(pid_of(label))
+
+
+def test_owner_sequence_check_plan_then_confirm_end_with_the_text_not_a_long_check(rig, monkeypatch):
+    """20.11: already open profile on the login page -> Check plan (review) -> Confirm (Publish)."""
+    import time
+
+    publish_api, reached = _check_plan_rig(rig, monkeypatch)
+    _open(rig, "A", [(LOGIN_URL, "Log in to Facebook")])
+    began = time.monotonic()
+    plan = publish_api.check_plan([{}], account_label="A", country="US")
+    assert not reached                                         # Check plan opened no session and no profile step
+    data, code = warm_api.prepare_connection("A")             # what Confirm sends before POST /publish-jobs
+    assert time.monotonic() - began < 5
+    assert plan["error"] == TEXT and plan["results"] == []
+    assert code == 409 and data["code"] == "account_blocked" and data["error"] == TEXT
+
+
+def test_a_graph_logout_hold_shows_the_new_text_for_check_plan_but_reads_keep_theirs(rig):
+    from src.fb_api.graph import LoggedOut
+
+    blocks.note_stop("key-G", "G", LoggedOut("x", page_seen=True), "Read")
     with blocks.problem_action("check_plan"):
-        with pytest.raises(publish_api.ApiPublishError) as err:
-            session.open("A")
-    assert str(err.value) == TEXT and err.value.code == "account_blocked" and not opened
+        assert blocks.refusal("key-G", "G", "read")[0] == TEXT
+    assert blocks.refusal("key-G", "G", "read")[0] != TEXT
 
 
 def test_a_healthy_tab_after_login_ends_the_hold_and_open_does_too(rig):

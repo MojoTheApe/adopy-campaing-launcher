@@ -1206,6 +1206,15 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     # ACL-2299 (C): nothing is written here, so a silent tab is waited for / the read asked again, not failed.
     from src.analysis_agent import account_spend as _as
 
+    # ACL-2847: Check plan reaches an already open profile: its tabs are read once from the local debugging port
+    # (no Graph call, no navigation), so a profile on the login page is held and refused below at once.
+    try:
+        from src.web import warm_api as _warm_api_
+
+        _warm_api_.note_tab_lock(account_label, action=_blocks_action())
+    except Exception:  # noqa: BLE001 - a failed look is only "not detected"
+        log.debug("tab look before Check plan failed", exc_info=True)
+
     # ACL-2790: Check plan стоит в очереди на аккаунте — профиль после чтения не закрывается.
     with _as.action_queued(account_label), user_started_action(), read_patience(), \
             _api._session(account_label) as sess:

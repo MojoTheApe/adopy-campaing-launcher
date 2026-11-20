@@ -472,7 +472,7 @@ def refusal(key: str, label: str, verb: str = "", *, timed: tuple[float, str] | 
     """
     held = _load().get(key) if key else None
     # ACL-2847: Publish and Check plan quote the one text; a read keeps its own wording for a Graph logout.
-    if is_login_hold(held) and (held.get("kind") != "logged_out" or verb == "publish"):
+    if is_login_hold(held) and (held.get("kind") != "logged_out" or verb == "publish" or _ACTION.get() == "check_plan"):
         _event("profile_block_refused", kind=held["kind"], verb=verb, action_of_block=held.get("action"))
         return f"{LOGIN_REASON} {LOGIN_NEXT}", ACCOUNT_BLOCKED_CODE     # ACL-2847: the same words everywhere, no suffix
     if held:
