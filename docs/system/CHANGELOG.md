@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2853 — Add country works when the country holds only another buyer's accounts — 2026-11-20
+
+"Add <country> to the account map" and Home "+ Country" now record the country for the selected buyer (KW and Kuwait count as one country), so it appears empty on that buyer's map while other buyers' accounts stay hidden; a press that changes nothing shows the reason next to the button.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1853).
+
 ## ACL-2850 — Pixel list loads faster — 2026-11-20
 
 Pixel and Pages are read in one profile session (one open, two read-only calls) and each click fills both caches; Check plan and Publish fill an empty pixel cache from the pixel list they already read; the Pixel field shows the profile wait/opening text; pixel reads write `fb_api_read` with wait, capture and call seconds.
