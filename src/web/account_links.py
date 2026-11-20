@@ -123,18 +123,26 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) ->
         temp.unlink(missing_ok=True)
 
 
-def _same_country(a: str, b: str) -> bool:
-    """«KW» и «Kuwait» — одна страна; регистр не важен."""
-    a, b = _norm(a).casefold(), _norm(b).casefold()
-    if a == b:
-        return True
-    try:
-        from src.web.app import _country_code
+def _known_code(name: str) -> str:
+    """Код страны только по настоящей таблице; без догадки «первые две буквы»."""
+    from src.analysis_agent.country_names import COUNTRY_CODES
 
-        ca, cb = _country_code(a).casefold(), _country_code(b).casefold()
-        return bool(ca) and ca == cb
-    except Exception:  # pragma: no cover - без таблицы кодов сравниваем имена
-        return False
+    n = _norm(name).casefold()
+    if not n:
+        return ""
+    if n in COUNTRY_CODES:
+        return COUNTRY_CODES[n]
+    if len(n) == 2 and n.upper() in set(COUNTRY_CODES.values()):
+        return n.upper()
+    return ""
+
+
+def _same_country(a: str, b: str) -> bool:
+    """«KW» и «Kuwait» — одна страна; регистр не важен. UAE и Ukraine — разные."""
+    if _norm(a).casefold() == _norm(b).casefold():
+        return True
+    ca, cb = _known_code(a), _known_code(b)
+    return bool(ca) and ca == cb
 
 
 def _shown_to(row: dict[str, str], buyer: str) -> bool:
@@ -147,12 +155,28 @@ def _shown_to(row: dict[str, str], buyer: str) -> bool:
 
 
 def country_marked_for(value: str, buyer: str) -> bool:
-    """Заведена ли страна именно этим байером (явная метка, не старая безымянная)."""
-    buyer = _norm(buyer).casefold()
-    return bool(buyer) and any(
+    """Заведена ли страна этим байером: пустая строка с его меткой.
+
+    Метка по правилу `account_buyer.tag_for_new_row`: у байера по умолчанию она
+    пустая, и тогда это безымянная строка, как была всегда."""
+    from src.web import account_buyer
+
+    tag = _norm(account_buyer.tag_for_new_row(_norm(buyer))).casefold()
+    return any(
         r["kind"] == "country" and not r["account_name"]
-        and _norm(r.get(BUYER_COLUMN)).casefold() == buyer
+        and _norm(r.get(BUYER_COLUMN)).casefold() == tag
         and r["value"].lower() == _norm(value).lower()
+        for r in load()
+    )
+
+
+def empty_country_visible_to(value: str, buyer: str) -> bool:
+    """Видна ли байеру пустая страна: безымянная — всем, с меткой — только её байеру."""
+    b = _norm(buyer).casefold()
+    return any(
+        r["kind"] == "country" and not r["account_name"]
+        and r["value"].lower() == _norm(value).lower()
+        and _norm(r.get(BUYER_COLUMN)).casefold() in ("", b)
         for r in load()
     )
 
@@ -198,7 +222,13 @@ def add_value(kind: str, value: str, buyer: str | None = None) -> bool:
         if any(r["kind"] == "country" and _same_country(r["value"], value) and _shown_to(r, buyer)
                for r in rows):
             return False
-        rows.append({"account_name": "", "kind": kind, "value": value, BUYER_COLUMN: buyer})
+        from src.web import account_buyer
+
+        row = {"account_name": "", "kind": kind, "value": value}
+        tag = _norm(account_buyer.tag_for_new_row(buyer))
+        if tag:  # байер по умолчанию метки не пишет: файл остаётся прежним
+            row[BUYER_COLUMN] = tag
+        rows.append(row)
     _write(rows)
     return True
 
@@ -251,15 +281,16 @@ def unlink(account: str, kind: str, value: str) -> bool:
     return True
 
 
-def unlink_all_for(kind: str, value: str, buyer: str | None = None) -> list[str]:
-    """Drop a country or asset entirely. Returns the accounts that were on it.
+def close_country(kind: str, value: str, buyer: str | None = None) -> tuple[list[str], int]:
+    """Drop a country or asset entirely. Returns (freed accounts, rows removed).
 
-    They are what falls into Available accounts — still configured, still
-    connected to their Multilogin profile, just not placed anywhere. The caller
-    is expected to have warned about any that are still running campaigns.
+    Они — то, что падает в Available accounts: настроены, подключены к профилю
+    Multilogin, просто нигде не размещены. Вызывающий предупредил о тех, кто
+    ещё крутит кампании.
 
     ACL-2853: с ``buyer`` закрывается только карта этого байера — его аккаунты
-    и его пустая страна. Аккаунты других байеров в той же стране остаются.
+    и пустая страна, видимая ему (безымянная или с его меткой). Аккаунты и
+    пустые страны других байеров остаются.
     """
     kind, value = _norm(kind).lower(), _norm(value)
     rows = load()
@@ -271,9 +302,25 @@ def unlink_all_for(kind: str, value: str, buyer: str | None = None) -> list[str]
 
     freed = [r["account_name"] for r in rows if _goes(r) and r["account_name"]]
     kept = [r for r in rows if not _goes(r)]
-    if len(kept) != len(rows):
+    removed = len(rows) - len(kept)
+    if removed:
         _write(kept)
-    return sorted(set(freed))
+    return sorted(set(freed)), removed
+
+
+def unlink_all_for(kind: str, value: str, buyer: str | None = None) -> list[str]:
+    """Тонкая обёртка над `close_country`: только список освобождённых аккаунтов."""
+    return close_country(kind, value, buyer)[0]
+
+
+def accounts_visible_for(kind: str, value: str, buyer: str | None) -> list[str]:
+    """Аккаунты страны, видимые байеру (все, если байер не задан)."""
+    names = accounts_for(kind, value)
+    if not buyer or _norm(kind).lower() != "country":
+        return names
+    from src.web import account_buyer
+
+    return [a for a in names if account_buyer.is_visible(a, selected=buyer)]
 
 
 def _rows_as_kwargs(rows: list[dict[str, str]]):

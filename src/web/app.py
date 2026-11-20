@@ -710,6 +710,9 @@ def _build_account_map_view(
             # The country holds only other buyers' accounts: not this buyer's map,
             # unless this buyer added the country themselves (ACL-2853).
             continue
+        if not _placed and not account_links.empty_country_visible_to(stored, _selected_cm()):
+            # ACL-2853: пустую страну с меткой другого байера этот байер не видит.
+            continue
         for label in _own:
             excel = _numbers(country_name, label) or stats.get(label) or {}
             # Имя из Multilogin (`KLD_BFL_X84`) с книжным (`FacebookMKTOBFLX84`)
@@ -6000,9 +6003,11 @@ async def account_links_edit(request: Request) -> JSONResponse:
             # «Изменилось» — про страну, а не про освобождённые аккаунты:
             # у пустой страны их нет, и ответ «ничего не поменялось» после
             # её удаления был бы неправдой.
-            existed = any(v.lower() == value.lower() for v in account_links.all_values(kind))
-            freed = account_links.unlink_all_for(kind, value, buyer=get_selected_cm())
-            return JSONResponse({"ok": True, "changed": existed, "freed": freed})
+            freed, removed = account_links.close_country(kind, value, buyer=get_selected_cm())
+            out = {"ok": True, "changed": bool(removed), "freed": freed}
+            if not removed:
+                out["reason"] = f"{value} is not on your account map, so there was nothing to close."
+            return JSONResponse(out)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # pragma: no cover - defensive

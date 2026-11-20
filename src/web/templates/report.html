@@ -15550,7 +15550,7 @@ async function amapSend(body, msgEl, errorAnchor, onOk) {
   });
   var data = null;
   try { data = await r.json(); } catch (e) { data = null; }
-  if (data && data.ok && data.changed === false && data.reason && body.action === 'add') {
+  if (data && data.ok && data.changed === false && data.reason) {
     /* ACL-2853: добавление ничего не изменило — причина рядом с кнопкой, без перезагрузки того же экрана */
     if (msgEl) { msgEl.textContent = data.reason; msgEl.className = 'amap-msg bad'; }
     else if (errorAnchor) aclInlineError(errorAnchor, data.reason);

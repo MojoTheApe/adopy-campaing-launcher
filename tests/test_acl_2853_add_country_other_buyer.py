@@ -136,3 +136,66 @@ def test_old_file_without_buyer_column_still_loads_and_stays_identical(env):
 def test_template_shows_reason_instead_of_reloading():
     src = open("src/web/templates/report.html", encoding="utf-8").read()
     assert "data.changed === false && data.reason" in src
+
+
+# ── Round 2 ───────────────────────────────────────────────────────────
+def test_code_name_add_leaves_other_buyers_map_exactly_as_it_was(env):
+    links.link("DanAcc", "country", "KW")
+    _select("Dan Dicker")
+    assert _countries() == {"KW": ["DanAcc"]} or _countries() == {"Kuwait": ["DanAcc"]}
+    before = _countries()
+    _select("Gil Zangi")
+    assert _post({"action": "add", "kind": "country", "value": "Kuwait"})["changed"] is True
+    assert "Kuwait" in _countries()
+    _select("Dan Dicker")
+    assert _countries() == before
+
+
+def test_brand_new_country_of_a_stays_off_b_and_b_cannot_close_it(env):
+    _select("Gil Zangi")
+    _post({"action": "add", "kind": "country", "value": "Brazil"})
+    assert "Brazil" in _countries()
+    _select("Dan Dicker")
+    assert "Brazil" not in _countries()
+    out = _post({"action": "close", "kind": "country", "value": "Brazil", "confirm": True})
+    assert out["changed"] is False and out["reason"]
+    _select("Gil Zangi")
+    assert "Brazil" in _countries()
+
+
+def test_close_removes_my_placeholder(env):
+    _select("Gil Zangi")
+    _post({"action": "add", "kind": "country", "value": "Brazil"})
+    out = _post({"action": "close", "kind": "country", "value": "Brazil", "confirm": True})
+    assert out["changed"] is True
+    assert "Brazil" not in _countries() and links.load() == []
+
+
+def test_close_untagged_empty_country_as_on_main(env):
+    links.add_value("country", "Peru")
+    _select("Gil Zangi")
+    assert "Peru" in _countries()
+    assert _post({"action": "close", "kind": "country", "value": "Peru", "confirm": True})["changed"] is True
+    assert links.load() == []
+
+
+def test_similar_prefix_countries_are_not_the_same():
+    assert not links._same_country("UAE", "Ukraine")
+    assert not links._same_country("Guinea", "Guinea-Bissau")
+    assert links._same_country("Kuwait", "KW") and links._same_country("KW", "kuwait")
+    assert links._same_country("United Arab Emirates", "AE")
+
+
+def test_adding_ukraine_when_uae_exists_adds_it(env):
+    links.link("GilAcc", "country", "UAE")
+    _select("Gil Zangi")
+    assert _post({"action": "add", "kind": "country", "value": "Ukraine"})["changed"] is True
+
+
+def test_default_buyer_writes_no_tag_and_no_column(env):
+    _select("Owner")
+    before = links.links_path().exists()
+    assert _post({"action": "add", "kind": "country", "value": "Chile"})["changed"] is True
+    assert links.links_path().read_text(encoding="utf-8").splitlines() == [
+        "account_name,kind,value", ",country,Chile"]
+    assert before is False
