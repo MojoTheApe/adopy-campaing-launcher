@@ -113,7 +113,7 @@
           [(item.domain || '') + (item.path || ''), item.template, item.language, item.status].filter(Boolean).join(' · ')));
         row.appendChild(main);
         var open = el('a', 'cb-landing-sub', 'Open ↗');
-        open.href = item.url || '#'; open.target = '_blank'; open.rel = 'noopener noreferrer';
+        open.href = /^https?:\/\//i.test(item.url || '') ? item.url : '#'; open.target = '_blank'; open.rel = 'noopener noreferrer';
         row.appendChild(open);
         var pick = el('button', 'cb-field-save-btn', 'Select');
         pick.type = 'button'; pick.setAttribute('data-landing-select', '');
