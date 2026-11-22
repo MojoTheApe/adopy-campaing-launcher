@@ -6701,6 +6701,64 @@ async def api_account_pixels(request: Request) -> Response:
     return JSONResponse(await asyncio.to_thread(read_pixels, account, force=force))
 
 
+@app.post("/api/jcloud/landings/search")
+async def api_jcloud_landings_search(request: Request) -> JSONResponse:
+    """ACL-2852: поиск лендингов в JCloudFront для билдера. Только чтение, только по нажатию.
+
+    Токен JCloud остаётся на сервере: в ответ идут лишь поля карточки.
+    """
+    from src.jcloud import client as jcloud
+
+    form = await request.form()
+    try:
+        page = int(str(form.get("page") or "1"))
+    except ValueError:
+        page = 1
+    try:
+        stock_id = int(str(form.get("stock_id") or "")) or None
+    except ValueError:
+        stock_id = None
+    result = await asyncio.to_thread(
+        jcloud.search, str(form.get("query") or ""), page=page,
+        snapshot_id=str(form.get("snapshot_id") or "") or None,
+        mode=str(form.get("mode") or "") or None, stock_id=stock_id)
+    return JSONResponse(result)
+
+
+@app.post("/api/jcloud/stocks/search")
+async def api_jcloud_stocks_search(request: Request) -> JSONResponse:
+    """ACL-2852: подсказки ассета (сток JCloudFront) для фильтра поиска лендингов."""
+    from src.jcloud import client as jcloud
+
+    form = await request.form()
+    return JSONResponse(await asyncio.to_thread(jcloud.find_stocks, str(form.get("query") or "")))
+
+
+@app.post("/api/account-landings")
+async def api_account_landings(request: Request) -> JSONResponse:
+    """ACL-2852: лендинги аккаунта (до трёх, с процентами). op: get | add | remove | percent."""
+    from src.web import account_landings as store
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "message": "account is required"}, status_code=400)
+    op = str(form.get("op") or "get")
+    if op == "add":
+        try:
+            landing = json.loads(str(form.get("landing") or ""))
+        except ValueError:
+            landing = None
+        result = await asyncio.to_thread(store.add_landing, account, landing)
+    elif op == "remove":
+        result = await asyncio.to_thread(store.remove_landing, account, form.get("id"))
+    elif op == "percent":
+        result = await asyncio.to_thread(store.set_percent, account, form.get("id"), form.get("percent"))
+    else:
+        result = {"ok": True, "landings": await asyncio.to_thread(store.get_landings, account)}
+    return JSONResponse(result)
+
+
 @app.post("/api/page-forms")
 async def api_page_forms(request: Request) -> JSONResponse:
     """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.

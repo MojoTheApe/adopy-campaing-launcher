@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2852 — Builder: pick JCloudFront landings for an account — 2026-11-22
+
+The builder's Account section can search the JCloudFront catalog by Variant, path, URL or Asset, preview a landing on hover or open it in a new tab, and keep up to three landings per account with an even, editable split (100 / 50-50 / 33-33-34). "Use landing" in the stats Landings tab opens the same search. Generate is shown but disabled until the Keitaro connection. The MCP token stays in the machine environment.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1852).
+
 ## ACL-2853 — Add country works when the country holds only another buyer's accounts — 2026-11-20
 
 "Add <country> to the account map" and Home "+ Country" now record the country for the selected buyer (KW and Kuwait count as one country), so it appears empty on that buyer's map while other buyers' accounts stay hidden; a press that changes nothing shows the reason next to the button.
