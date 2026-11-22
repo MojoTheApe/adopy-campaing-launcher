@@ -254,6 +254,12 @@ def build_drafts(slots: list[dict[str, Any]], *, account_label: str, country: st
     return enrich_campaign_drafts(drafts, account_label=account_label, preview_mode=False)
 
 
+def _blocks_action() -> str:
+    from src.fb_api import account_blocks
+
+    return account_blocks.current_action()
+
+
 class ApiPublishError(RuntimeError):
     """Отказ всего задания (профиль, страница, кабинет) с текстом человеку."""
 
@@ -539,6 +545,14 @@ class ApiPublisher:
             self._auth_probe = _b_.is_auth_hold(_as_._profile_key(account_label))
         except Exception:  # noqa: BLE001 - never breaks the open
             log.debug("auth hold check failed", exc_info=True)
+        # ACL-2847: a person-started action (Check plan, Publish) reaches an already open profile: its tabs are read
+        # once from the local debugging port, so a profile that fell to the login page is held before the refusal below.
+        try:
+            from src.web import warm_api as _warm_api_
+
+            _warm_api_.note_tab_lock(account_label, action=_blocks_action())
+        except Exception:  # noqa: BLE001 - a failed look is only "not detected"
+            log.debug("tab look before the open failed", exc_info=True)
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
@@ -642,6 +656,7 @@ class ApiPublisher:
                                   stage="while checking the ad account") from exc
         self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
                                            act=self.act)
+        _fill_pixel_cache(account_label, self._facts)      # ACL-2850
         self.progress("ad account verified")
         self._settle_auth_probe()
 
@@ -1192,6 +1207,15 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     # ACL-2299 (C): nothing is written here, so a silent tab is waited for / the read asked again, not failed.
     from src.analysis_agent import account_spend as _as
 
+    # ACL-2847: Check plan reaches an already open profile: its tabs are read once from the local debugging port
+    # (no Graph call, no navigation), so a profile on the login page is held and refused below at once.
+    try:
+        from src.web import warm_api as _warm_api_
+
+        _warm_api_.note_tab_lock(account_label, action=_blocks_action())
+    except Exception:  # noqa: BLE001 - a failed look is only "not detected"
+        log.debug("tab look before Check plan failed", exc_info=True)
+
     # ACL-2790: Check plan стоит в очереди на аккаунте — профиль после чтения не закрывается.
     with _as.action_queued(account_label), user_started_action(), read_patience(), \
             _api._session(account_label) as sess:
@@ -1205,6 +1229,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account", stage="while checking the ad account") from exc
+        _fill_pixel_cache(account_label, pub._facts)
         pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
                                           act=sess.act)
         try:
@@ -1234,6 +1259,13 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             # управляет вытеснение по простою; таймер `plan_keep_open_s()` — только при выключенном.
             sess.keep_convenience = _keep_profiles_open()
     return results
+
+
+def _fill_pixel_cache(account_label: str, facts: Any) -> None:
+    """ACL-2850: the pixel list was just read in this session; an empty/expired cache takes it (no extra call)."""
+    from src.web.account_pixels import fill_from_facts
+
+    fill_from_facts(account_label, facts)
 
 
 def _record_facts(resolver: Any) -> None:

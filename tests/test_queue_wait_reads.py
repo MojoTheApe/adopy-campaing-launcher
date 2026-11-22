@@ -21,15 +21,13 @@ def cache_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def reads(monkeypatch):
-    calls = []
+    # ACL-2850: Pages and Pixels share one profile session; count profile entries, not reader calls.
+    from tests.acl2850_fakes import fake_session, quiet, reader
 
-    def fake_read(account):
-        calls.append(account)
-        return {"ok": True, "state": "ready", "pages": [{"id": "111", "name": "P"}], "account": account}
-
-    from src.analysis_agent import account_spend as accounts
-
-    monkeypatch.setattr(accounts, "serialized_browser", lambda **kw: (lambda fn: fake_read))
+    calls = fake_session(monkeypatch)
+    quiet(monkeypatch, "pixels")
+    monkeypatch.setattr(ap, "_read_in_session", reader(
+        lambda account: {"ok": True, "state": "ready", "pages": [{"id": "111", "name": "P"}], "account": account}))
     return calls
 
 
@@ -55,13 +53,9 @@ def test_a_stale_entry_is_read_again(cache_dir, reads):
 def test_a_failed_read_is_not_cached(cache_dir, monkeypatch):
     from src.analysis_agent import account_spend as accounts
 
-    calls = []
+    from tests.acl2850_fakes import fake_session
 
-    def boom(account):
-        calls.append(account)
-        raise RuntimeError("profile did not open")
-
-    monkeypatch.setattr(accounts, "serialized_browser", lambda **kw: (lambda fn: boom))
+    calls = fake_session(monkeypatch, fail=RuntimeError("profile did not open"))
     assert ap.read_pages("Doc120")["ok"] is False
     assert ap.read_pages("Doc120")["ok"] is False
     assert calls == ["Doc120", "Doc120"]

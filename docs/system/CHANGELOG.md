@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2853 — Add country works when the country holds only another buyer's accounts — 2026-11-20
+
+"Add <country> to the account map" and Home "+ Country" now record the country for the selected buyer (KW and Kuwait count as one country), so it appears empty on that buyer's map while other buyers' accounts stay hidden; a press that changes nothing shows the reason next to the button.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1853).
+
+## ACL-2850 — Pixel list loads faster — 2026-11-20
+
+Pixel and Pages are read in one profile session (one open, two read-only calls) and each click fills both caches; Check plan and Publish fill an empty pixel cache from the pixel list they already read; the Pixel field shows the profile wait/opening text; pixel reads write `fb_api_read` with wait, capture and call seconds.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1850).
+
+## ACL-2847 — Logged out of Facebook: Publish and Check plan say so at once — 2026-11-20
+
+A profile that was already open and fell to the Facebook login page is now detected when Publish or Check plan reaches it (local tab addresses only, no Graph call). That account shows "Logged out of Facebook. Open the profile, log in to Ads Manager, then publish again." and Publish and Check plan stop with the same text; other accounts go on. A review that cannot open, or a Confirm that cannot start, now says why instead of doing nothing.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1847).
+
 ## ACL-2845 — Arabic texts with a Stories/Reels file: empty default rule in the Website feed — 2026-11-20
 
 The Website labelled feed (several texts plus a Stories/Reels file) now sends its main rule with an empty customization_spec, the default rule Ads Manager sends. Meta refused Arabic texts without it (error 2490266, "Missing Default Rule in Language Asset Feed").

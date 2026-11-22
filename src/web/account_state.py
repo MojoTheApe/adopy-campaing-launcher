@@ -139,7 +139,7 @@ def _person_lock(hold) -> dict | None:
         # ACL-2841: Meta's own text from the tab title; without a readable title the fixed wording stays.
         head = f'Facebook says: "{title}".'
     elif login:
-        head = "The profile is logged out of Facebook (log in inside the open profile window)."
+        head = "The profile is logged out of Facebook."
     else:
         head = "The Facebook user of this profile is locked (for example: log in with another device to unlock it)."
     return {

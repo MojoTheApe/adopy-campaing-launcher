@@ -85,16 +85,30 @@ def _message(pixels: list[dict[str, str]]) -> str:
     return ""
 
 
-def _read_in_session(account: str) -> dict:
-    from src.analysis_agent.account_spend_api import _session
+def _read_in_session(sess: Any, account: str) -> dict:
+    """Один запрос `/{act}/adspixels` в уже открытой сессии профиля (только чтение)."""
+    if sess.client.allow_writes:
+        raise AssertionError("Pixel discovery must be read-only")
+    sess.client.reset_budget(2)
+    pixels = pixels_from_client(sess.client, sess.act)
+    return {"ok": True, "state": "ready" if pixels else "empty", "pixels": pixels,
+            "act": sess.act, "account": account, "message": _message(pixels)}
 
-    with _session(account) as sess:
-        if sess.client.allow_writes:
-            raise AssertionError("Pixel discovery must be read-only")
-        sess.client.reset_budget(2)
-        pixels = pixels_from_client(sess.client, sess.act)
-        return {"ok": True, "state": "ready" if pixels else "empty", "pixels": pixels,
-                "act": sess.act, "account": account, "message": _message(pixels)}
+
+def fill_from_facts(account: str, facts: Any) -> None:
+    """ACL-2850: Check plan / Publish уже прочитали `/adspixels` в своей сессии - пустой или
+    устаревший кэш списка берёт этот ответ. Новых запросов и сессий нет; сбой молчит."""
+    try:
+        ids = [str(p) for p in (getattr(facts, "pixels", None) or []) if p]
+        if not ids or cached_pixels(account) is not None:
+            return
+        names = getattr(facts, "pixel_names", None) or {}
+        pixels = [{"id": pid, "name": names.get(pid) or pid} for pid in ids]
+        remember_pixels(account, {"ok": True, "state": "ready", "pixels": pixels,
+                                  "act": getattr(facts, "act", ""), "account": account,
+                                  "message": _message(pixels)})
+    except Exception:
+        pass
 
 
 def cached_only(account: str) -> dict:
@@ -108,21 +122,14 @@ def cached_only(account: str) -> dict:
 
 
 def read_pixels(account: str, *, force: bool = False) -> dict:
-    from src.analysis_agent import account_spend as accounts
-    from src.analysis_agent import account_spend_api as api
+    """Список пикселей: кэш или одна сессия профиля, в которой заодно читаются Страницы, если их кэш пуст (ACL-2850)."""
+    from src.web import account_lists
 
-    if not force:
-        hit = cached_pixels(account)
-        if hit is not None:
-            return hit
-    read = accounts.serialized_browser(key=accounts._profile_key, reading=True)(_read_in_session)
-    from src.fb_api.connection import user_started_action
-    try:
-        # ACL-2272: список пикселей открывает человек (Pixel / Refresh pixels); отрисовка — `cached_only`.
-        with user_started_action():
-            result = read(account)
-        remember_pixels(account, result)
-        return result
-    except Exception as exc:
-        return {"ok": False, "state": "failed", "pixels": [], "account": account,
-                "message": "Could not load pixels. Refresh pixels to retry. " + api._failure(account, exc)[0]}
+    return account_lists.read_lists(account, "pixels", force=force)
+
+
+def stream_pixels(account: str, *, force: bool = False):
+    """Тот же `read_pixels`, но со строками ожидания по ходу: {"progress": ...} ... {"result": ...} (ACL-2850)."""
+    from src.web import account_lists
+
+    return account_lists.stream(account, "pixels", force=force)
