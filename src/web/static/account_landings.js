@@ -27,8 +27,15 @@
     var query = root.querySelector('[data-landings-query]');
     var results = root.querySelector('[data-landings-results]');
     var preview = root.querySelector('[data-landings-preview]');
+    var assetInput = root.querySelector('[data-landings-asset]');
+    var assetList = root.querySelector('[data-landings-asset-list]');
+    var assetChip = root.querySelector('[data-landings-asset-chip]');
+    var assetName = root.querySelector('[data-landings-asset-name]');
+    var asset = null;       // выбранный ассет {id, name} или null
+    var assetToken = 0;
+    var assetTimer = null;
     var chosen = [];
-    var token = 0;          // номер поиска: устаревшие ответы и повторы при pending отбрасываются
+    var token = 0;         // номер поиска: устаревшие ответы и повторы при pending отбрасываются
     var previewTimer = null;
 
     function say(text) { statusEl.textContent = text || ''; }
@@ -137,8 +144,8 @@
     }
 
     // mode/snapshot держат способ поиска и каталог при листании и ожидании `pending`.
-    function run(text, page, mode, snapshot, mine) {
-      post('/api/jcloud/landings/search', {query: text, page: page, mode: mode, snapshot_id: snapshot})
+    function run(text, page, mode, snapshot, mine, stock) {
+      post('/api/jcloud/landings/search', {query: text, page: page, mode: mode, snapshot_id: snapshot, stock_id: stock})
         .then(function (data) {
           if (mine !== token) return;
           clearNotes();
@@ -146,7 +153,7 @@
           if (data.state === 'pending') {
             note('JCloudFront is preparing the catalog…');
             setTimeout(function () {
-              if (mine === token && !search.hidden) { clearNotes(); run(text, page, data.searched_as, snapshot, mine); }
+              if (mine === token && !search.hidden) { clearNotes(); run(text, page, data.searched_as, snapshot, mine, stock); }
             }, Math.max(1, Number(data.retry_after_seconds) || 3) * 1000);
             return;
           }
@@ -159,7 +166,7 @@
             more.setAttribute('data-landing-note', '');
             more.addEventListener('click', function () {
               more.remove();
-              run(text, page + 1, data.searched_as, data.snapshot_id, mine);
+              run(text, page + 1, data.searched_as, data.snapshot_id, mine, stock);
             });
             results.appendChild(more);
           }
@@ -172,10 +179,44 @@
       token += 1;
       results.replaceChildren();
       hidePreview();
-      if (!text) { results.hidden = true; return; }
+      if (!text && !asset) { results.hidden = true; return; }
       results.hidden = false;
       note('Searching…');
-      run(text, 1, null, null, token);
+      run(text, 1, null, null, token, asset ? asset.id : null);
+    }
+
+    // Фильтр «Asset»: подсказки по началу названия (сток JCloudFront), выбранный ассет — чип.
+    function pickAsset(stock) {
+      asset = stock;
+      assetList.hidden = true; assetList.replaceChildren();
+      assetInput.value = '';
+      assetInput.hidden = !!stock;
+      assetChip.hidden = !stock;
+      assetName.textContent = stock ? stock.name : '';
+      if (stock) doSearch();
+    }
+    function suggestAssets() {
+      var text = (assetInput.value || '').trim();
+      assetToken += 1;
+      var mineA = assetToken;
+      if (text.length < 2) { assetList.hidden = true; assetList.replaceChildren(); return; }
+      post('/api/jcloud/stocks/search', {query: text}).then(function (data) {
+        if (mineA !== assetToken) return;
+        assetList.replaceChildren();
+        assetList.hidden = false;
+        var stocks = (data && data.ok !== false && data.stocks) || [];
+        if (!stocks.length) {
+          assetList.appendChild(el('div', 'cb-landing-note', data && data.ok === false ? data.message : 'No such asset.'));
+          return;
+        }
+        stocks.forEach(function (s) {
+          var b = el('button', 'cb-landing-row cb-landing-asset-option', s.name);
+          b.type = 'button';
+          b.setAttribute('data-asset-id', s.id);
+          b.addEventListener('click', function () { pickAsset(s); });
+          assetList.appendChild(b);
+        });
+      }).catch(function () { if (mineA === assetToken) { assetList.hidden = true; } });
     }
 
     function openSearch(prefill) {
@@ -186,6 +227,8 @@
     }
     function closeSearch() {
       token += 1;
+      assetToken += 1;
+      assetList.hidden = true;
       search.hidden = true;
       results.hidden = true;
       results.replaceChildren();
@@ -196,6 +239,15 @@
     root.querySelector('[data-landings-go]').addEventListener('click', doSearch);
     root.querySelector('[data-landings-close]').addEventListener('click', closeSearch);
     query.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+    assetInput.addEventListener('input', function () {
+      clearTimeout(assetTimer);
+      assetTimer = setTimeout(suggestAssets, 250);
+    });
+    root.querySelector('[data-landings-asset-clear]').addEventListener('click', function () {
+      pickAsset(null);
+      doSearch();
+      assetInput.focus();
+    });
     root._landingsOpen = openSearch;
 
     post('/api/account-landings', {account_label: account, op: 'get'})

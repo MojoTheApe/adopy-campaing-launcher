@@ -87,6 +87,49 @@ def test_items_carry_only_card_fields(monkeypatch):
     assert set(item) == set(jc.ITEM_FIELDS)
 
 
+# ───────────────────────── фильтр по ассету ─────────────────────────
+
+def test_asset_only_search_sends_stock_ids_without_a_query(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append((tool, args)) or _ready([_landing()]))
+    out = jc.search("", stock_id=418)
+    assert seen[0][0] == "search_landing_catalog" and seen[0][1]["stock_ids"] == [418]
+    assert "query" not in seen[0][1] and out["searched_as"] == "asset" and out["ok"]
+
+
+def test_asset_filter_combines_with_text(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([_landing()]))
+    jc.search("aipl_en_1_lp", stock_id=418)
+    assert seen[0]["query"] == "/aipl_en_1_lp" and seen[0]["stock_ids"] == [418]
+
+
+def test_no_text_and_no_asset_is_still_invalid():
+    assert jc.search("  ")["code"] == "invalid_query"
+
+
+def test_find_stocks_returns_id_and_name_only(monkeypatch):
+    monkeypatch.setattr(jc, "_call", lambda tool, args: {"ok": True, "matches": 2, "stocks": [
+        {"id": 418, "name": "A.I.", "x": 1}, {"id": 666, "name": "AA Acady"}]})
+    out = jc.find_stocks("a.")
+    assert out["stocks"] == [{"id": 418, "name": "A.I."}, {"id": 666, "name": "AA Acady"}]
+
+
+def test_find_stocks_ignores_one_letter_and_does_not_call(monkeypatch):
+    monkeypatch.setattr(jc, "_call", lambda t, a: pytest.fail("must not call"))
+    assert jc.find_stocks("a")["stocks"] == []
+
+
+def test_stock_endpoints(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jc, "_call", lambda t, a: seen.append((t, a)) or (
+        {"ok": True, "matches": 1, "stocks": [{"id": 418, "name": "A.I."}]} if t == "find_stocks" else _ready([_landing()])))
+    c = _client()
+    assert c.post("/api/jcloud/stocks/search", headers=HDR, data={"query": "a.i"}).json()["stocks"][0]["id"] == 418
+    r = c.post("/api/jcloud/landings/search", headers=HDR, data={"query": "", "stock_id": "418"})
+    assert r.json()["ok"] and seen[-1][1]["stock_ids"] == [418]
+
+
 # ───────────────────────── ожидание и ошибки ─────────────────────────
 
 def test_pending_is_returned_with_pause(monkeypatch):

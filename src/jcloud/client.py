@@ -131,10 +131,32 @@ def _shape(data: dict, *, searched_as: str, page: int) -> dict:
             "unclassified_count": data.get("unclassified_count") or 0}
 
 
-def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: str | None = None) -> dict:
-    """Поиск лендингов. `mode` (path|template|url) повторяет уже выбранный способ при листании и ожидании."""
+def find_stocks(query: str) -> dict:
+    """Подсказки ассета (сток в JCloudFront) по началу названия: [{id, name}]."""
+    q = (query or "").strip()
+    if len(q) < 2:
+        return {"ok": True, "stocks": []}
+    if not configured():
+        return _error("not_configured")
+    try:
+        data = _call("find_stocks", {"query": q})
+    except ImportError:
+        return _error("unavailable")
+    except Exception as exc:  # noqa: BLE001
+        return _error(_classify_exception(exc))
+    stocks = [{"id": s.get("id"), "name": s.get("name")} for s in (data.get("stocks") or [])
+              if isinstance(s, dict) and s.get("id")]
+    return {"ok": True, "stocks": stocks[:10], "matches": data.get("matches", len(stocks))}
+
+
+def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: str | None = None,
+           stock_id: int | None = None) -> dict:
+    """Поиск лендингов. `mode` (path|template|url) повторяет уже выбранный способ при листании и ожидании.
+
+    `stock_id` — фильтр по ассету. Без текста поиск идёт только по ассету.
+    """
     kind, q = classify_query(query)
-    if not q:
+    if not q and not stock_id:
         return _error("invalid_query")
     if not configured():
         return _error("not_configured")
@@ -142,6 +164,8 @@ def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: s
 
     def run(args: dict, searched_as: str) -> dict:
         args = {**args, "page": page, "page_size": PAGE_SIZE}
+        if stock_id:
+            args["stock_ids"] = [int(stock_id)]
         if snapshot_id:
             args["snapshot_id"] = snapshot_id
         try:
@@ -151,6 +175,8 @@ def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: s
         except Exception as exc:  # noqa: BLE001 — любое падение транспорта сводим к понятной причине
             return _error(_classify_exception(exc))
 
+    if not q:
+        return run({}, "asset")
     if kind == "url":
         return run({"query": q, "kind": "url"}, "url")
     if kind == "path":

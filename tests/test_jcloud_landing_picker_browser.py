@@ -46,7 +46,9 @@ def page(browser, monkeypatch, tmp_path):
         f = {k: v[0] for k, v in parse_qs(r.request.post_data or "").items()}
         if "multipart" in (r.request.headers.get("content-type") or ""):
             f = dict(re.findall(r'name="([^"]+)"\r\n\r\n(.*?)\r\n--', r.request.post_data or "", re.S))
-        if url.endswith("/api/jcloud/landings/search"):
+        if url.endswith("/api/jcloud/stocks/search"):
+            body = {"ok": True, "stocks": [{"id": 418, "name": "A.I."}]}
+        elif url.endswith("/api/jcloud/landings/search"):
             searches.append(f)
             body = {"ok": True, "state": "ready", "searched_as": "path", "page": 1, "items": pages["1"],
                     "total": 4, "has_more": False, "snapshot_id": "s", "complete": True, "unclassified_count": 0}
@@ -170,6 +172,24 @@ def test_use_landing_from_stats_reveals_the_builder_and_searches(page):
     page.locator("[data-landing-id]").first.wait_for()
     assert page.locator("[data-landings-query]").input_value() == "aipl_en_1_lp"
     assert page.evaluate("cbUseLandingFromStats('zz', 'x')") is False
+
+
+def test_asset_filter_suggests_then_searches_by_asset_without_text(page):
+    page.click("[data-landings-open]")
+    page.fill("[data-landings-asset]", "a.")
+    page.locator("[data-asset-id='418']").click()
+    page.locator("[data-landing-id]").first.wait_for()
+    assert page.searches[-1]["stock_id"] == "418" and page.searches[-1]["query"] == ""
+    assert page.locator("[data-landings-asset-name]").inner_text() == "A.I."
+    # текст + ассет вместе
+    page.fill("[data-landings-query]", "aaa")
+    page.click("[data-landings-go]")
+    page.wait_for_timeout(500)
+    assert page.searches[-1]["stock_id"] == "418" and page.searches[-1]["query"] == "aaa"
+    # снять ассет: без текста поиск не идёт, с текстом идёт без ассета
+    page.locator("[data-landings-asset-clear]").click()
+    page.wait_for_function("!document.querySelector('[data-landings-asset-chip]') || document.querySelector('[data-landings-asset-chip]').hidden")
+    assert page.locator("[data-landings-asset]").is_visible()
 
 
 def test_use_landing_opens_the_picker_prefilled_and_searches(page):

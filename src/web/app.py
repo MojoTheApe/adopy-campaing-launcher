@@ -6686,11 +6686,24 @@ async def api_jcloud_landings_search(request: Request) -> JSONResponse:
         page = int(str(form.get("page") or "1"))
     except ValueError:
         page = 1
+    try:
+        stock_id = int(str(form.get("stock_id") or "")) or None
+    except ValueError:
+        stock_id = None
     result = await asyncio.to_thread(
         jcloud.search, str(form.get("query") or ""), page=page,
         snapshot_id=str(form.get("snapshot_id") or "") or None,
-        mode=str(form.get("mode") or "") or None)
+        mode=str(form.get("mode") or "") or None, stock_id=stock_id)
     return JSONResponse(result)
+
+
+@app.post("/api/jcloud/stocks/search")
+async def api_jcloud_stocks_search(request: Request) -> JSONResponse:
+    """ACL-2852: подсказки ассета (сток JCloudFront) для фильтра поиска лендингов."""
+    from src.jcloud import client as jcloud
+
+    form = await request.form()
+    return JSONResponse(await asyncio.to_thread(jcloud.find_stocks, str(form.get("query") or "")))
 
 
 @app.post("/api/account-landings")

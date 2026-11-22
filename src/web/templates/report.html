@@ -970,6 +970,8 @@
     .cb-landings-actions, .cb-landing-search-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .cb-landing-secondary { background: transparent; color: var(--text); border: 1px solid var(--border-strong); }
     .cb-landing-secondary:hover { background: var(--bg-elev); }
+    .cb-landing-asset-row { margin-top: .4rem; }
+    .cb-landing-asset-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); font-size: .85rem; }
     .cb-landing-popup { max-width: 34rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); max-height: 18rem; overflow-y: auto; }
     .cb-landing-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); font-size: var(--adopy-text-table); }
     .cb-landing-row:last-child { border-bottom: none; }
@@ -5666,6 +5668,15 @@ function dashRefreshUpdateCheck() {
               <button type="button" class="cb-field-save-btn" data-landings-go>Search</button>
               <button type="button" class="cb-field-save-btn cb-landing-secondary" data-landings-close>Close</button>
             </div>
+            <div class="cb-landing-search-row cb-landing-asset-row">
+              <input type="text" class="cb-input cb-input-url" data-landings-asset
+                     placeholder="Asset (optional): start typing a name" autocomplete="off">
+              <span class="cb-landing-asset-chip" data-landings-asset-chip hidden>
+                <span data-landings-asset-name></span>
+                <button type="button" class="cb-landing-remove" data-landings-asset-clear title="Remove the asset filter">×</button>
+              </span>
+            </div>
+            <div class="cb-landing-popup" data-landings-asset-list hidden></div>
             <div class="cb-landing-popup" data-landings-results hidden></div>
           </div>
           <div class="cb-landing-preview" data-landings-preview hidden></div>
