@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2859 — Landing picker: template fallback after a pending search, lazy load, hidden Asset chip — 2026-11-22
+
+A Variant whose first path search answered "preparing the catalog" is now also searched as a template when the repeat finds nothing. Chosen landings are loaded when an account block is first shown, not for every collapsed block at page load. The empty "×" chip under the Asset field no longer shows when no asset is chosen.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1859).
+
 ## ACL-2852 — Builder: pick JCloudFront landings for an account — 2026-11-22
 
 The builder's Account section can search the JCloudFront catalog by Variant, path, URL or Asset, preview a landing on hover or open it in a new tab, and keep up to three landings per account with an even, editable split (100 / 50-50 / 33-33-34). "Use landing" in the stats Landings tab opens the same search. Generate is shown but disabled until the Keitaro connection. The MCP token stays in the machine environment.
