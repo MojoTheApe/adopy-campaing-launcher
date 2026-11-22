@@ -174,6 +174,43 @@ def test_use_landing_from_stats_reveals_the_builder_and_searches(page):
     assert page.evaluate("cbUseLandingFromStats('zz', 'x')") is False
 
 
+def test_asset_chip_is_not_visible_until_an_asset_is_chosen(page):
+    # ACL-2859: display:inline-flex перебивал атрибут hidden, пустой «×» был виден всегда.
+    page.click("[data-landings-open]")
+    assert page.locator("[data-landings-asset-chip]").is_visible() is False
+    page.fill("[data-landings-asset]", "a.")
+    page.locator("[data-asset-id='418']").click()
+    assert page.locator("[data-landings-asset-chip]").is_visible() is True
+
+
+def test_hidden_account_blocks_do_not_ask_the_server_until_shown(browser, monkeypatch, tmp_path):
+    monkeypatch.setattr(store, "_path", lambda: tmp_path / "account_landings.json")
+    store.add_landing("Demo", _card(7, "kept"))
+    gets = []
+
+    def route(r):
+        if r.request.url.endswith("/api/account-landings"):
+            f = dict(re.findall(r'name="([^"]+)"\r\n\r\n(.*?)\r\n--', r.request.post_data or "", re.S))
+            gets.append(f.get("op"))
+            r.fulfill(content_type="application/json",
+                      body=json.dumps({"ok": True, "landings": store.get_landings("Demo")}))
+        else:
+            r.fulfill(content_type="text/html", body="<!doctype html><html><body></body></html>")
+
+    ctx = browser.new_context()
+    ctx.route("**/*", route)
+    pg = ctx.new_page()
+    pg.goto("http://acl.test/")
+    pg.set_content('<div id="wrap" style="display:none">' + ROW + "</div>")
+    pg.add_script_tag(content=JS)
+    pg.wait_for_timeout(400)
+    assert gets == [] and pg.locator(".cb-landing-chosen").count() == 0
+    pg.evaluate("document.getElementById('wrap').style.display = 'block'")
+    pg.wait_for_selector(".cb-landing-chosen")
+    assert gets == ["get"] and pg.locator(".cb-landing-chosen-name").inner_text() == "kept"
+    ctx.close()
+
+
 def test_asset_filter_suggests_then_searches_by_asset_without_text(page):
     page.click("[data-landings-open]")
     page.fill("[data-landings-asset]", "a.")

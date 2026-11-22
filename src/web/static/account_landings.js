@@ -219,7 +219,19 @@
       }).catch(function () { if (mineA === assetToken) { assetList.hidden = true; } });
     }
 
+    // Выбранные лендинги читаем один раз и только когда блок аккаунта виден: свёрнутые блоки
+    // не создают запросов при загрузке страницы.
+    var loaded = false;
+    function load() {
+      if (loaded) return;
+      loaded = true;
+      post('/api/account-landings', {account_label: account, op: 'get'})
+        .then(function (data) { chosen = (data && data.landings) || []; paintChosen(); })
+        .catch(function () { loaded = false; paintChosen(); });
+    }
+
     function openSearch(prefill) {
+      load();
       search.hidden = false;
       if (prefill != null) query.value = prefill;
       query.focus();
@@ -250,9 +262,15 @@
     });
     root._landingsOpen = openSearch;
 
-    post('/api/account-landings', {account_label: account, op: 'get'})
-      .then(function (data) { chosen = (data && data.landings) || []; paintChosen(); })
-      .catch(function () { paintChosen(); });
+    paintChosen();
+    if (typeof IntersectionObserver === 'function') {
+      var seen = new IntersectionObserver(function (entries) {
+        if (entries.some(function (e) { return e.isIntersecting; })) { seen.disconnect(); load(); }
+      });
+      seen.observe(root);
+    } else {
+      load();
+    }
   }
 
   // Для кнопки «Use landing» в статистике: открыть выбор у аккаунта и сразу найти Variant.

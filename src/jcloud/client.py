@@ -185,6 +185,7 @@ def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: s
     if mode == "template":
         return run({"query": q, "kind": "template", "template_match": "contains"}, "template")
     result = run({"query": "/" + q, "kind": "path"}, "path")
-    if mode is None and result.get("ok") and result.get("state") == "ready" and not result.get("total"):
+    # `mode == "path"` — повтор после `pending`: первый ответ был «готовится», шаблон ещё не пробовали.
+    if mode in (None, "path") and result.get("ok") and result.get("state") == "ready" and not result.get("total"):
         return run({"query": q, "kind": "template", "template_match": "contains"}, "template")
     return result
