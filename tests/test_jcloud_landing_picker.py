@@ -64,6 +64,25 @@ def test_variant_without_path_match_falls_back_to_template(monkeypatch):
     assert out["searched_as"] == "template" and out["total"] == 1
 
 
+def test_template_fallback_also_runs_on_the_repeat_after_pending(monkeypatch):
+    # ACL-2859: первый запрос по пути ответил `pending`, UI повторяет его с mode=path.
+    seen = []
+
+    def fake(tool, args):
+        seen.append(args["kind"])
+        return _ready([]) if args["kind"] == "path" else _ready([_landing()])
+
+    monkeypatch.setattr(jc, "_call", fake)
+    out = jc.search("aipl", mode="path")
+    assert seen == ["path", "template"] and out["searched_as"] == "template" and out["total"] == 1
+
+
+def test_repeat_with_path_results_does_not_fall_back(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jc, "_call", lambda t, a: seen.append(a["kind"]) or _ready([_landing()]))
+    assert jc.search("aipl_en_1_lp", mode="path")["searched_as"] == "path" and seen == ["path"]
+
+
 def test_url_and_path_do_not_fall_back(monkeypatch):
     seen = []
     monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([]))
