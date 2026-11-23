@@ -43,7 +43,6 @@ def team(tmp_path, monkeypatch):
         d.mkdir(exist_ok=True)
         (d / "selected_cm.txt").write_text(machine, encoding="utf-8")
         monkeypatch.setenv("ACL_CONFIG_DIR", str(d))
-        tl._pulled.clear()
 
     yield backend, on
     tl.use_backend(None)
@@ -75,7 +74,9 @@ def test_a_template_saved_on_one_machine_reaches_the_other(team):
     assert lib_data(backend)["templates"][saved["id"]]["added_by"] == "Anna"
     assert backend.commits and backend.commits[-1].endswith("— Anna")
     on("Boris")
-    assert ft.load() == [saved]            # load() подтягивает копию сам
+    assert ft.load() == []                 # ACL-2668: чтение по копии, без сети
+    ft.pull(force=True)                    # событие: страница / выбор / вкладка Forms
+    assert ft.load() == [saved]
     assert ft.get(saved["id"]) == saved    # публикация читает то же самое
 
 
@@ -186,7 +187,7 @@ def test_an_invalid_library_entry_is_listed_flagged_and_kept(team):
     backend, on = team
     on("Anna")
     put_raw(backend, {BROKEN["id"]: BROKEN})
-    rows = ft.listing()["rows"]
+    rows = ft.listing(force=True)["rows"]
     [row] = rows
     assert row["id"] == BROKEN["id"] and row["invalid"] is True
     assert any("https://" in e for e in row["errors"])
@@ -400,7 +401,6 @@ def unseeded(tmp_path, monkeypatch):
     d.mkdir()
     (d / "selected_cm.txt").write_text("Anna", encoding="utf-8")
     monkeypatch.setenv("ACL_CONFIG_DIR", str(d))
-    tl._pulled.clear()
     yield backend
     tl.use_backend(None)
 
@@ -455,7 +455,7 @@ def test_mixed_case_ids_still_load_and_stay_editable(team):
     on("Anna")
     rec = {**TEMPLATE, "id": "AbCdEf012345"}
     put_raw(backend, {"AbCdEf012345": rec})
-    [row] = ft.listing()["rows"]
+    [row] = ft.listing(force=True)["rows"]
     assert row["invalid"] is False and row["id"] == "abcdef012345"
     assert ft.get("AbCdEf012345")["name"] == "Demo form"
     ft.save({**editable("abcdef012345"), "id": "AbCdEf012345", "headline": "Edited"})
@@ -469,6 +469,7 @@ def test_a_key_both_active_and_deleted_does_not_block_the_team(team):
     on("Anna")
     put_raw(backend, {BROKEN["id"]: {**BROKEN, "privacy_url": "https://example.com/p"}},
             {BROKEN["id"]: {"data": BROKEN, "deleted_by": "x", "deleted_at": "t"}})
+    ft.pull(force=True)
     assert [t["id"] for t in ft.load()] == [BROKEN["id"]]
     ft.save(TEMPLATE)
     assert len(ft.load()) == 2
@@ -505,7 +506,7 @@ def test_a_library_entry_with_a_legacy_locale_is_usable_and_stays_editable(team)
     on("Anna")
     rec = {**TEMPLATE, "id": "bbbbbbbbbbbb", "locale": "ES_MX"}
     put_raw(backend, {"bbbbbbbbbbbb": rec})
-    [row] = ft.listing()["rows"]
+    [row] = ft.listing(force=True)["rows"]
     assert row["invalid"] is False and row["locale"] == "ES_MX"
     assert ft.get("bbbbbbbbbbbb")["locale"] == "ES_MX"
     ft.save({**editable(rec["id"]), "headline": "Edited"})

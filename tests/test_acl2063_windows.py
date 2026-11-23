@@ -104,3 +104,16 @@ def test_restart_does_not_catch_up_a_missed_saved_window(world):
     restart.page_open(now=datetime(2026, 10, 24, 13), port=9095)
     assert restart._drain_once() == 3
     assert all(trigger.endswith('/13:00') for _, trigger in seen)
+
+
+def test_failed_read_is_retried_in_the_next_window_but_a_held_profile_is_skipped(world, monkeypatch):
+    # ACL-2668 #26: обычная неудача 10 минут назад не выключает аккаунт из окна 08/13/18;
+    # удержанный профиль (ACL-2091) окно по-прежнему пропускает.
+    new, _snaps, seen, _skips, _accounts, now = world
+    failed = {"state": "failed", "at_utc": datetime.fromtimestamp(now - 600, timezone.utc).isoformat(), "stop": ""}
+    monkeypatch.setattr(ci, "get_attempt", lambda a: dict(failed) if a in ("A", "B") else None)
+    monkeypatch.setattr(ar, "_profile_held", lambda a: a == "B")
+    q = new()
+    assert q.page_open(now=datetime(2026, 10, 24, 8), port=9095)["queued"] == 2
+    q._drain_once()
+    assert sorted(a for a, _ in seen) == ["A", "C"]

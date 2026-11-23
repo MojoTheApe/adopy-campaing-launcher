@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "ApiPublishError",
+  "message": "acc: the profile was closed while the action was starting",
+  "expect": {
+    "key": "profile_closed",
+    "short": "The profile was closed",
+    "next": "press Open (or Retry) to open it again",
+    "severity": "hold",
+    "retry": "later"
+  },
+  "code": "profile_closed"
+}

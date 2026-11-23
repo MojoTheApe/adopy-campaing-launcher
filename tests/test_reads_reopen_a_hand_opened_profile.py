@@ -319,6 +319,9 @@ def _current_failure_row(dashboard, message, code):
     from datetime import datetime, timezone
     from src.analysis_agent import campaign_inventory as ci
     site, page = dashboard
+    # ACL-2668 #26: обычная неудача больше не выключает аккаунт из окна 08/13/18 на час.
+    # Окно 08:00 проходит до сбоя (аккаунт свежий), чтобы открытие страницы ниже его не перечитало.
+    assert site.q.page_open(port=9095)["sweep"] == "started"
     stamp = datetime.fromtimestamp(site.now, timezone.utc).isoformat()
     failed = ci.Snapshot(account='Acc', state='failed', error=message,
                          error_code=code, finished_at_utc=stamp)
@@ -356,3 +359,9 @@ def test_the_server_row_keeps_failed_retry_for_other_failures(rendered, dashboar
 def _attach_without_reopen():
     with sp.profile_lock(PROFILE):
         return sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)
+
+
+@pytest.fixture(autouse=True)
+def _rpa_backend_explicit(monkeypatch):
+    """ACL-2785: по умолчанию теперь api; эти тесты проверяют ветку RPA, поэтому выбирают её явно."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")

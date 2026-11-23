@@ -25,6 +25,7 @@ def job(monkeypatch):
     from src.web import profile_slots as ps
     monkeypatch.setattr(pj, '_slots', ps.ProfileSlots(
         memory=lambda: ps.MemoryReading(total_mb=65536, available_mb=49152)))
+    monkeypatch.setenv('ACL_FB_BACKEND', 'rpa')  # ACL-2785: RPA-ветка задания выбирается явно
     key = pj.create_job('Offline', 'Test', [{}])
     yield key
     with pj._jobs_lock:

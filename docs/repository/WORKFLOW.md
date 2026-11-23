@@ -89,10 +89,12 @@ Shared contract references retain canonical bodies; `_ACL` documents preserve th
 
 Use the exact published Task Tracker revision selected by
 [tracker/engine.json](../../tracker/engine.json) and
-[delivery.json](../../delivery.json). ACL-2512 selects published Tracker3.28.1 at
-`6e8dce91d1696f8f24e50deaf03dcff04703303c` for signed partial-batch recovery and verified part-delivery recognition.
+[delivery.json](../../delivery.json). ACL-2758 selects published Tracker3.28.3 at
+`0f38be0711f3c614d356b006f5e61790fb26ae66` for fast archive writes through the
+authenticated previous-provider upgrade. ACL-2512's Tracker3.28.1 signed
+partial-batch recovery/verified part-delivery selection on10 November2026,
 ACL-2421's Tracker3.27.3 selection and ACL-2417's Tracker3.26.0 recovery
-support remains history. The previous ACL-2351 selection of
+support remain history. The previous ACL-2351 selection of
 Tracker3.24.1 on 4 November 2026 remains preserved as history.
 The original ACL-2156 selection of Tracker3.14.1 remains in the
 [dated provider history](STANDALONE_PROVIDER_ACL.md#historical-adoption--acl-2156-24-october-2026).
@@ -104,7 +106,7 @@ The descriptor and template baseline retain the provider's audited Master 1.8.0 
 Use the exact official Tracker source and its isolated
 `scripts/workflow_provider.py` entry point for future supported rendering. Read
 [the local provider adoption](STANDALONE_PROVIDER_ACL.md) and
-[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/6e8dce91d1696f8f24e50deaf03dcff04703303c/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/0f38be0711f3c614d356b006f5e61790fb26ae66/docs/STANDALONE_WORKFLOW_PROVIDER.md).
 Preserve all local rules below, true pristine ancestry, independent review and
 full applicable checks. The native configuration, adopted execution3, capacities,
 target, required checks, IDs, existing owners and original task scope are unchanged.

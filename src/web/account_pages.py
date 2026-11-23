@@ -84,21 +84,19 @@ def resolve_selection(pages: list[dict[str, str]], selected: str = "") -> dict[s
     raise ValueError("The selected Facebook Page is not available for this account. Refresh pages and choose again.")
 
 
-def _read_in_session(account: str) -> dict:
-    from src.analysis_agent.account_spend_api import _session
-
-    with _session(account) as sess:
-        if sess.client.allow_writes:
-            raise AssertionError("Page discovery must be read-only")
-        sess.client.reset_budget(8)
-        counts: dict = {}
-        pages = pages_from_client(sess.client, sess.act, counts=counts)
-        return {"ok": True, "state": "ready" if pages else "empty", "pages": pages, "sources": counts,
-                "act": sess.act, "account": account, "message": "" if pages else
-                "No Page is available for this account. With Automatic, the Graph API backend creates only "
-                "the website campaign (PAUSED) and its ad sets (active, they start when you turn the campaign on); add a Page and ads in Ads Manager, and the RPA "
-                "backend leaves the Identity as Ads Manager sets it. A specific Page or an Instant Form "
-                "requires a Page; Refresh pages after restoring access."}
+def _read_in_session(sess: Any, account: str) -> dict:
+    """Чтение Страниц в уже открытой сессии профиля (только чтение)."""
+    if sess.client.allow_writes:
+        raise AssertionError("Page discovery must be read-only")
+    sess.client.reset_budget(8)
+    counts: dict = {}
+    pages = pages_from_client(sess.client, sess.act, counts=counts)
+    return {"ok": True, "state": "ready" if pages else "empty", "pages": pages, "sources": counts,
+            "act": sess.act, "account": account, "message": "" if pages else
+            "No Page is available for this account. With Automatic, the Graph API backend creates only "
+            "the website campaign (PAUSED) and its ad sets (active, they start when you turn the campaign on); add a Page and ads in Ads Manager, and the RPA "
+            "backend leaves the Identity as Ads Manager sets it. A specific Page or an Instant Form "
+            "requires a Page; Refresh pages after restoring access."}
 
 
 def cached_only(account: str) -> dict:
@@ -112,24 +110,10 @@ def cached_only(account: str) -> dict:
 
 
 def read_pages(account: str, *, force: bool = False) -> dict:
-    from src.analysis_agent import account_spend as accounts
-    from src.analysis_agent import account_spend_api as api
+    """Список Страниц: кэш или одна сессия профиля, в которой заодно читаются пиксели, если их кэш пуст (ACL-2850)."""
+    from src.web import account_lists
 
-    if not force:
-        hit = cached_pages(account)
-        if hit is not None:
-            return hit
-    read = accounts.serialized_browser(key=accounts._profile_key, reading=True)(_read_in_session)
-    from src.fb_api.connection import user_started_action
-    try:
-        # ACL-2272: the Page control / Refresh pages is pressed by the person (render time uses `cached_only`).
-        with user_started_action():
-            result = read(account)
-        remember_pages(account, result)
-        return result
-    except Exception as exc:
-        return {"ok": False, "state": "failed", "pages": [], "account": account,
-                "message": "Could not load Facebook Pages. Refresh pages to retry. " + api._failure(account, exc)[0]}
+    return account_lists.read_lists(account, "pages", force=force)
 
 
 def validate_profile_page(account: str, *, act: str, page_id: str, page_name: str = "", link: str = "") -> str:

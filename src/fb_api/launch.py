@@ -12,11 +12,10 @@
 Отсюда три правила, общие для всех путей API, которые поднимают профиль
 (чтения, Check plan, Publish, «Open profiles for today»):
 
-* `StartPacer` — сколько запросов MLX `start` идут разом
-  (`ACL_MLX_PARALLEL_STARTS`, по умолчанию 1) и пауза перед стартом, которому
-  пришлось ждать предыдущий (`ACL_MLX_START_GAP_S`, 3 с). Одиночный старт не
-  ждёт ничего. Профили после старта по-прежнему работают параллельно —
-  сколько разом, решает место по памяти (`ACL_MAX_PROFILES`).
+* `StartPacer` — отдельного потолка стартов нет (решение владельца 16.11,
+  ACL-2668 п. 12): профилей стартует разом столько, сколько пускает место
+  «Profiles at once» (`ACL_MAX_PROFILES`), паузы между стартами нет.
+  `ACL_MLX_PARALLEL_STARTS` — только аварийный потолок: не задан — потолка нет.
 * `is_launcher_connection_error` — обрыв соединения с MLX launcher
   (10053/10054) на старте: один отложенный повтор у `profile.open_profile`.
   Таймаут, 4xx/5xx, вход в прокси, потеря сессии MLX — не повторяются.
@@ -28,7 +27,7 @@
 Телеметрия (журнал пилота `fb_api_pilot.jsonl`): `fb_api_mlx_start` — каждый
 старт (сколько шёл, сколько ждал очереди, сколько стартов было разом, повтор,
 вид отказа) и `fb_api_cold_open` — сроки первых вызовов CDP. По ним владелец
-подбирает потолок и темп на своей машине; живых замеров код сам не делает.
+видит, сколько стартов шло разом; живых замеров код сам не делает.
 """
 from __future__ import annotations
 
@@ -39,10 +38,8 @@ import urllib.parse
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator
 
+#: Аварийный потолок стартов MLX разом; не задан (или 0) — потолка нет.
 PARALLEL_STARTS_ENV = "ACL_MLX_PARALLEL_STARTS"
-DEFAULT_PARALLEL_STARTS = 1
-START_GAP_ENV = "ACL_MLX_START_GAP_S"
-DEFAULT_START_GAP_S = 3.0
 #: Пауза перед единственным повтором старта после обрыва соединения с MLX.
 START_RETRY_DELAY_S = 5.0
 
@@ -56,6 +53,7 @@ PROXY_PROBE_ENV = "ACL_PROXY_PROBE_URL"
 DEFAULT_PROXY_PROBE_URL = "https://api.ipify.org/"
 #: Через сколько секунд повторить пробу/первую навигацию после ERR_INVALID_AUTH_CREDENTIALS.
 PROXY_RETRY_S = 12.0
+PROXY_PROBE_POLL_S = 1.0  # ACL-2792: шаг повторных проб внутри бюджета PROXY_RETRY_S
 #: Пауза перед единственным повтором первой навигации при прокси/TLS-сбое (ACL-2321).
 PROXY_NET_RETRY_S = 30.0
 #: Сколько ждём, пока процесс остановленного профиля уйдёт (п. 8c).
@@ -71,11 +69,12 @@ def _env_number(name: str, default: float, lo: float, hi: float) -> float:
 
 
 def parallel_starts() -> int:
-    return int(_env_number(PARALLEL_STARTS_ENV, DEFAULT_PARALLEL_STARTS, 1, 4))
-
-
-def start_gap_s() -> float:
-    return _env_number(START_GAP_ENV, DEFAULT_START_GAP_S, 0.0, 30.0)
+    """Аварийный потолок стартов MLX разом; 0 — потолка нет (по умолчанию)."""
+    raw = str(os.environ.get(PARALLEL_STARTS_ENV, "") or "").strip()
+    try:
+        return max(0, int(float(raw.replace(",", ".")))) if raw else 0
+    except ValueError:
+        return 0
 
 
 def cold_start_s() -> float:
@@ -104,23 +103,19 @@ def _record(event: dict) -> None:
 # ───────────────────────── темп стартов MLX ─────────────────────────
 
 class StartPacer:
-    """Не больше `limit()` запросов MLX `start` разом; ждавший — ещё `gap()` секунд.
+    """Считает запросы MLX `start` в полёте; ждать заставляет только аварийный `limit()`.
 
-    Пауза — от конца последнего старта и только для того, кто стоял в очереди:
-    одиночный старт (и последовательные тесты) не ждут ничего.
+    `limit()` <= 0 (по умолчанию) — потолка нет: старт идёт сразу, разом
+    стартует столько профилей, сколько пустило место «Profiles at once».
+    Паузы между стартами нет (ACL-2668 п. 12).
     """
 
     def __init__(self, *, limit: Callable[[], int] = parallel_starts,
-                 gap: Callable[[], float] = start_gap_s,
-                 clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+                 clock: Callable[[], float] = time.monotonic):
         self._limit = limit
-        self._gap = gap
         self._clock = clock
-        self._sleep = sleep
         self._cond = threading.Condition()
         self._in_flight = 0
-        self._last_end = 0.0
 
     def in_flight(self) -> int:
         with self._cond:
@@ -130,25 +125,16 @@ class StartPacer:
     def slot(self) -> Iterator[dict]:
         """Контекст одного запроса `start`; отдаёт `{waited_s, in_flight}` для телеметрии."""
         began = self._clock()
-        waited = False
         with self._cond:
-            while self._in_flight >= max(1, int(self._limit())):
-                waited = True
+            while 0 < int(self._limit() or 0) <= self._in_flight:
                 self._cond.wait(timeout=1.0)
             self._in_flight += 1
-            pause = max(0.0, self._last_end + self._gap() - self._clock()) if waited else 0.0
-        info = {"in_flight": 0, "waited_s": 0.0}
+            info = {"in_flight": self._in_flight, "waited_s": round(self._clock() - began, 1)}
         try:
-            if pause > 0:
-                self._sleep(pause)
-            with self._cond:
-                info["in_flight"] = self._in_flight
-            info["waited_s"] = round(self._clock() - began, 1)
             yield info
         finally:
             with self._cond:
                 self._in_flight -= 1
-                self._last_end = self._clock()
                 self._cond.notify_all()
 
 

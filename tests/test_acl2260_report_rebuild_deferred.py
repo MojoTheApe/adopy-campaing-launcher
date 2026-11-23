@@ -59,15 +59,15 @@ def roomy(monkeypatch):
 
 @pytest.fixture
 def busy(monkeypatch):
-    """A publish job runs and a kept window holds a slot."""
+    """A publish job runs and a job works in the profile queue."""
     monkeypatch.setattr(publish_jobs, "_jobs", {"j1": {"status": "running", "account_label": "A"}})
-    monkeypatch.setattr(publish_jobs._slots, "occupied", lambda: True)
+    monkeypatch.setattr(publish_jobs._slots, "working", lambda: True)
 
 
 @pytest.fixture
 def idle(monkeypatch):
     monkeypatch.setattr(publish_jobs, "_jobs", {})
-    monkeypatch.setattr(publish_jobs._slots, "occupied", lambda: False)
+    monkeypatch.setattr(publish_jobs._slots, "working", lambda: False)
 
 
 def test_rebuild_is_deferred_while_memory_is_short(warm_cache, idle, short):
@@ -76,11 +76,32 @@ def test_rebuild_is_deferred_while_memory_is_short(warm_cache, idle, short):
     assert warm_cache == []
 
 
-def test_rebuild_runs_during_a_publish_and_a_kept_window(warm_cache, busy, roomy):
+def test_rebuild_runs_during_a_publish(warm_cache, busy, roomy):
     assert publish_jobs.publishing_busy() is True
     assert cache.rebuild_deferred() is False
     assert cache.get_cached_report()[0]["marker"] == "new"
     assert warm_cache == [NEW]
+
+
+def _fresh_slots(running=None, waiting=None):
+    import threading
+
+    slots = publish_jobs._slots
+    fresh = type(slots).__new__(type(slots))
+    fresh._cond = threading.Condition()
+    fresh._running, fresh._waiting = dict(running or {}), dict(waiting or {})
+    return fresh
+
+
+def test_a_kept_window_does_not_defer_the_rebuild(warm_cache, idle, roomy, monkeypatch):
+    # ACL-2668 (решение владельца 16.11): лёгкая вкладка после публикации / Check plan
+    # открыта, но ничего не делает — отчёт пересобирается.
+    kept = _fresh_slots({"a": {"profile": "P1", "kept": True, "kept_kind": "convenience"},
+                         "b": {"profile": "P2", "kept": True, "kept_kind": "review"}})
+    monkeypatch.setattr(publish_jobs, "_slots", kept)
+    assert publish_jobs.publishing_busy() is False
+    assert publish_jobs.profile_slots_held() is True       # выход из MLX всё ещё бережёт окно
+    assert cache.get_cached_report()[0]["marker"] == "new"
 
 
 def test_rebuild_runs_when_idle(warm_cache, idle, roomy):
@@ -119,22 +140,22 @@ def test_nothing_in_memory_still_builds(warm_cache, short, monkeypatch):
 
 def test_finished_jobs_are_not_busy(monkeypatch):
     monkeypatch.setattr(publish_jobs, "_jobs", {"j": {"status": "done"}, "k": {"status": "failed"}})
-    monkeypatch.setattr(publish_jobs._slots, "occupied", lambda: False)
+    monkeypatch.setattr(publish_jobs._slots, "working", lambda: False)
     assert publish_jobs.publishing_busy() is False
 
 
 def test_slots_occupied_covers_running_waiting_and_kept():
     slots = publish_jobs._slots
     assert slots.occupied() in (True, False)  # no exception on the live object
-    fresh = type(slots).__new__(type(slots))
-    import threading
-    fresh._cond = threading.Condition()
-    fresh._running, fresh._waiting = {}, {}
-    assert fresh.occupied() is False
+    assert slots.working() in (True, False)
+    fresh = _fresh_slots()
+    assert fresh.occupied() is False and fresh.working() is False
     fresh._running = {"j": {"kept": True}}
-    assert fresh.occupied() is True
+    assert fresh.occupied() is True and fresh.working() is False
+    fresh._running = {"j": {"profile": "P"}}
+    assert fresh.occupied() is True and fresh.working() is True
     fresh._running, fresh._waiting = {}, {"w": {}}
-    assert fresh.occupied() is True
+    assert fresh.occupied() is True and fresh.working() is True
 
 
 def _get(path, **params):
@@ -193,6 +214,14 @@ def test_scheduled_account_reads_wait_for_a_publish(busy, monkeypatch):
     now = account_refresh.datetime(2026, 10, 28, 9, 0).astimezone()
     result = queue.page_open(now=now, port=9090)
     assert result == {"sweep": "deferred_publish", "window": "08:00", "queued": 0}
+
+
+def test_a_kept_window_does_not_defer_the_scheduled_account_reads(idle, monkeypatch):
+    # ACL-2668: окно, оставленное после публикации, утреннее чтение не откладывает.
+    monkeypatch.setenv("ACL_AUTO_REFRESH", "1")
+    monkeypatch.setattr(publish_jobs, "_slots", _fresh_slots(
+        {"a": {"profile": "P1", "kept": True, "kept_kind": "convenience"}}))
+    assert account_refresh._publishing_busy() is False
 
 
 # ── ACL-2508: the notice says what and why; Refresh ends in the fresh page ──
