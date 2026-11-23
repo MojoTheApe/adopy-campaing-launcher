@@ -110,3 +110,70 @@ def test_search_still_maps_a_connection_failure_to_unreachable(opened):
     log, behaviour = opened
     behaviour["fail_open"] = True
     assert jc.search("/x")["code"] == "unreachable"
+
+
+# ───────────── зависшее открытие / закрытие (замечание ревью ACL-2881) ─────────────
+
+def _hanging_open(monkeypatch, log, *, hang_times, uninterruptible=False):
+    """Первые hang_times открытий зависают на рукопожатии; остальные дают рабочую сессию."""
+    import asyncio
+
+    state = {"n": 0}
+
+    @contextlib.asynccontextmanager
+    async def fake_open(url, token):
+        state["n"] += 1
+        if state["n"] <= hang_times:
+            if uninterruptible:
+                while True:
+                    try:
+                        await asyncio.sleep(3600)
+                    except asyncio.CancelledError:
+                        pass  # зависание, которое не снимается отменой
+            await asyncio.sleep(3600)
+        log.append(("open", token))
+        yield _Session(log)
+
+    monkeypatch.setattr(jc, "_open_session", fake_open)
+
+
+def test_a_hanging_handshake_times_out_and_the_next_search_works(opened, monkeypatch):
+    import time
+    log, _ = opened
+    monkeypatch.setattr(jc, "OPEN_S", 0.3)
+    _hanging_open(monkeypatch, log, hang_times=1)
+    t = time.time()
+    assert jc.search("/x")["code"] == "timeout"
+    assert time.time() - t < 3
+    assert jc.search("/x")["ok"] is True
+
+
+def test_a_handshake_that_ignores_cancellation_is_abandoned_for_a_fresh_thread(opened, monkeypatch):
+    import threading
+    log, _ = opened
+    monkeypatch.setattr(jc, "OPEN_S", 0.2)
+    monkeypatch.setattr(jc, "CALL_WAIT_S", 0.8)
+    _hanging_open(monkeypatch, log, hang_times=1, uninterruptible=True)
+    threads_before = {t.ident for t in threading.enumerate() if t.name == "jcloud-mcp"}
+    assert jc.search("/x")["code"] == "timeout"
+    assert jc.search("/x")["ok"] is True
+    after = {t.ident for t in threading.enumerate() if t.name == "jcloud-mcp"}
+    assert after - threads_before  # работает новый поток
+
+
+def test_a_hanging_close_does_not_block_the_next_session(opened, monkeypatch):
+    import asyncio
+    log, _ = opened
+    monkeypatch.setattr(jc, "CLOSE_S", 0.2)
+
+    @contextlib.asynccontextmanager
+    async def slow_close(url, token):
+        log.append(("open", token))
+        yield _Session(log)
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(jc, "_open_session", slow_close)
+    jc._call("search_landing_catalog", {})
+    monkeypatch.setenv("JCLOUD_MCP_TOKEN", "tok-OTHER-1234567")  # заставляет закрыть и открыть заново
+    assert jc._call("search_landing_catalog", {})["ok"]
+    assert len(_opens(log)) == 2
