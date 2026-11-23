@@ -125,8 +125,9 @@
         row.setAttribute('data-landing-id', item.id);
         var main = el('div', 'cb-landing-main');
         main.appendChild(el('div', 'cb-landing-title', item.title || ('#' + item.id)));
+        var pages = Number(item.count) > 1 ? item.count + ' pages' : '';
         main.appendChild(el('div', 'cb-landing-sub',
-          [(item.domain || '') + (item.path || ''), item.template, item.language, item.status].filter(Boolean).join(' · ')));
+          [(item.domain || '') + (item.path || ''), item.template, item.language, item.status, pages].filter(Boolean).join(' · ')));
         row.appendChild(main);
         var open = el('a', 'cb-landing-sub', 'Open ↗');
         open.href = /^https?:\/\//i.test(item.url || '') ? item.url : '#'; open.target = '_blank'; open.rel = 'noopener noreferrer';
@@ -174,6 +175,12 @@
             return;
           }
           if (page === 1 && !data.items.length) { note('Nothing found.'); return; }
+          if (page === 1) {
+            // Выдача сгруппирована: total — уникальные конфигурации, matching_landings — все лендинги в них.
+            var sum = el('div', 'cb-landing-note', data.total + ' unique configurations · ' + data.matching_landings + ' landings');
+            sum.setAttribute('data-landings-summary', '');
+            results.appendChild(sum);
+          }
           addRows(data.items);
           if (!data.complete) note(data.unclassified_count + ' landings could not be checked.');
           if (data.has_more) {

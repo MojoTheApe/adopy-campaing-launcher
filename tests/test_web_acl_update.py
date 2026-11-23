@@ -77,16 +77,37 @@ def test_update_is_refused_when_no_launcher_is_watching(monkeypatch, tmp_path):
     assert not (tmp_path / acl_update.RESTART_MARKER).exists()
 
 
-def test_update_is_refused_while_a_campaign_job_is_running(monkeypatch, tmp_path):
-    """A restart mid-run abandons a half-built campaign in Ads Manager."""
-    monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 2)
+def test_update_waits_for_a_running_campaign_job_instead_of_refusing(monkeypatch, tmp_path):
+    """ACL-2668 №11: a restart mid-run abandons a half-built campaign, so the
+    update queues and starts by itself once the job ends — never mid-publish."""
+    import threading
+    from src.web import publish_jobs, update_queue
+
     monkeypatch.setattr(acl_update, "check", lambda **k: _offer())
+    monkeypatch.setattr(update_queue, "POLL_SECONDS", 0.01)
+    monkeypatch.setattr(publish_jobs, "_update_reserved", False)
+    monkeypatch.setattr(publish_jobs, "_jobs", {"run": {"status": "running"}})
+    exited = threading.Event()
+    monkeypatch.setattr(acl_update, "schedule_exit", lambda *a, **k: exited.set())
+    update_queue.reset()
+    try:
+        response = asyncio.run(_request("POST", "/acl/update/apply"))
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] and body["queued"] and body["message"] == update_queue.WAITING_TEXT
+        assert not exited.wait(0.2), "the update must not start while the job runs"
+        assert not (tmp_path / acl_update.RESTART_MARKER).exists()
+        # Reloaded page and a second click see the same queued update.
+        assert asyncio.run(_request("POST", "/acl/update/apply")).json()["queued"]
+        assert update_queue.status()["state"] == "waiting"
 
-    response = asyncio.run(_request("POST", "/acl/update/apply"))
-
-    assert response.status_code == 409
-    assert "2 campaign job(s)" in response.json()["error"]
-    assert not (tmp_path / acl_update.RESTART_MARKER).exists()
+        publish_jobs._jobs["run"]["status"] = "done"
+        assert exited.wait(5)
+        assert (tmp_path / acl_update.RESTART_MARKER).exists()
+        assert publish_jobs._update_reserved, "no new job may start before the restart"
+    finally:
+        update_queue.reset()
+        publish_jobs.release_update()
 
 
 def test_update_is_refused_when_the_gate_offers_nothing(monkeypatch, tmp_path):
@@ -107,7 +128,10 @@ def test_update_is_refused_when_the_gate_offers_nothing(monkeypatch, tmp_path):
 # ── the happy path ─────────────────────────────────────────────────────────
 
 def test_accepted_update_leaves_the_marker_and_names_the_release(monkeypatch, tmp_path):
-    monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 0)
+    from src.web import publish_jobs
+
+    monkeypatch.setattr(publish_jobs, "_update_reserved", False)
+    monkeypatch.setattr(publish_jobs, "_jobs", {})
     monkeypatch.setattr(acl_update, "check", lambda **k: _offer())
 
     response = asyncio.run(_request("POST", "/acl/update/apply"))

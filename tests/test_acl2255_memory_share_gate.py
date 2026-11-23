@@ -108,7 +108,10 @@ def test_the_setting_is_read_from_the_machine_env_and_garbage_falls_back():
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "85"}).max_used_pct == 85.0
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "92,5"}).max_used_pct == 92.5
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "lots"}).max_used_pct == 92.0
-    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 92.0     # ниже 10 — мусор
+    # ACL-2668: Settings разрешает 0–95 %, низкая доля — настоящее значение, а не мусор.
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 5.0
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "0"}).max_used_pct == 0.0
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "-3"}).max_used_pct == 92.0   # отрицательное — мусор
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "150"}).max_used_pct == 99.0
 
 

@@ -242,7 +242,7 @@ def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
                                          minimum=0.1) * 1024),
         reserve_mb=int(_env_number(env, "ACL_MEMORY_RESERVE_GB", DEFAULT_RESERVE_GB, minimum=0) * 1024),
         max_used_pct=min(99.0, _env_number(env, "ACL_MEMORY_MAX_USED_PCT", DEFAULT_MAX_USED_PCT,
-                                           minimum=10)),
+                                           minimum=0)),   # ACL-2668: Settings разрешает 0–95
         warmup_s=_env_number(env, "ACL_PROFILE_WARMUP_S", DEFAULT_WARMUP_S, minimum=0),
         settle_s=_env_number(env, "ACL_PROFILE_SETTLE_S", DEFAULT_SETTLE_S, minimum=0),
         kept_idle_close_s=_env_number(env, "ACL_KEPT_IDLE_CLOSE_MIN",

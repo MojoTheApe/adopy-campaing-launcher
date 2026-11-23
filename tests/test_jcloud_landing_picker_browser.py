@@ -25,7 +25,7 @@ PREVIEW_CSS = re.search(r"\.cb-landing-preview \{[^}]*\}", TEMPLATE).group(0)
 
 
 def _card(lid, title):
-    return {"id": lid, "title": title, "url": f"https://lp.example.com/{title}", "domain": "lp.example.com",
+    return {"id": lid, "title": title, "count": 2, "url": f"https://lp.example.com/{title}", "domain": "lp.example.com",
             "path": f"/{title}", "template": "react_x", "language": "en", "status": None, "page_type": "funnel"}
 
 
@@ -53,7 +53,7 @@ def page(browser, monkeypatch, tmp_path):
         elif url.endswith("/api/jcloud/landings/search"):
             searches.append(f)
             body = {"ok": True, "state": "ready", "searched_as": "path", "page": 1, "items": pages["1"],
-                    "total": 4, "has_more": False, "snapshot_id": "s", "complete": True, "unclassified_count": 0}
+                    "total": 4, "matching_landings": 9, "has_more": False, "snapshot_id": "s", "complete": True, "unclassified_count": 0}
         elif url.endswith("/api/account-landings"):
             op = f.get("op", "get")
             if op == "add":
@@ -266,3 +266,11 @@ def test_preview_sits_beside_the_list_when_there_is_room(page):
     page.set_viewport_size({"width": 1400, "height": 800})
     r = _hover_first_row(page)
     assert r["p"][0] >= r["l"][1] and r["p"][2] <= r["w"]
+
+def test_cards_show_instance_count_and_the_grouped_totals(page):
+    page.click("[data-landings-open]")
+    page.fill("[data-landings-query]", "x")
+    page.click("[data-landings-go]")
+    page.locator("[data-landing-id]").first.wait_for()
+    assert page.locator("[data-landings-summary]").inner_text() == "4 unique configurations · 9 landings"
+    assert "2 pages" in page.locator("[data-landing-id]").first.inner_text()
