@@ -494,7 +494,7 @@ def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
 def test_pixel_missing_for_website_conversions(tmp_path):
     d = _draft(tmp_path, ads=1)
     out = _audit(AuditMeta(pixels=[]), d)
-    assert _by(out)["pixel_ok"]["status"] == "error" and "pixels/datasets" in _by(out)["pixel_ok"]["detail"]
+    assert _by(out)["pixel_ok"]["status"] == "error" and "no pixel/dataset" in _by(out)["pixel_ok"]["detail"]
 
 
 def test_instant_form_needs_an_active_form_of_the_page(tmp_path):

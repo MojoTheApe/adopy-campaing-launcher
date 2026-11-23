@@ -150,6 +150,7 @@ function boot(spec, opts = {}) {
   };
 
   const sandbox = {
+    CSS: { escape: (s) => String(s) },   // в браузере CSS.escape есть всегда (ACL-2669: страница им пользуется)
     document,
     localStorage: { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = String(v); } },
     aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
@@ -291,7 +292,9 @@ assert.equal(t.p.panels[0].querySelectorAll('.cb-parked-note').length
 
 // ── удаление спрашивает и называет ────────────────────────────────────
 t = boot(SPEC, { confirm: false });
-t.panel.fire('click', { target: { closest: (s) => (s === '[data-act]' ? { dataset: { act: 'drop' }, closest: () => ({ dataset: { camp: ids[0] } }) } : null) } });
+// id карточек теперь настоящие (случайные, как в черновике), в новой странице они новые
+const dropIds = [...t.body.innerHTML.matchAll(/data-camp="([^"]+)"/g)].map((m) => m[1]);
+t.panel.fire('click', { target: { closest: (s) => (s === '[data-act]' ? { dataset: { act: 'drop' }, closest: () => ({ dataset: { camp: dropIds[0] } }) } : null) } });
 assert.ok(/SA_one/.test(t.confirms[0] || ''), 'в вопросе не названо, что удаляют');
 assert.equal(t.p.forms[0].querySelectorAll('.cb-slot').length, 2, 'удалили, несмотря на отказ');
 

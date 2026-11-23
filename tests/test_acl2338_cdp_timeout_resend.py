@@ -70,17 +70,18 @@ def test_ad_appearing_only_for_the_second_readback_is_not_resent(tmp_path):
 
 
 @pytest.mark.parametrize("video", [False, True])
-def test_upload_with_a_cdp_timeout_is_never_resent(tmp_path, video):
+def test_upload_with_a_cdp_timeout_is_resent_once(tmp_path, video):
+    """Owner rule 12.11: an upload with no answer and an empty readback is sent again (an extra file is harmless)."""
     meta = CdpMeta()
     edge = "advideos" if video else "adimages"
     meta.fail_next[edge] = "cdp_unsent"
     out, _ = _run(meta, _draft(tmp_path, ads=1, video=video), reconcile_wait_s=0)
-    assert out.error and out.stop_kind == "unknown"
-    assert len(_edges(meta, edge)) == 1
+    assert not out.error, out.error
+    assert len(_edges(meta, edge)) == 2
 
 
 @pytest.mark.parametrize("reason", ["context_stale", "page_closed"])
-def test_stale_context_and_closed_page_are_never_resent(tmp_path, reason):
+def test_stale_context_and_closed_page_are_resent_once_then_stop_the_campaign(tmp_path, reason):
     class Gone(FakeMeta):
         def write(self, path, params, files=None, filename="", **kw):
             if path.endswith("/ads"):
@@ -91,9 +92,8 @@ def test_stale_context_and_closed_page_are_never_resent(tmp_path, reason):
     meta = Gone()
     out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
     assert out.error and out.stop_kind == "unknown"
-    assert meta.ad_posts == 1
-    from src.fb_api import creator as cr
-    assert not {"context_stale", "page_closed"} & set(cr.RESEND_REASONS)
+    assert meta.ad_posts == 2                       # sent again once, then this campaign stops (never a third POST)
+    assert out.run_continues is True
 
 
 def test_a_failing_readback_leaves_a_stop_row(tmp_path, monkeypatch):
@@ -186,16 +186,16 @@ def test_write_unknown_carries_the_in_page_reason(tmp_path):
     assert caught.value.reason == "context_stale"
 
 
-def test_cdp_timeout_stops_after_exactly_one_post_and_leaves_a_row(tmp_path, monkeypatch):
+def test_cdp_timeout_is_resent_once_and_leaves_a_row(tmp_path, monkeypatch):
     rows = []
     monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, kw.get("diag") or {})))
     meta = CdpMeta()
     meta.fail_next["ads"] = "cdp_unsent"
     out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
-    assert out.error and out.stop_kind == "unknown"
-    assert len(_edges(meta, "ads")) == 1
+    assert not out.error, out.error
+    assert len(_edges(meta, "ads")) == 2                 # owner rule 12.11: one re-send after two empty readbacks
     row = [d for s, d in rows if s == "api_create_step" and d.get("reason") == "cdp_timeout"]
-    assert len(row) == 1 and row[0]["outcome"] == "stop_not_found"
+    assert len(row) == 1 and row[0]["outcome"] == "resend"
     assert {"waited_s", "readback_1", "cpu_pct", "page_count"} <= set(row[0])
 
 

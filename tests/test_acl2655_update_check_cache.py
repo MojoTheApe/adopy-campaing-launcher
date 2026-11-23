@@ -39,23 +39,23 @@ def rig(tmp_path, monkeypatch):
     return r
 
 
-def test_cache_window_is_fifteen_minutes():
-    assert ru.CHECK_EVERY_SECONDS == 15 * 60
+def test_cache_window_is_one_minute():
+    assert ru.CHECK_EVERY_SECONDS == 60
 
 
 def test_check_repeats_only_after_the_window(rig):
     ru.check(now=1000.0)
-    ru.check(now=1000.0 + 14 * 60)
+    ru.check(now=1000.0 + 59)
     assert rig.calls == 1
-    ru.check(now=1000.0 + 16 * 60)
+    ru.check(now=1000.0 + 61)
     assert rig.calls == 2
 
 
 def test_forced_check_sees_a_release_published_after_the_last_check(rig):
     assert not ru.check(now=1000.0)["available"]
     rig.latest = "2026-11-16.1651"
-    assert not ru.check(now=1060.0)["available"], "cached answer inside the window"
-    state = ru.check(now=1120.0, force=True)
+    assert not ru.check(now=1030.0)["available"], "cached answer inside the window"
+    state = ru.check(now=1060.0, force=True)
     assert state["available"] and state["candidate"]["version"] == "2026-11-16.1651"
 
 
@@ -75,8 +75,30 @@ def test_error_without_any_known_release_does_not_raise(rig):
     assert not state["available"] and not state["ok"]
 
 
-def test_header_first_check_forces_and_hourly_one_does_not():
+def test_header_checks_on_events_only_and_always_forces():
+    """ACL-2668 decision 23: no periodic timer; page load and Refresh force a check."""
     html = TEMPLATE.read_text(encoding="utf-8")
     assert "'/acl/update/check' + (force ? '?force=1' : '')" in html
-    assert "aclCheck(true);" in html
-    assert "setInterval(function () { aclCheck(false); }, 60 * 60 * 1000);" in html
+    assert "window.aclUpdateCheck = function () { aclCheck(true); };" in html
+    block = html[html.index("(function aclUpdateControl()"):]
+    block = block[:block.index("btn.addEventListener('click'")]
+    assert "aclCheck(true);" in block
+    assert "aclCheck(false)" not in block
+    assert "setInterval" not in block and "setTimeout" not in block
+
+
+def test_refresh_without_reload_checks_for_a_release():
+    html = TEMPLATE.read_text(encoding="utf-8")
+    body = html[html.index("async function dashRefresh(ev)"):html.index("function dashRefreshUpdateCheck()")]
+    # обе ветки сбоя (ответ с ошибкой и исключение) зовут проверку
+    assert body.count("dashRefreshUpdateCheck();") == 2
+    # успех перезагружает страницу — проверка идёт при загрузке
+    assert "location.reload();" in body
+
+
+def test_date_change_reloads_the_page_so_the_forced_load_check_covers_it():
+    html = TEMPLATE.read_text(encoding="utf-8")
+    body = html[html.index("function amapApply(from, to, span, cmp)"):]
+    body = body[:body.index("\n}\n")]
+    assert "window.location.href = " in body
+    assert "acl-update-check-soft" not in html
