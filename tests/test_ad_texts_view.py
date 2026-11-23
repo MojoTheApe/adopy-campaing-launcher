@@ -44,6 +44,19 @@ def test_the_form_carries_every_column_of_the_sheet():
         assert f'id="{field}"' in panel, f"в форме нет поля {field}"
 
 
+def test_the_form_fields_show_no_example_placeholders():
+    """Серые примеры в полях выглядели как уже введённые значения (ACL-2831).
+
+    Проверяются только четыре поля из задачи; остальные поля формы не трогаем.
+    """
+    t = _t()
+    panel = t[t.index('id="view-ad-texts"'): t.index('id="view-home"')]
+    for field in ("at-name", "at-language", "at-headline", "at-description"):
+        tag = re.search(rf'<input id="{field}"[^>]*>', panel)
+        assert tag, f"в форме нет поля {field}"
+        assert "placeholder=" not in tag.group(0), f"у поля {field} остался пример-placeholder"
+
+
 def test_the_body_is_a_textarea_not_a_single_line_input():
     """Тело объявления многострочное. В `input` абзацы набрать нечем."""
     t = _t()

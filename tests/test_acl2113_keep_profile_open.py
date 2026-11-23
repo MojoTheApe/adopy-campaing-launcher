@@ -4,8 +4,9 @@
 Владелец: байер работает в окне дальше (проверяет кампании, включает), поэтому
 робот его не закрывает. Но каждое оставленное окно держит место в очереди, и два
 опубликованных аккаунта запирали всю очередь (22.10, TEST9095: B91 и D65 ждали
-Doc122/9403A). Здесь: окна «для удобства» (чистая публикация) уступают место,
-простояв N минут; окна «на проверку» не закрываются никогда; открытое окно
+Doc122/9403A). Здесь: окна «для удобства» (чистая публикация) места не занимают
+и при нехватке памяти уступают сразу (ACL-2668, решение владельца 16.11 — без
+10 минут простоя); окна «на проверку» не закрываются никогда; открытое окно
 берёт следующее задание того же аккаунта. Очередь, часы и остановка профиля —
 подставные: ни Multilogin, ни Meta.
 """
@@ -37,6 +38,10 @@ def _key(label):
 
 
 IDLE_S = 600.0
+#: Свободно столько — меньше запаса (`keep_free_mb` ~10 ГБ из 128): новый профиль ждёт памяти.
+SHORT_MB = 8 * GB
+#: Закрытое окно возвращает столько.
+FREED_MB = 4 * GB
 
 
 def _until(cond, timeout=3.0):
@@ -51,22 +56,27 @@ def _until(cond, timeout=3.0):
 class Rig:
     """Очередь с потолком 2, ручными часами и подставным закрытием окон."""
 
-    def __init__(self, ceiling=2, evict_ok=True):
+    def __init__(self, ceiling=2, evict_ok=True, idle_close_s=0.0):
         self.now = 1000.0
+        self.avail_mb = 120 * GB
         self.closed: list[tuple[str, str, str]] = []
         self.evict_ok = evict_ok
         self.lock_free = True
         self.idle_seen: list[float] = []
         self.settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=ceiling,
-                                            kept_idle_close_s=IDLE_S)
+                                            kept_idle_close_s=idle_close_s)
         self.probe = ps.ProfileUsage(lambda profiles: {p: int(3.5 * GB) for p in profiles},
                                      clock=lambda: self.now, background=False)
         self.slots = self.make_slots(self._evict)
 
     def make_slots(self, evictor):
         return ps.ProfileSlots(
-            memory=lambda: ps.MemoryReading(total_mb=128 * GB, available_mb=120 * GB),
+            memory=lambda: ps.MemoryReading(total_mb=128 * GB, available_mb=self.avail_mb),
             settings=lambda: self.settings, clock=lambda: self.now, tick_s=0.02, usage=self.probe,
+            # Подставная «открыт ли профиль»: настоящая сканирует процессы Mimic и может
+            # отвечать секунды — очередь ждёт её до 5 с перед закрытием окна ради памяти.
+            open_probe=ps.OpenProfileProbe(lambda profiles: set(), clock=lambda: self.now,
+                                           background=False),
             evictor=evictor)
 
     def _evict(self, job_id, label, profile, idle_s=0.0):
@@ -78,6 +88,8 @@ class Rig:
         self.lock_free = self.lock_free and "snap" in seen
         self.idle_seen.append(idle_s)
         self.closed.append((job_id, label, profile))
+        if self.evict_ok:
+            self.avail_mb += FREED_MB
         return self.evict_ok
 
     def run_and_keep(self, job_id, profile, label, kind):
@@ -102,14 +114,50 @@ def _running(slots):
     return sorted((r["profile"], r["kept_kind"]) for r in slots.snapshot()["running"])
 
 
-# ── очередь: окна «для удобства» уступают место ─────────────────────────────
+# ── очередь: окна «для удобства» места не занимают и уступают сразу ───────
 
-def test_three_clean_publishes_with_a_ceiling_of_two_the_third_starts_after_the_oldest_idle_window_closes():
+def _drop_waiter(rig, job_id):
+    with rig.slots._cond:
+        rig.slots._waiting.pop(job_id, None)
+        rig.slots._cond.notify_all()
+
+
+def test_kept_convenience_windows_do_not_take_a_slot_the_third_job_starts_at_once():
+    # ACL-2668: потолок 2, два окна оставлены после чистых публикаций — третье задание
+    # стартует сразу, ничего не закрывая: память есть, а окна места не держат.
     rig = Rig()
     rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
-    rig.now += 60
     rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
-    rig.now += IDLE_S + 1                                   # оба простаивают дольше N минут
+    c = rig.start("c", "P3")
+    assert _until(lambda: "grant" in c)
+    assert rig.closed == [] and c["grant"]["closed_for_room"] == []
+    assert c["waits"] == []
+    assert [p for p, _ in _running(rig.slots)] == ["P1", "P2", "P3"]
+
+
+def test_the_ceiling_counts_only_running_jobs_not_kept_convenience_windows():
+    rig = Rig()
+    rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
+    rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
+    assert rig.slots.acquire("c", "P3") is not None
+    assert rig.slots.acquire("d", "P4") is not None        # два идут — потолок взят
+    e = rig.start("e", "P5")
+    assert _until(lambda: e["waits"])
+    time.sleep(0.15)
+    assert "grant" not in e and rig.closed == []          # закрытие окна потолка не освободит
+    assert e["waits"][0]["reason"] == "ceiling"
+    rig.slots.release("c")
+    assert _until(lambda: "grant" in e)
+
+
+def test_when_memory_is_short_the_oldest_convenience_window_gives_way_at_once():
+    # ACL-2668: ни минуты простоя — окно только что оставлено, а уступает сразу.
+    rig = Rig()
+    rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
+    rig.now += 1
+    rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
+    rig.now += 1
+    rig.avail_mb = SHORT_MB
     c = rig.start("c", "P3")
     assert _until(lambda: "grant" in c)
     assert rig.closed == [("a", "KLD_A", "P1")]            # закрыто ровно самое давнее
@@ -117,19 +165,18 @@ def test_three_clean_publishes_with_a_ceiling_of_two_the_third_starts_after_the_
     assert [p for p, _ in _running(rig.slots)] == ["P2", "P3"]
 
 
-def test_a_window_that_has_not_idled_long_enough_is_not_closed_and_the_queue_says_why():
-    rig = Rig()
+def test_the_machine_setting_can_still_bring_back_the_idle_wait():
+    # Аварийный выключатель: `ACL_KEPT_IDLE_CLOSE_MIN` на машине — окно ждёт простоя, как до ACL-2668.
+    rig = Rig(idle_close_s=IDLE_S)
     rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
-    rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
-    rig.now += IDLE_S - 30
+    rig.avail_mb = SHORT_MB
     c = rig.start("c", "P3")
     assert _until(lambda: c["waits"])
     time.sleep(0.15)
     assert "grant" not in c and rig.closed == []
-    assert c["waits"][0]["reason"] == "idle_windows"
-    assert sorted(c["waits"][0]["convenience_accounts"]) == ["KLD_A", "KLD_B"]
-    assert pj._queue_view(c["waits"][0])["state"] == "waiting_idle"
-    rig.now += 60                                           # теперь простаивают
+    assert c["waits"][0]["reason"] == "below_reserve"
+    assert c["waits"][0]["convenience_accounts"] == ["KLD_A"]
+    rig.now += IDLE_S + 1
     assert _until(lambda: "grant" in c)
     assert [x[1] for x in rig.closed] == ["KLD_A"]
 
@@ -146,14 +193,26 @@ def test_review_windows_are_never_auto_closed_however_long_they_stay():
     assert c["waits"][0]["reason"] == "review_windows"
     assert sorted(c["waits"][0]["kept_accounts"]) == ["KLD_A", "KLD_B"]
     assert pj._queue_view(c["waits"][0])["state"] == "waiting_review"
+    _drop_waiter(rig, "c")
 
 
-def test_only_the_idle_convenience_window_is_closed_when_a_review_window_is_open_too():
+def test_review_windows_are_not_closed_for_memory_either():
+    rig = Rig(ceiling=4)
+    rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_REVIEW)
+    rig.avail_mb = SHORT_MB
+    c = rig.start("c", "P3")
+    assert _until(lambda: c["waits"])
+    time.sleep(0.15)
+    assert "grant" not in c and rig.closed == []
+    _drop_waiter(rig, "c")
+
+
+def test_only_the_convenience_window_is_closed_when_a_review_window_is_open_too():
     rig = Rig()
     rig.run_and_keep("a", "P1", "KLD_REVIEW", ps.KEPT_REVIEW)       # самое давнее, но на проверке
     rig.now += 10
     rig.run_and_keep("b", "P2", "KLD_CONV", ps.KEPT_CONVENIENCE)
-    rig.now += IDLE_S + 1
+    rig.avail_mb = SHORT_MB
     c = rig.start("c", "P3")
     assert _until(lambda: "grant" in c)
     assert rig.closed == [("b", "KLD_CONV", "P2")]
@@ -164,19 +223,19 @@ def test_a_failed_close_keeps_the_window_and_does_not_retry_in_a_loop():
     rig = Rig(evict_ok=False)
     rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
     rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
-    rig.now += IDLE_S + 1
+    rig.avail_mb = SHORT_MB
     c = rig.start("c", "P3")
     assert _until(lambda: rig.closed)
     time.sleep(0.2)
     assert "grant" not in c and len(rig.closed) == 1
     assert len(_running(rig.slots)) == 2
+    _drop_waiter(rig, "c")
 
 
 def test_a_job_for_an_account_whose_window_is_open_reuses_it_without_closing_anything():
     rig = Rig()
     rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
     rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
-    rig.now += IDLE_S + 1
     again = rig.start("a2", "P1")
     assert _until(lambda: "grant" in again)
     assert rig.closed == []
@@ -192,20 +251,35 @@ def test_a_review_window_stays_review_when_the_next_job_reuses_it():
     assert again["grant"]["reused_kept"] == ps.KEPT_REVIEW
 
 
-def test_the_idle_threshold_comes_from_the_machine_env_in_minutes():
-    assert ps.load_settings({}).kept_idle_close_s == 600.0
+def test_by_default_there_is_no_idle_wait_and_the_machine_env_is_in_minutes():
+    assert ps.load_settings({}).kept_idle_close_s == 0.0
     assert ps.load_settings({"ACL_KEPT_IDLE_CLOSE_MIN": "3"}).kept_idle_close_s == 180.0
 
 
-def test_touching_a_window_restarts_its_idle_time():
+def test_a_touched_window_is_closed_last():
     rig = Rig()
     rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
     rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
-    rig.now += IDLE_S + 1
+    rig.now += 5
     rig.slots.touch("kld_a")
+    rig.avail_mb = SHORT_MB
     c = rig.start("c", "P3")
     assert _until(lambda: "grant" in c)
     assert [x[1] for x in rig.closed] == ["KLD_B"]
+
+
+def test_a_kept_window_does_not_make_the_queue_working_but_a_running_job_does():
+    # ACL-2668: оставленное окно не откладывает утреннее чтение и пересборку отчёта.
+    rig = Rig()
+    assert rig.slots.working() is False
+    rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
+    rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_REVIEW)
+    assert rig.slots.working() is False
+    assert rig.slots.occupied() is True                    # подключение MLX окна всё же держат
+    rig.slots.acquire("c", "P3")
+    assert rig.slots.working() is True
+    rig.slots.release("c")
+    assert rig.slots.working() is False
 
 
 # ── задания: вид оставленного окна и строка в панели ────────────────────────
@@ -273,8 +347,13 @@ def jobs(monkeypatch):
     monkeypatch.setattr(pj, "profile_key_for", _key)
     monkeypatch.setattr(publish_api, "ApiPublisher", FakePublisher)
     stops: list[str] = []
-    monkeypatch.setattr(pj, "_stop_idle_profile", lambda label, profile, busy_msg="", **kw: (
-        stops.append(label) or {"ok": True}))
+
+    def stop(label, profile, busy_msg="", **kw):
+        stops.append(label)
+        rig.avail_mb += FREED_MB
+        return {"ok": True}
+
+    monkeypatch.setattr(pj, "_stop_idle_profile", stop)
 
     def run(label, result=_ok_result, **scenario):
         FakePublisher.scenario = {"result": result, **scenario}
@@ -307,12 +386,22 @@ def test_a_readback_mismatch_leaves_a_review_window(jobs):
     assert _kinds() == [(_key("KLD_A"), ps.KEPT_REVIEW)]
 
 
-def test_three_clean_publishes_close_the_oldest_idle_window_and_say_so_in_both_panels(jobs):
+def test_three_clean_publishes_with_a_ceiling_of_two_close_nothing_while_memory_is_free(jobs):
+    jobs("KLD_A")
+    jobs("KLD_B")
+    _, job3 = jobs("KLD_C")
+    assert jobs.stops == []
+    assert not any("make room" in n for n in job3["creative_notices"])
+    assert {p for p, _ in _kinds()} == {_key("KLD_A"), _key("KLD_B"), _key("KLD_C")}
+
+
+def test_short_memory_closes_the_oldest_kept_window_at_once_and_says_so_in_both_panels(jobs):
     rig = jobs.rig
     first, _ = jobs("KLD_A")
     rig.now += 30
     jobs("KLD_B")
-    rig.now += IDLE_S + 1
+    rig.now += 1
+    rig.avail_mb = SHORT_MB
     _, job3 = jobs("KLD_C")
     assert jobs.stops == ["KLD_A"]                          # закрыто через остановку профиля
     assert "Closed KLD_A to make room" in job3["creative_notices"]
@@ -489,11 +578,12 @@ def test_the_queue_lock_is_free_while_the_idle_window_is_being_stopped():
     rig = Rig()
     rig.run_and_keep("a", "P1", "KLD_A", ps.KEPT_CONVENIENCE)
     rig.run_and_keep("b", "P2", "KLD_B", ps.KEPT_CONVENIENCE)
-    rig.now += IDLE_S + 1
+    rig.now += 42
+    rig.avail_mb = SHORT_MB
     c = rig.start("c", "P3")
     assert _until(lambda: "grant" in c)
     assert rig.lock_free is True
-    assert rig.idle_seen and rig.idle_seen[0] > IDLE_S
+    assert rig.idle_seen == [42.0]
 
 
 def test_a_window_that_is_being_closed_is_not_reused_and_its_account_waits_for_the_stop():
