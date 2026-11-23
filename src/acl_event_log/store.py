@@ -110,6 +110,40 @@ def pull_new(conn: sqlite3.Connection, list_page: Callable[[str | None], tuple[l
             return total
 
 
+
+def _hub_cursor(conn: sqlite3.Connection) -> int:
+    """Последний скачанный seq_id хаба: страницы пишутся в segments как `hub:<after>-<next>`."""
+    best = 0
+    for (key,) in conn.execute("SELECT key FROM segments WHERE key LIKE 'hub:%'"):
+        try:
+            best = max(best, int(key.rsplit("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return best
+
+
+def pull_hub(conn: sqlite3.Connection, fetch_page: Callable[[int], tuple[bytes, int]]) -> dict:
+    """Скачать новые события из хаба (`/api/events?after=`), начиная с запомненного курсора.
+
+    `fetch_page(after) -> (ndjson, next_after)`. Каждая страница пишется целиком или нет.
+    """
+    total: dict[str, Any] = {"segments": 0, "new": 0, "duplicates": 0, "conflicts": 0, "secrets": [],
+                             "errors": 0}
+    after = _hub_cursor(conn)
+    while True:
+        body, nxt = fetch_page(after)
+        if not body.strip() or nxt <= after:
+            return total
+        res = ingest_segment(conn, f"hub:{after}-{nxt}", gzip.compress(body))
+        if res.get("error"):
+            total["errors"] += 1
+            return total
+        total["segments"] += 1
+        for name in ("new", "duplicates", "conflicts"):
+            total[name] += res[name]
+        total["secrets"].extend(res["secrets"])
+        after = nxt
+
 def _rows(conn: sqlite3.Connection, sql: str, args: Iterable[Any] = ()) -> list[dict]:
     out = []
     for r in conn.execute(sql, tuple(args)):

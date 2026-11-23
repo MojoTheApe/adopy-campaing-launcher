@@ -1,6 +1,6 @@
 """«Publish selected» через Graph API в профиле — кампании на паузе (ACL-1761).
 
-Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+По умолчанию (ACL-2785) работает API; `ACL_FB_BACKEND=rpa` в `.env` машины включает RPA вручную. Тогда
 задание публикации (`publish_jobs._run_job_inner`) вместо робота Ads Manager
 зовёт `ApiPublisher`: тот же черновик билдера (`slots_to_campaign_drafts` →
 `enrich_campaign_drafts`), та же очередь мест по памяти и замок профиля (их
@@ -25,11 +25,13 @@ import logging
 import os
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from src.fb_api import targeting_resolver as _tr_cap
 from src.fb_api import plain_errors as _plain
+from src.fb_api import stop_reason as _stop_reason
 from src.fb_api import operation_journal as _oj
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
@@ -67,8 +69,10 @@ PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are created and pa
 
 
 def backend() -> str:
-    """`api` или `rpa` (по умолчанию). Незнакомое значение — `rpa`."""
-    return "api" if (os.environ.get(BACKEND_ENV) or "").strip().lower() == "api" else "rpa"
+    """`api` (по умолчанию, ACL-2785) или `rpa` — только при явном `ACL_FB_BACKEND=rpa`."""
+    from src.fb_api import backend as _backend
+
+    return _backend.backend()
 
 
 def api_enabled() -> bool:
@@ -117,6 +121,13 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
                          "This is ACL's own per-run limit, not Meta's. Let ACL compress the video "
                          "(needs ffmpeg), use a shorter video, or split the campaign. Nothing was created.")
     return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
+
+
+def blocks_run(outcome: Any, client: Any) -> bool:
+    """An unknown write result blocks the next campaigns of the run, unless it stayed unknown after the one re-send
+    (owner rule 12.11, ACL-2748): that stops only its own campaign. A write nobody reconciled always blocks."""
+    return ((outcome.stop_kind == "unknown" and not getattr(outcome, "run_continues", False))
+            or client.unreconciled is not None)
 
 
 def journal_enabled() -> bool:
@@ -241,6 +252,12 @@ def build_drafts(slots: list[dict[str, Any]], *, account_label: str, country: st
 
     drafts = slots_to_campaign_drafts(slots, account_label=account_label, country=country, activate=False)
     return enrich_campaign_drafts(drafts, account_label=account_label, preview_mode=False)
+
+
+def _blocks_action() -> str:
+    from src.fb_api import account_blocks
+
+    return account_blocks.current_action()
 
 
 class ApiPublishError(RuntimeError):
@@ -517,15 +534,25 @@ class ApiPublisher:
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
+        self._auth_probe = False
         try:
-            # ACL-2595: pressing Publish after the owner finished the Meta check lifts that one hold; a pending
-            # check is answered by Meta once and the stop sets the hold again.
+            # ACL-2595/2652: pressing Publish after the owner finished the Meta check passes that one hold (code 31)
+            # and makes the account check. The hold file is cleared only once Meta has answered it without a stop
+            # (`_finish_open`); a pending check sets it again, and a failure before any call leaves it in place.
             from src.analysis_agent import account_spend as _as_
             from src.fb_api import account_blocks as _b_
 
-            _b_.lift_auth_hold(_as_._profile_key(account_label), "publish")
+            self._auth_probe = _b_.is_auth_hold(_as_._profile_key(account_label))
         except Exception:  # noqa: BLE001 - never breaks the open
-            log.debug("auth hold lift failed", exc_info=True)
+            log.debug("auth hold check failed", exc_info=True)
+        # ACL-2847: a person-started action (Check plan, Publish) reaches an already open profile: its tabs are read
+        # once from the local debugging port, so a profile that fell to the login page is held before the refusal below.
+        try:
+            from src.web import warm_api as _warm_api_
+
+            _warm_api_.note_tab_lock(account_label, action=_blocks_action())
+        except Exception:  # noqa: BLE001 - a failed look is only "not detected"
+            log.debug("tab look before the open failed", exc_info=True)
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
@@ -534,8 +561,12 @@ class ApiPublisher:
         key = _frozen_api(account_label)[1]
         # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
         # and a timed pause are explained by the one owner of that state.
-        blocked = _blocks.refusal(key, account_label, "publish",
-                                  timed=(left, why) if left > 0 and not frozen_deferred else None)
+        # ACL-2652: only a bare hold is passed; a timed pause (rate limit, frozen tab) still refuses
+        # ACL-2652: a held frozen tab is about the tab, not the account: Publish / Check plan opens a fresh tab itself and the
+        # hold ends in `_note_tab_recovered` once the page answers; a page that is still frozen sets it again (code page_unresponsive).
+        frozen_probe = left == float("inf") and why == "page_unresponsive"
+        blocked = None if (self._auth_probe or frozen_probe) and left == float("inf") else _blocks.refusal(
+            key, account_label, "publish", timed=(left, why) if left > 0 and not frozen_deferred else None)
         if blocked:
             held = _blocks.is_held(key)
             raise ApiPublishError(blocked[0], code=blocked[1] if held else (
@@ -553,7 +584,7 @@ class ApiPublisher:
 
         if self._open_warm(account_label, profile_id):
             return
-        if frozen_deferred:
+        if frozen_deferred or frozen_probe:
             raise frozen_error()      # not the warm path: nothing replaces the hung tab, the pause stands
         self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
@@ -561,7 +592,10 @@ class ApiPublisher:
         try:
             from src.fb_api import stop_log as _stop_log
 
-            with _mlx.scope(account=account_label), _stop_log.cancel_scope(self.cancelled):
+            # ACL-2821: у публикации своя пачка — отказанный слот в её пределах не стартуем снова и снова.
+            if not getattr(self, "_mlx_batch", ""):
+                self._mlx_batch = f"publish-{uuid.uuid4().hex[:12]}"
+            with _mlx.scope(account=account_label, batch=self._mlx_batch), _stop_log.cancel_scope(self.cancelled):
                 earlier = self._opened
                 self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
                                              (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
@@ -609,6 +643,7 @@ class ApiPublisher:
             min_interval_s=_env_number(MIN_INTERVAL_ENV, 1.0, 0.5, 10.0),
             max_calls=PREFLIGHT_MAX_CALLS)
         self.progress("Ads Manager session ready")
+        _note_tab_recovered(account_label)     # ACL-2652: the fresh tab answers: a frozen-tab hold (only that kind) ends
         try:
             self._facts = preflight_account(self._client, self.act)
         except PlanError as exc:
@@ -621,7 +656,25 @@ class ApiPublisher:
                                   stage="while checking the ad account") from exc
         self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
                                            act=self.act)
+        _fill_pixel_cache(account_label, self._facts)      # ACL-2850
         self.progress("ad account verified")
+        self._settle_auth_probe()
+
+    def _settle_auth_probe(self) -> None:
+        """ACL-2652: Meta answered the account check without a stop: the code-31 hold is over. No call, no clear."""
+        if not getattr(self, "_auth_probe", False):
+            return
+        client = self._client
+        if client is None or client.stopped is not None or not client.calls:
+            return
+        self._auth_probe = False
+        try:
+            from src.analysis_agent import account_spend as _as_
+            from src.fb_api import account_blocks as _b_
+
+            _b_.clear_auth_hold(_as_._profile_key(self.account_label), "publish")
+        except Exception:  # noqa: BLE001
+            log.debug("auth hold clear failed", exc_info=True)
 
     def _open_warm(self, account_label: str, profile_id: str) -> bool:
         """ACL-1812: профиль «на сегодня» — берём его вкладку робота, без перезагрузки.
@@ -738,7 +791,7 @@ class ApiPublisher:
                 # ACL-2595: the account waits for its security check; no write and no read for this campaign.
                 return result_dict(Outcome(campaign_name=name), not_started=True, error=_plain.AUTH_NOT_STARTED)
             return result_dict(Outcome(campaign_name=name), not_started=True,
-                               error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
+                               error=_stop_reason.not_started_text(self.account_label, self.stop.kind))
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
             # Ревью M4: пока прошлая неизвестная запись не сверена, новых нет.
             return result_dict(Outcome(campaign_name=name), not_started=True, error=(
@@ -859,8 +912,11 @@ class ApiPublisher:
                 self.stop = exc
                 _start_cooldown(self.account_label, exc)
             raise
+        if outcome.failure is not None:
+            # ACL-2811: a stop with no Meta reason of its own shows the account's latest known Meta signal.
+            outcome.failure = _stop_reason.explain(outcome.failure, self.account_label)
         # ACL-2392: a deterministic rejection proven by readback ("rejected") does not block the next campaigns.
-        if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
+        if blocks_run(outcome, self._client):
             self.blocked = outcome.campaign_name
         if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
             self.stop = self._client.stopped
@@ -926,9 +982,15 @@ class ApiPublisher:
             from src.acl_event_log import emit
             from src.acl_event_log.events import stats_payload
 
+            try:
+                from src.acl_event_log.machine_profile import load_snapshot
+
+                load = load_snapshot()
+            except Exception:  # noqa: BLE001
+                load = None
             emit("publish.stats", stats_payload(
                 name, spec.get("spec_hash", ""), outcome=outcome, plan=plan, began=began,
-                calls=self._client.calls, writes=self._client.writes, raised=raised),
+                calls=self._client.calls, writes=self._client.writes, raised=raised, load=load),
                 account=self.account_label, campaign=name)
         except Exception:  # noqa: BLE001
             pass
@@ -1143,7 +1205,20 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     # ACL-2272: Check plan is pressed by the person: an allowed path that may start a closed profile
     # (and keeps it `plan_keep_open_s()` for the Publish that usually follows).
     # ACL-2299 (C): nothing is written here, so a silent tab is waited for / the read asked again, not failed.
-    with user_started_action(), read_patience(), _api._session(account_label) as sess:
+    from src.analysis_agent import account_spend as _as
+
+    # ACL-2847: Check plan reaches an already open profile: its tabs are read once from the local debugging port
+    # (no Graph call, no navigation), so a profile on the login page is held and refused below at once.
+    try:
+        from src.web import warm_api as _warm_api_
+
+        _warm_api_.note_tab_lock(account_label, action=_blocks_action())
+    except Exception:  # noqa: BLE001 - a failed look is only "not detected"
+        log.debug("tab look before Check plan failed", exc_info=True)
+
+    # ACL-2790: Check plan стоит в очереди на аккаунте — профиль после чтения не закрывается.
+    with _as.action_queued(account_label), user_started_action(), read_patience(), \
+            _api._session(account_label) as sess:
         client = sess.client
         if client.allow_writes:
             raise _PlanReadContractError("the read session must not be able to write")
@@ -1154,6 +1229,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account", stage="while checking the ad account") from exc
+        _fill_pixel_cache(account_label, pub._facts)
         pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
                                           act=sess.act)
         try:
@@ -1183,6 +1259,13 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             # управляет вытеснение по простою; таймер `plan_keep_open_s()` — только при выключенном.
             sess.keep_convenience = _keep_profiles_open()
     return results
+
+
+def _fill_pixel_cache(account_label: str, facts: Any) -> None:
+    """ACL-2850: the pixel list was just read in this session; an empty/expired cache takes it (no extra call)."""
+    from src.web.account_pixels import fill_from_facts
+
+    fill_from_facts(account_label, facts)
 
 
 def _record_facts(resolver: Any) -> None:

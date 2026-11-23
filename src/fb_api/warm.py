@@ -43,7 +43,6 @@ from contextvars import ContextVar
 import contextlib
 import logging
 import os
-import random
 import threading
 import time
 import urllib.parse
@@ -148,9 +147,6 @@ DEFAULT_RESTART_COOLDOWN_S = _stop_log.DEFAULT_RESTART_COOLDOWN_S
 MAX_HEAVY_ENV = "ACL_WARM_MAX_HEAVY"
 GATE_WAIT_ENV = "ACL_WARM_GATE_WAIT_S"
 DEFAULT_GATE_WAIT_S = 300.0
-#: Пауза между запусками профилей «на сегодня» (секунды, случайно в диапазоне).
-STAGGER_MIN_S = 5.0
-STAGGER_MAX_S = 10.0
 #: Сколько ждём места по памяти под запуск одного профиля.
 START_SLOT_WAIT_S = 120.0
 #: Сколько ждём памяти под запуск следующего профиля и сколько профиль «приживается».
@@ -288,6 +284,31 @@ def _url_stop(url: str) -> GraphStop | None:
     if where == "checkpoint":
         return Checkpoint("the profile is on a Facebook checkpoint")
     return None
+
+
+def local_page_targets(port: int, *, timeout: float = 2.0) -> list[tuple[str, str]]:
+    """ACL-2653/2841: `(address, title)` of the open tabs of a profile from its LOCAL debugging port (`/json/list`).
+
+    One request to 127.0.0.1, no Graph call, no Meta, no script in a page. Unreachable: an empty list."""
+    import urllib.request
+
+    if not port:
+        return []
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(urllib.request.Request(f"http://127.0.0.1:{int(port)}/json/list"), timeout=timeout) as resp:
+            targets = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except Exception:  # noqa: BLE001 - a silent browser is "no answer", not a lock
+        return []
+    if not isinstance(targets, list):
+        return []
+    return [(str(t.get("url") or ""), str(t.get("title") or ""))
+            for t in targets if isinstance(t, dict) and t.get("type") == "page"]
+
+
+def local_page_urls(port: int, *, timeout: float = 2.0) -> list[str]:
+    """ACL-2653: addresses of the open tabs of a profile (see `local_page_targets`)."""
+    return [url for url, _title in local_page_targets(port, timeout=timeout)]
 
 
 def _url_act(url: str) -> str:
@@ -615,6 +636,8 @@ class WarmRegistry:
                  scan: Callable[[list[str]], dict] | None = None,
                  tab_factory: Callable[[str], Any] | None = None,
                  start_profile: Callable[..., Any] | None = None,
+                 lock_state: Callable[[str, str], str | None] | None = None,
+                 release_lock: Callable[[str, str, str], Any] | None = None,
                  close_window: Callable[[Any, str], Any] | None = None,
                  slot_queue: Callable[[], Any] | None = None,
                  gate: HeavyGate | None = None,
@@ -627,13 +650,15 @@ class WarmRegistry:
                  usage: Any = None,
                  cpu: Callable[[], float | None] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
-                 mono: Callable[[], float] = time.monotonic,
-                 stagger: Callable[[], float] = lambda: random.uniform(STAGGER_MIN_S, STAGGER_MAX_S)):
+                 mono: Callable[[], float] = time.monotonic):
         self._store = store or WarmStore()
         self._wall = wall
         self._scan = scan or scan_local
         self._tab_factory = tab_factory or _default_tab
         self._start_profile = start_profile or _default_start
+        #: ACL-2819: локальный статус MLX профиля ("stopped"/"running"/None) и снятие замка (stop-вызов).
+        self._lock_state = lock_state or _default_lock_state
+        self._release_lock = release_lock or _default_release_lock
         #: Закрытие окна профиля подаёт дешборд (`set_closer`): пилот в `src/fb_api` профили не останавливает.
         self._close_window = close_window
         self._slot_queue = slot_queue or _default_slot_queue
@@ -649,7 +674,6 @@ class WarmRegistry:
         self._cpu = cpu or _default_cpu
         self._sleep = sleep
         self._mono = mono
-        self._stagger = stagger
         self._lock = threading.RLock()
         self._sessions: dict[str, WarmSession] = {}
         #: Записи, которые держит ДРУГОЙ живой процесс дешборда: не трогаем ни их, ни их вкладки.
@@ -919,7 +943,24 @@ class WarmRegistry:
 
     # -- открыть профили на сегодня
     def open_one(self, label: str, entry: Any, *, job_id: str = "", cancelled: Callable[[], bool] = lambda: False) -> dict:
-        """Поднять один профиль с автоматизацией. Ответ — `{ok, state, message, code, started}`."""
+        """Поднять один профиль с автоматизацией. Ответ — `{ok, state, message, code, started}`.
+
+        ACL-2822: на каждое открытие одно событие `profile.open` (исход и секунды по шагам).
+        """
+        from src.fb_api import open_timing
+
+        slot = (getattr(entry, "multilogin_instance", "") or "A").strip().upper() or "A"
+        timer = open_timing.OpenTimer(label, slot, "warm")
+        outcome = "error"
+        try:
+            with open_timing.activate(timer):
+                result = self._open_one(label, entry, job_id=job_id, cancelled=cancelled)
+            outcome = str(result.get("code") or "") if isinstance(result, dict) else "error"
+            return result
+        finally:
+            timer.emit(outcome)
+
+    def _open_one(self, label: str, entry: Any, *, job_id: str = "", cancelled: Callable[[], bool] = lambda: False) -> dict:
         pid = (getattr(entry, "profile_id", "") or "").strip()
         folder = (getattr(entry, "folder_id", "") or "").strip()
         instance = (getattr(entry, "multilogin_instance", "") or "A").strip() or "A"
@@ -927,10 +968,12 @@ class WarmRegistry:
             return _result(False, "No Multilogin profile is linked to this account.", "no_profile")
         # ACL-1138: профиль без прокси в Multilogin не берём и не поднимаем — ни
         # чужой уже открытый (`_adopt`), ни свой запуск.
-        refusal = _proxy_refusal(pid, instance, label)
+        with _open_step("proxy_gate"):
+            refusal = _proxy_refusal(pid, instance, label)
         if refusal:
             return _result(False, refusal, "profile_no_proxy")
-        kind, port = self._scan([pid]).get(pid, ("unknown", None))
+        with _open_step("local_scan"):
+            kind, port = self._scan([pid]).get(pid, ("unknown", None))
         if kind == "port" and port:
             return self._adopt(label, pid, int(port))
         if kind == "no_port":
@@ -977,79 +1020,101 @@ class WarmRegistry:
         # The turn wait can take minutes while the warming profiles grow, so memory is checked AGAIN once the
         # turn is ours and right before the start; over the line -> give the turn back and wait for memory
         # (queued, cancellable, live numbers), then take a turn again.
-        took_turn = False
-        while True:
-            short = self._wait_for_memory(cancelled)
-            if short:
-                return _result(False, short, "memory_low")
-            if job is None:
-                break
-            if not self._wait_start_turn(pid, cancelled, job):
-                return _result(False, "Stopped while waiting for its turn to start the profile.", "cancelled")
-            took_turn = True
-            if self._memory_fits_now():
-                break
-            with self._lock:
-                self._starting.pop(pid, None)
+        for attempt in (1, 2):
+            lock_pending = False
             took_turn = False
-        turn_kept = False
-        slot_id = f"warm-open:{label}:{job_id or int(self._wall())}"
-        queue = self._slot_queue()
-        began = time.monotonic()
-        grant = None
-        opened = None
-        # ACL-1862 (G3): замок профиля — на сам запуск и запись в реестр; ожидания памяти, очереди
-        # старта и места выше его не держат (читатели не должны стоять из-за них).
-        lease_stack = contextlib.ExitStack()
-        # ACL-2262: a publish job already holds its own queue slot for this profile; asking for a second
-        # one would make the job wait for itself. Only an action without a slot (Check, Add account) asks.
-        own_slot = False
-        try:
-            from src.fb_ads_rpa.run_telemetry import current_job_id
-
-            holds = getattr(queue, "holds", None)
-            # ACL-2273: the slot is recorded under the lower-case canonical UUID; an upper-case id in the
-            # account map must still find it (else the job waited for its own slot).
-            own_slot = bool(queue is not None and callable(holds) and current_job_id()
-                            and holds(current_job_id(), pid.lower()))
-        except Exception:  # noqa: BLE001
-            own_slot = False
-        try:
-            if queue is not None and not own_slot:
-                # ACL-2278: a job waits for the place as long as it takes; others keep the time limit.
-                if quiet_active():
-                    grant = queue.acquire(slot_id, pid, cancelled=cancelled, once=True)
-                else:
-                    grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
-                                          or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
-                if grant is None:
-                    return _result(False, self._slot_refusal_text(), "memory_low")
-            refusal = lease_stack.enter_context(try_lease(
-                pid, busy_message=_OPEN_BUSY.format(label=label), busy_code="profile_lease"))
-            if refusal:
-                return refusal
-            try:
-                opened = self._start_profile(pid, folder, instance)
-                turn_kept = bool(getattr(opened, "started_now", False))
-            except _fb_profile.ProfileError as exc:
-                code = getattr(exc, "code", "") or "profile_error"
-                msg = HAND_MESSAGE if code == "open_by_hand" else str(exc)
-                return _result(False, msg, code)
-            except Exception as exc:  # noqa: BLE001 — MLX/сеть
-                if "lock profile" in str(exc).lower():
-                    # ACL-2262: process is gone but Multilogin still holds the profile lock. No retry loop.
-                    return _result(False, f"Multilogin still holds the {label} profile after it closed; "
-                                   "nothing was started. Try again in a minute.", "profile_locked")
-                return _result(False, f"The profile could not be started with automation: "
-                                      f"{scrub(str(exc))}", "start_failed")
-        finally:
-            if took_turn and not turn_kept:
+            while True:
+                short = self._wait_for_memory(cancelled)
+                if short:
+                    return _result(False, short, "memory_low")
+                if job is None:
+                    break
+                if not self._wait_start_turn(pid, cancelled, job):
+                    return _result(False, "Stopped while waiting for its turn to start the profile.", "cancelled")
+                took_turn = True
+                if self._memory_fits_now():
+                    break
                 with self._lock:
                     self._starting.pop(pid, None)
-            if queue is not None and grant is not None and not own_slot:
-                queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
-            if opened is None:
-                lease_stack.close()      # запуска не было: замок отпускаем здесь
+                took_turn = False
+            turn_kept = False
+            slot_id = f"warm-open:{label}:{job_id or int(self._wall())}"
+            queue = self._slot_queue()
+            began = time.monotonic()
+            grant = None
+            opened = None
+            # ACL-1862 (G3): замок профиля — на сам запуск и запись в реестр; ожидания памяти, очереди
+            # старта и места выше его не держат (читатели не должны стоять из-за них).
+            lease_stack = contextlib.ExitStack()
+            # ACL-2262: a publish job already holds its own queue slot for this profile; asking for a second
+            # one would make the job wait for itself. Only an action without a slot (Check, Add account) asks.
+            own_slot = False
+            try:
+                from src.fb_ads_rpa.run_telemetry import current_job_id
+
+                holds = getattr(queue, "holds", None)
+                # ACL-2273: the slot is recorded under the lower-case canonical UUID; an upper-case id in the
+                # account map must still find it (else the job waited for its own slot).
+                own_slot = bool(queue is not None and callable(holds) and current_job_id()
+                                and holds(current_job_id(), pid.lower()))
+            except Exception:  # noqa: BLE001
+                own_slot = False
+            try:
+                if queue is not None and not own_slot:
+                    # ACL-2278: a job waits for the place as long as it takes; others keep the time limit.
+                    if quiet_active():
+                        grant = queue.acquire(slot_id, pid, cancelled=cancelled, once=True)
+                    else:
+                        grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
+                                              or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
+                    if grant is None:
+                        return _result(False, self._slot_refusal_text(), "memory_low")
+                refusal = lease_stack.enter_context(try_lease(
+                    pid, busy_message=_OPEN_BUSY.format(label=label), busy_code="profile_lease"))
+                if refusal:
+                    return refusal
+                try:
+                    with _open_step("start_profile"):   # ACL-2822: the retry adds to the same step, one event per open
+                        opened = self._start_profile(pid, folder, instance)
+                    turn_kept = bool(getattr(opened, "started_now", False))
+                except _fb_profile.ProfileError as exc:
+                    code = getattr(exc, "code", "") or "profile_error"
+                    msg = HAND_MESSAGE if code == "open_by_hand" else str(exc)
+                    return _result(False, msg, code)
+                except Exception as exc:  # noqa: BLE001 — MLX/сеть
+                    low = str(exc).lower()
+                    if "lock profile" in low and _held_elsewhere(low):
+                        # ACL-2819: другая машина/сессия держит профиль — не наш замок, стоп не шлём.
+                        return _result(False, f"The {label} profile is held by another machine or user in "
+                                       "Multilogin. Nothing was stopped or started; close it there first.",
+                                       "profile_locked")
+                    if "lock profile" in low and attempt == 1:
+                        # ACL-2819: ждём «stopped» и снимаем замок ниже, ПОСЛЕ отдачи места и очереди старта.
+                        lock_pending = True
+                    elif "lock profile" in low:
+                        return _result(False, f"Multilogin still holds the {label} profile after it closed; "
+                                       "nothing was started. Try again in a minute.", "profile_locked")
+                    else:
+                        return _result(False, f"The profile could not be started with automation: "
+                                       f"{scrub(str(exc))}", "start_failed")
+            finally:
+                if took_turn and not turn_kept:
+                    with self._lock:
+                        self._starting.pop(pid, None)
+                if queue is not None and grant is not None and not own_slot:
+                    queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
+                if opened is None:
+                    lease_stack.close()      # запуска не было: замок отпускаем здесь
+            if not lock_pending:
+                break
+            # ACL-2819: место, очередь старта и замок профиля уже отданы; ожидание «stopped» никому не мешает.
+            with _open_step("release_after_lock"):
+                released = self._release_after_lock(pid, folder, instance, cancelled)
+            if released == "cancelled":
+                return _result(False, _stop_log.CANCELLED_TEXT, "cancelled")
+            if released != "ok":
+                return _result(False, f"Multilogin still holds the {label} profile after it closed; "
+                               "nothing was started. Try again in a minute.", "profile_locked")
         try:
             started = bool(getattr(opened, "started_now", False))
             self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
@@ -1064,6 +1129,32 @@ class WarmRegistry:
         return _result(True, "Opened; ready for the next action." if started
                        else "Already open with automation; kept warm.",
                        "started" if started else "already_open", started=started)
+
+    def _release_after_lock(self, pid: str, folder: str, instance: str, cancelled: Callable[[], bool]) -> str:
+        """ACL-2819: «can't lock profile» после остановки. Только локальный MLX (statuses/stop), Meta не трогаем.
+
+        Вызывается БЕЗ места очереди и без очереди старта. Ждём «stopped» (локальный статус MLX; «running»
+        и нечитаемый статус — ждать), затем тот же stop, что у RPA. Возврат: "ok" / "cancelled" / "locked".
+        """
+        def look() -> str | None:
+            try:
+                return self._lock_state(pid, instance)
+            except Exception:  # noqa: BLE001 — нет токена/MLX не отвечает: статус неизвестен
+                return None
+
+        deadline = self._mono() + CLOSE_WAIT_S
+        state = look()
+        while state != "stopped" and not cancelled() and self._mono() < deadline:
+            self._sleep(CLOSE_POLL_S)
+            state = look()
+        if state != "stopped":
+            return "cancelled" if cancelled() else "locked"
+        try:
+            self._release_lock(pid, folder, instance)
+        except Exception:  # noqa: BLE001 — MLX отказал: замок остаётся, скажем об этом на аккаунте
+            log.warning("warm: stale lock of %s could not be released", pid)
+            return "locked"
+        return "ok"
 
     def _wait_until_closed(self, pid: str, cancelled: Callable[[], bool]) -> str:
         """Local process look every `CLOSE_POLL_S` until the profile is gone (`none`) or the wait ends."""
@@ -1274,9 +1365,9 @@ class WarmRegistry:
     def open_many(self, items: list[tuple[str, Any]], *, job_id: str = "",
                   on_result: Callable[[str, dict], None] | None = None,
                   cancelled: Callable[[], bool] = lambda: False) -> dict[str, dict]:
-        """Запуск по очереди; между настоящими запусками — пауза 5–10 с. Не больше одного профиля за раз."""
+        """Запуск по очереди, без паузы между запусками (ACL-2668 #14): следующий профиль стартует сразу,
+        как только позволяет потолок мест. Не больше одного профиля за раз."""
         results: dict[str, dict] = {}
-        pending_pause = False
         from src.fb_api import mlx_session as _mlx
 
         # ACL-1826: пачка = это задание. После потери общей сессии слота B остальные B-старты
@@ -1291,12 +1382,9 @@ class WarmRegistry:
             if skip:
                 res = _result(False, skip["message"], skip["code"], skipped=True)
             else:
-                if pending_pause:
-                    self._sleep(self._stagger())
                 with _mlx.scope(account=label, batch=batch):
                     res = self.open_one(label, entry, job_id=job_id, cancelled=cancelled)
             results[label] = res
-            pending_pause = bool(res.get("started")) and not skip
             if on_result is not None:
                 try:
                     on_result(label, res)
@@ -1363,7 +1451,8 @@ class WarmRegistry:
             raise WarmError("This profile is not kept warm.", "not_warm")
         # ACL-1138: и сессия, взятая в пул до гейта (старая сборка), — через гейт.
         # Пространство у сессии не записано: гейт спросит оба; «есть» кэшируется.
-        refusal = _proxy_refusal(profile_id, "", account)
+        # ACL-2822: only the profile's own slot is asked (the map knows it); no slot known -> both, as before.
+        refusal = _proxy_refusal(profile_id, _slot_of(account), account)
         if refusal:
             raise WarmError(refusal, "profile_no_proxy")
         if sess.owner == threading.get_ident():
@@ -2089,6 +2178,22 @@ def _chip(state: str, text: str, title: str, *, since: str = "", closable: bool 
             "closable": bool(closable), "busy": bool(busy)}
 
 
+def _open_step(name: str):
+    from src.fb_api import open_timing
+
+    return open_timing.step(name)
+
+
+def _slot_of(account: str) -> str:
+    """ACL-2822: слот Multilogin аккаунта из карты ("A"/"B"); пусто — карта не знает аккаунта."""
+    try:
+        from src.fb_api import mlx_session
+
+        return mlx_session.instance_of(account) if account else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _proxy_refusal(profile_id: str, instance: str, label: str) -> str:
     """Текст отказа, если у профиля в Multilogin нет прокси (ACL-1138); иначе пусто."""
     from types import SimpleNamespace
@@ -2215,8 +2320,26 @@ def _default_tab(cdp_url: str) -> Any:
     return PageTab.open(cdp_url)
 
 
+def _held_elsewhere(msg: str) -> bool:
+    """MLX: profile held by another machine/user (same marks as fb_ads_rpa.browser._start_held_elsewhere, ACL-2300)."""
+    return any(mark in msg for mark in ("another device", "other device", "another machine",
+                                        "another user", "different user"))
+
+
 def _default_start(profile_id: str, folder_id: str, instance: str) -> Any:
     return _fb_profile.open_profile(profile_id, folder_id, instance)
+
+
+def _default_lock_state(profile_id: str, instance: str) -> str | None:
+    from src.fb_api import profile as _p
+
+    return _p._default_launcher(instance).profile_run_state(profile_id)
+
+
+def _default_release_lock(profile_id: str, folder_id: str, instance: str) -> None:
+    from src.fb_api import profile as _p
+
+    _p._default_launcher(instance).release_stale_lock(profile_id, folder_id=folder_id or None)
 
 
 def _default_pending_close(profile_id: str) -> Any:

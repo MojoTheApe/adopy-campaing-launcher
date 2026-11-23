@@ -449,15 +449,17 @@ def test_wait_ready_keeps_waiting_while_patient_then_reports_the_silence():
 # ---- the job loop ----
 
 class _FakeReg:
-    def __init__(self, clear_after):
+    def __init__(self, clear_after, reasons=("cpu_high", "memory_high")):
         self.calls = 0
         self.clear_after = clear_after
+        self.reasons = list(reasons)
 
     def load_snapshot(self, pid=""):
         self.calls += 1
+        # ACL-2676: the CPU reading alone never holds a restart; memory / warming profiles do.
         return {"loaded": True, "clear": self.calls >= self.clear_after, "cpu_pct": 91.0, "cpu_level": 85.0,
                 "available_mb": 2500, "used_pct": 88.0, "max_used_pct": 90.0, "running": 3, "warming": 1,
-                "reasons": ["cpu_high"]}
+                "reasons": self.reasons}
 
     def restart_wait_s(self, pid):
         return 0.0
@@ -564,6 +566,16 @@ def test_one_start_at_a_time_it_waits_for_the_load_to_clear_before_each_start(mo
     pj._open_with_load_requeue(job_id, pub, "B97")
     assert order[0] == ("open", 0) and order[1][1] >= 100 or clock["t"] >= 300
     assert len(order) == 2
+
+
+def test_high_cpu_alone_does_not_hold_a_restart(monkeypatch, job):
+    # ACL-2676: after the backoff the restart goes ahead at high CPU.
+    pj, job_id, clock = job
+    reg = _FakeReg(clear_after=10 ** 9, reasons=("cpu_high",))
+    monkeypatch.setattr(warm, "registry", lambda: reg)
+    pub = _FlakyPublisher(fails=1)
+    pj._open_with_load_requeue(job_id, pub, "B97")
+    assert pub.attempts == 2 and clock["t"] < 100
 
 
 def test_cancel_of_a_requeued_job_stops_the_wait(monkeypatch, job):
