@@ -1246,8 +1246,10 @@ def _wait_out_machine_load(job_id: str, account_label: str, publisher: Any, rq: 
             snap = reg.load_snapshot(pid)
             pause = float(reg.restart_wait_s(pid)) if pid else 0.0
             waited = time.monotonic() - began
+            # ACL-2676: the CPU reading no longer holds a restart; only warming profiles and memory do.
+            held = [r for r in (snap.get("reasons") or []) if r != "cpu_high"]
             if waited >= backoff and pause <= 0 and (
-                    snap.get("clear") or waited >= max(backoff, _warm.LOAD_BACKOFF_CAP_S)):
+                    not held or waited >= max(backoff, _warm.LOAD_BACKOFF_CAP_S)):
                 return True
             _show_resource_wait(job_id, account_label, {
                 "hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"), "cpu_level": snap.get("cpu_level"),

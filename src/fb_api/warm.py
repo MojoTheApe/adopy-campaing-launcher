@@ -160,21 +160,13 @@ CLOSE_WAIT_S = 120.0
 CLOSE_POLL_S = 3.0
 SETTLE_ENV = "ACL_WARM_SETTLE_S"
 DEFAULT_SETTLE_S = 90.0
-#: ACL-2283. "Busy" machine = CPU at or above this share, or other profiles still warming up. Used for the
-#: staggered start (the next start waits for the CPU to settle below it), for patient readiness (a tab that
-#: has not answered yet is not called unresponsive for minutes) and for the closed-while-starting fallback.
+#: ACL-2283. "Busy" machine = CPU at or above this share, or other profiles still warming up. Used for patient
+#: readiness (a tab that has not answered yet is not called unresponsive for minutes) and for the
+#: closed-while-starting fallback. ACL-2668 (решение №13): старт профиля по CPU больше не ждёт — его охраняют
+#: только порог памяти (ACL-2255, 92 %) и потолок профилей.
 LOAD_CPU_ENV = "ACL_LOAD_CPU_PCT"
 #: ACL-2316: 70, not 85. Live freezes of 2026-10-29 happened at 59 %, 74 % and 76 % CPU; at 85 none of them counted as busy.
 DEFAULT_LOAD_CPU_PCT = 70.0
-#: A: how long the CPU must stay below the level before the next profile of a job starts.
-START_CPU_SETTLE_ENV = "ACL_START_CPU_SETTLE_S"
-DEFAULT_START_CPU_SETTLE_S = 5.0
-#: ACL-2328: the CPU part of the start wait is capped. After this many seconds a start goes ahead even if the CPU
-#: never settled below `ACL_LOAD_CPU_PCT` (a machine that idles at 70-85 % must not hold starts forever).
-#: Only the CPU condition is waived: the ACL-2255 memory gate is checked outside this wait and is never bypassed,
-#: and profiles that are still warming up keep the turn (they are bounded by `START_READY_CAP_S`).
-START_MAX_HOLD_ENV = "ACL_START_MAX_HOLD_S"
-DEFAULT_START_MAX_HOLD_S = 180.0
 #: A: a started profile counts as "not ready yet" until its tab answered, but not longer than this.
 START_READY_CAP_S = 300.0
 #: B: how long a tab may stay silent on a busy machine before it is called unresponsive (idle: today's limit).
@@ -870,43 +862,24 @@ class WarmRegistry:
     def _wait_start_turn(self, pid: str, cancelled: Callable[[], bool], job: "JobWait") -> bool:
         """A (ACL-2283): profiles of jobs start one at a time.
 
-        Waits (queued, cancellable, live numbers) until no other started profile is still warming up and the
-        CPU has been below the level for `ACL_START_CPU_SETTLE_S`. The turn is taken atomically, so two jobs
-        cannot pass together. False - cancelled.
+        Waits (queued, cancellable, live numbers) until no other started profile is still warming up. The turn
+        is taken atomically, so two jobs cannot pass together. False - cancelled.
 
-        ACL-2328: the CPU condition holds for at most `ACL_START_MAX_HOLD_S` (default 180 s); then the start
-        goes ahead on a busy CPU. Memory (ACL-2255) is not part of this wait and is never waived by the cap.
+        ACL-2668 (решение №13): CPU здесь больше не читается и не держит старт (было: CPU ниже 70 % 5 с, до
+        180 с). Память (ACL-2255) проверяется вне этого ожидания.
         """
-        settle = _env_number(START_CPU_SETTLE_ENV, DEFAULT_START_CPU_SETTLE_S, 0.0, 600.0)
-        max_hold = _env_number(START_MAX_HOLD_ENV, DEFAULT_START_MAX_HOLD_S, 0.0, 3600.0)
-        began = self._mono()
-        level = _env_number(LOAD_CPU_ENV, DEFAULT_LOAD_CPU_PCT, 1.0, 100.0)
-        quiet_since: float | None = None
         try:
             while True:
                 if cancelled():
                     return False
-                cpu = None
-                try:
-                    cpu = self._cpu()
-                except Exception:  # noqa: BLE001
-                    cpu = None
-                now = self._mono()
-                if cpu is None or cpu < level:
-                    quiet_since = now if quiet_since is None else quiet_since
-                else:
-                    quiet_since = None
                 with self._lock:
                     now = self._mono()
                     self._starting = {p: t for p, t in self._starting.items() if now - t < START_READY_CAP_S}
                     others = self.warming_others(pid)
-                    cpu_ok = (quiet_since is not None and now - quiet_since >= settle) or now - began >= max_hold
-                    if not others and cpu_ok:
+                    if not others:
                         self._starting[pid] = now
                         return True
-                _show(job, {"hold": "machine_busy", "cpu_pct": None if cpu is None else round(float(cpu), 1),
-                            "cpu_level": level, "running": len(others), "warming": len(others),
-                            "max_hold_s": max_hold})
+                _show(job, {"hold": "machine_busy", "running": len(others), "warming": len(others)})
                 self._sleep(2.0)
         finally:
             _show(job, None)
@@ -1042,8 +1015,8 @@ class WarmRegistry:
             # ACL-2278: Stop of the job also stops the waits below (the caller passes no `cancelled`).
             base_cancelled = cancelled
             cancelled = lambda: base_cancelled() or job.cancelled()   # noqa: E731
-        # ACL-2283 (A): profiles of jobs start one at a time: wait for the previous start to be ready and the CPU
-        # to settle. The turn is released when this start fails, or when the tab answers (`mark_ready`).
+        # ACL-2283 (A): profiles of jobs start one at a time: wait for the previous start to be ready (CPU is
+        # not waited for since ACL-2668). The turn is released when this start fails, or when the tab answers (`mark_ready`).
         # The turn wait can take minutes while the warming profiles grow, so memory is checked AGAIN once the
         # turn is ours and right before the start; over the line -> give the turn back and wait for memory
         # (queued, cancellable, live numbers), then take a turn again.
