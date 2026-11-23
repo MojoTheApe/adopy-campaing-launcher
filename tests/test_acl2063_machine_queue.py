@@ -87,7 +87,12 @@ def test_duplicate_map_gets_the_actual_result_without_another_read(dashboards):
     assert second.state()["rows"]["A"]["list_at"] == original.finished_at
 
 
-def test_checkpoint_in_another_config_is_visible_before_dispatch(dashboards):
+def test_checkpoint_in_another_config_is_no_machine_stop_and_does_not_halt_the_second_dashboard(dashboards):
+    """ACL-2653 (owner decision): a checkpoint is recorded on its own profile hold only, per config.
+
+    The hold file lives in the config dir, so a second dashboard of the same machine (the owner's dev setup) does
+    not see it and may read that account. That is accepted; what must hold is that nothing halts the machine.
+    """
     select, new, reads = dashboards
     first, second = new("one"), new("two")
     select("one")
@@ -96,9 +101,11 @@ def test_checkpoint_in_another_config_is_visible_before_dispatch(dashboards):
     first.record_result(snap, trigger="action")
     select("two")
     second.page_open(now=NOW, port=9095)
-    assert second.state()["halt"]["kind"] == "checkpoint"
-    assert second._drain_once() == 0
-    assert reads == []
+    assert second.state()["halt"] is None
+    assert MachineStore(second._machine.root).halt() is None
+    assert reads == []                              # admission alone reads nothing
+    assert second._drain_once() == 1                # the second config's schedule reads A: accepted cross-config
+    assert [a for _, a in reads] == ["A"]
 
 
 def test_partly_different_maps_join_once_and_both_get_their_whole_list(dashboards):
@@ -110,7 +117,9 @@ def test_partly_different_maps_join_once_and_both_get_their_whole_list(dashboard
     select("two")
     assert second.page_open(now=NOW, port=9095)["sweep"] == "joined"
     assert second._drain_once() == 1
-    assert [account for _, account in reads] == ["A", "B", "C"]
+    # ACL-2668: A and B are read together in the first drain (order free); C comes in the second.
+    order = [account for _, account in reads]
+    assert sorted(order[:2]) == ["A", "B"] and order[2:] == ["C"], order
     assert all(ci.get_snapshot(account) is not None for account in ("B", "C"))
     assert second.state()["sweep"] == {"window": "2026-10-24/08:00", "done": 2, "total": 2}
 
@@ -166,7 +175,7 @@ def test_interrupted_read_is_not_replayed_by_restart_or_another_config(dashboard
     first = new("one")
     first.page_open(now=NOW, port=9090)
     from src.analysis_agent.account_refresh_machine import binding
-    with first._machine.lease("account-structure-read.lock").holding():
+    with first._machine.fence(binding("A")).holding():
         first._machine.begin(binding("A"), first._owner, "schedule")
         # Simulate process death after admission/open, before any durable outcome.
     select("two")
@@ -185,9 +194,9 @@ def test_status_during_own_live_read_does_not_recover_it(dashboards):
     first = new("one")
     real = first._reader
     def read(account, trigger):
-        assert first.state()["running"] == account
-        with first._machine.transaction() as state:
-            assert state["running"]["key"]
+        from src.analysis_agent.account_refresh_machine import binding
+        assert first.state()["running"] == account and first.state()["reading"] == [account]
+        assert first._machine.running_keys() == {binding(account)}
         return real(account, trigger)
     first._reader = read
     first.page_open(now=NOW, port=9090)
@@ -235,14 +244,18 @@ def test_checkpoint_survives_restart_and_only_own_success_clears_it(dashboards):
     first.record_result(ci.Snapshot(account="A", state="failed", stop="checkpoint"), trigger="action")
     second = new("two", ["A", "B"])
     second.page_open(now=NOW, port=9095)
-    assert second._drain_once() == 0
+    assert second.state()["halt"] is None          # ACL-2653: no machine-wide stop for a checkpoint
     second.request("B", "retry", force=True)
-    assert second._drain_once() == 1
-    assert second.state()["halt"]["kind"] == "checkpoint"
-    second.request("A", "retry", force=True)
-    assert second._drain_once() == 1
+    # Cross-config (the owner's dev setup only) is accepted: the second dashboard has no hold file of the first,
+    # so its own admitted sweep reads A as well. Nothing halts, and the reads are exactly these two.
+    # ACL-2668 (main): the retry for B outranks the sweep entry for A, so A yields to the next drain round.
+    assert second._drain_once() + second._drain_once() == 2
     assert second.state()["halt"] is None
     assert [a for _, a in reads] == ["B", "A"]
+    # Within the first config the hold keeps automatic reads off A's profile.
+    select("one")
+    assert first.request("A", "attention") == {"queued": False, "reason": "profile_held"}
+    assert first.request("A", "schedule", window="08:00") == {"queued": False, "reason": "profile_held"}
 
 
 def test_forced_requests_queued_before_peer_result_join_it_but_later_retry_reads(dashboards):
@@ -287,13 +300,12 @@ def test_legacy_stop_migrates_before_first_schedule_window(dashboards):
     first = new('one')
     with first._store.transaction() as state:
         state['halt'] = {'kind': 'checkpoint', 'reason': 'legacy checkpoint', 'until': None, 'account': 'A'}
-    assert first.state()['halt']['kind'] == 'checkpoint'
+    assert first.state()['halt'] is None          # ACL-2653: a legacy checkpoint is not migrated as a machine stop
     assert first._store.read()['machine_migrated'] is True
     new.clock[0] = NOW.timestamp()
     select('two'); second = new('two')
     second.page_open(now=NOW, port=9095)
-    assert second.state()['halt']['kind'] == 'checkpoint'
-    assert second._drain_once() == 0 and reads == []
+    assert second.state()['halt'] is None
 
 
 @pytest.mark.parametrize('code,raw,expected', [
@@ -313,3 +325,34 @@ def test_peer_failure_keeps_a_safe_reason_without_private_details(dashboards, co
     assert expected in error.lower() and 'Retry' in error
     assert 'synthetic' not in error and 'secret' not in error and 'https://' not in error
     assert ci.get_attempt('A')['error'] == error
+
+
+@pytest.mark.parametrize("ceiling", [1, 2])
+def test_queue_reads_up_to_profiles_at_once_accounts_together(dashboards, monkeypatch, ceiling):
+    """ACL-2668: no machine-wide one-read lock; the only count limit is Profiles at once."""
+    import threading
+    monkeypatch.setenv("ACL_MAX_PROFILES", str(ceiling))
+    select, new, reads = dashboards
+    first = new("one", ["A", "B", "C"])
+    real = first._reader
+    guard, live, peak, both = threading.Lock(), [0], [0], threading.Event()
+    def read(account, trigger):
+        with guard:
+            live[0] += 1
+            peak[0] = max(peak[0], live[0])
+            if live[0] >= 2:
+                both.set()
+        try:
+            # Two reads overlap only if the queue really runs them together.
+            both.wait(3 if ceiling > 1 and account != "C" else .2)
+            assert first.state()["reading"].count(account) == 1
+            return real(account, trigger)
+        finally:
+            with guard:
+                live[0] -= 1
+    first._reader = read
+    first.page_open(now=NOW, port=9090)
+    assert first._drain_once() == 3
+    assert sorted(a for _, a in reads) == ["A", "B", "C"]
+    assert peak[0] == ceiling
+    assert first.state()["reading"] == [] and first.state()["running"] is None

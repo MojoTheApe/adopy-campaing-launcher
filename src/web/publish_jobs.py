@@ -732,7 +732,11 @@ def _run_job(job_id: str, slots: list[dict[str, Any]], **kwargs: Any) -> None:
     """
     ended = _job_ended.setdefault(job_id, threading.Event())
     try:
-        _run_job_inner(job_id, slots, **kwargs)
+        # ACL-2790: Publish стоит в очереди на аккаунте с отправки — профиль после чтения не закрывается.
+        from src.analysis_agent import account_spend as _as
+
+        with _as.action_queued(str(kwargs.get("account_label") or "")):
+            _run_job_inner(job_id, slots, **kwargs)
     except job_cancel.JobCancelled:
         with _jobs_lock:
             live = not _abandoned(job_id)
@@ -1387,6 +1391,75 @@ def _record_slot_decision(rt: Any, campaign: str, account: str, verdict: dict[st
         pass
 
 
+def apply_account_signal(account: str, status: str, text: str) -> int:
+    """ACL-2811: Meta's reason for `account` was stored after its publish stopped: the stopped rows of that account's
+    latest finished job show it (same text as at stop time). Other accounts are untouched; a clean status changes
+    nothing; no read, no timer. Returns the number of changed rows."""
+    from types import SimpleNamespace
+
+    from src.fb_api import stop_reason
+
+    if not reason_failure_known(status, text):
+        return 0
+    with _jobs_lock:
+        mine = [j for j in _jobs.values() if _norm_account(j.get("account_label")) == _norm_account(account)]
+        done = [j for j in mine if j.get("status") == "done"]
+        if not done or any(j.get("status") in _LIVE_STATUSES for j in mine):
+            return 0
+        job = max(done, key=lambda j: str(j.get("finished_at") or ""))
+        changed = 0
+        new_line = ""
+        for res in job["results"]:
+            old = res.get("failure") if isinstance(res, dict) else None
+            if res.get("success") is True:
+                continue
+            if isinstance(old, dict) and old.get("key") in stop_reason.OVERRIDABLE:
+                base = SimpleNamespace(details=old.get("details") or {}, left=old.get("left") or [],
+                                       stage=old.get("stage") or "")
+                new = stop_reason.reason_failure({"status": status, "status_text": text}, base)
+                before = res.get("error")
+                res["failure"], res["error"] = new.as_dict(), new.text()
+                res["blocking_failures"] = [("not finished: " + new.text()) if str(b).startswith("not finished: ") else b
+                                            for b in res.get("blocking_failures") or []]
+                new_line = new.line()
+                changed += before != res["error"]
+            elif res.get("not_started") and str(res.get("error") or "").startswith(
+                    "Not started: Graph API stopped earlier"):
+                new = stop_reason.reason_failure({"status": status, "status_text": text})
+                res["error"] = f"Not started: {new.line()}. Nothing was created for it."
+                changed += 1
+        rows = job.setdefault("error_details", [])
+        rows.extend([None] * (len(job["errors"]) - len(rows)))
+        for i, det in enumerate(rows):
+            if isinstance(det, dict) and det.get("failure_key") in stop_reason.OVERRIDABLE:
+                new = stop_reason.reason_failure({"status": status, "status_text": text}, SimpleNamespace(
+                    details=det, left=[], stage=""))
+                if job["errors"][i] == new.text():
+                    continue   # already rewritten for this reason: nothing to persist
+                job["errors"][i] = new.text()
+                rows[i] = dict(new.details, failure_key=new.key)
+                changed += 1
+        if not changed:
+            return 0
+        snapshot = _status_snapshot_locked(job)
+    _persist_job(snapshot)
+    return changed
+
+
+def reason_failure_known(status: str, text: str) -> bool:
+    from src.fb_api import stop_reason
+
+    return stop_reason.reason_failure({"status": status, "status_text": text}) is not None
+
+
+try:    # ACL-2811: the stored account status is the one place every Meta read ends in
+    from src.analysis_agent import account_spend as _status_store
+
+    _status_store.add_status_listener(apply_account_signal)
+except Exception:  # noqa: BLE001
+    pass
+
+
 def _append_result(job_id: str, res: dict[str, Any]) -> None:
     with _jobs_lock:
         if _abandoned(job_id):
@@ -1405,6 +1478,14 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
                        campaign=res.get("campaign_name"))
         except Exception:
             pass
+        if res.get("success") is not True:
+            # Хаб телеметрии: сбой кампании уходит владельцу сразу, а не в следующем цикле отправки.
+            try:
+                from src.acl_event_log import wake_shipper
+
+                wake_shipper()
+            except Exception:
+                pass
 
 
 def _mlx_text(job_id: str, msg: str) -> str:
@@ -1429,7 +1510,7 @@ def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str,
     if exc is None:
         return text, None
     try:
-        from src.fb_api import plain_errors
+        from src.fb_api import plain_errors, stop_reason
         from src.fb_api.creator import PlanError
         from src.fb_api.graph import GraphError, GraphStop
 
@@ -1438,6 +1519,11 @@ def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str,
             cause = exc
         stage = getattr(exc, "stage", "") or getattr(cause, "stage", "")
         failure = plain_errors.classify(cause, ctx={"stage": stage} if stage else None)
+        with _jobs_lock:
+            account = (_jobs.get(job_id) or {}).get("account_label", "")
+        # ACL-2811: no Meta reason of its own -> the account's latest known Meta signal (no new read, no waiting).
+        failure = stop_reason.explain(failure, account)
+        failure.details.setdefault("failure_key", failure.key)   # ACL-2811: a later Meta signal may re-explain it
         if text != msg:  # Multilogin session / proxy text is already plain
             return text, failure.details
         return failure.text(), failure.details

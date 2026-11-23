@@ -5,7 +5,7 @@
 1. `_load_ref_options` (GET / и `/api/ref-data`) звал
    `targeting_registry.pull(force=True)` — запрос к api.github.com с таймаутом
    15 с на каждом открытии. Теперь отрисовка читает копию на машине, а
-   обновление идёт в своём потоке.
+   обновление идёт в своём потоке. ACL-2668: только по событиям, без порога.
 
 2. Ошибки asyncio 14.09/22.09/29.09 («loop … is not the running loop», «There
    is no current event loop in thread 'MainThread'», после чего /health молчит
@@ -37,26 +37,43 @@ from src.web import publish_jobs  # noqa: E402
 
 # ── 1. отрисовка без сети ─────────────────────────────────────────────────
 
+def _wait_idle(timeout: float = 5) -> None:
+    from src.analysis_agent import team_library as tl
+    deadline = time.monotonic() + timeout
+    while tl._bg_running and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
 @pytest.fixture
 def slow_pull(monkeypatch, tmp_path):
-    """`pull`, который «ждёт GitHub», пока тест его не отпустит."""
-    from src.analysis_agent import targeting_registry as tr
+    """`pull` всех трёх видов библиотеки, который «ждёт GitHub», пока тест не отпустит."""
+    from src.analysis_agent import ad_text_registry as ar, targeting_registry as tr, team_library as tl
+    from src.fb_api import form_templates as ft
 
     release = threading.Event()
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, str, dict]] = []
 
-    def pull(**kwargs):
-        calls.append((threading.current_thread().name, kwargs))
-        release.wait(10)
-        return {}
+    def slow(kind):
+        def pull(**kwargs):
+            calls.append((kind, threading.current_thread().name, kwargs))
+            release.wait(10)
+            return {}
+        return pull
 
-    monkeypatch.setattr(tr, "pull", pull)
+    monkeypatch.setattr(tl, "configured", lambda: True)
+    monkeypatch.setattr(tr, "pull", slow("targets"))
+    monkeypatch.setattr(ar, "pull", slow("ad_texts"))
+    monkeypatch.setattr(ft, "pull", slow("form_templates"))
     monkeypatch.setattr(web, "get_upload_fb_excel_path", lambda: str(tmp_path / "missing.xlsx"))
-    web._targets_refreshing = False
+    _wait_idle()
     yield calls, release
     release.set()
-    deadline = time.monotonic() + 5
-    while web._targets_refreshing and time.monotonic() < deadline:
+    _wait_idle()
+
+
+def _wait_calls(calls, n, timeout=2):
+    deadline = time.monotonic() + timeout
+    while len(calls) < n and time.monotonic() < deadline:
         time.sleep(0.01)
 
 
@@ -68,15 +85,14 @@ def test_ref_options_answer_without_waiting_for_the_library(slow_pull):
 
     assert elapsed < 1.0, f"render path waited {elapsed:.1f}s for the network"
     assert "targetings" in result
-    deadline = time.monotonic() + 2
-    while not calls and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert len(calls) == 1
-    thread_name, kwargs = calls[0]
-    assert thread_name == "acl-targets-refresh"
-    assert threading.current_thread().name != thread_name
-    # Без force: `pull` сам не идёт в сеть чаще раза в PULL_EVERY_SECONDS.
-    assert not kwargs.get("force")
+    _wait_calls(calls, 3)
+    # ACL-2668: загрузка страницы — событие: все три вида идут в GitHub, каждый
+    # в своём потоке, принудительно (порога в 15 с больше нет).
+    assert sorted(c[0] for c in calls) == ["ad_texts", "form_templates", "targets"]
+    for kind, thread_name, kwargs in calls:
+        assert thread_name == f"acl-library-sync-{kind}"
+        assert kwargs.get("force") is True
+    assert threading.current_thread().name.startswith("acl-library-sync-") is False
 
 
 def test_reloads_while_a_refresh_waits_do_not_stack_requests(slow_pull):
@@ -84,21 +100,47 @@ def test_reloads_while_a_refresh_waits_do_not_stack_requests(slow_pull):
     for _ in range(5):
         web._load_ref_options()
     time.sleep(0.2)
-    assert len(calls) == 1
+    assert len(calls) == 3
 
     release.set()
-    deadline = time.monotonic() + 5
-    while web._targets_refreshing and time.monotonic() < deadline:
-        time.sleep(0.01)
+    _wait_idle()
     web._load_ref_options()
-    deadline = time.monotonic() + 2
-    while len(calls) < 2 and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert len(calls) == 2, "after the first refresh finished the next reload may refresh again"
+    _wait_calls(calls, 6)
+    assert len(calls) == 6, "after the first refresh finished the next reload may refresh again"
+
+
+def test_builder_form_picker_answers_from_the_copy_and_syncs_alongside(slow_pull, monkeypatch):
+    from src.fb_api import form_templates as ft
+
+    calls, _release = slow_pull
+    monkeypatch.setattr(ft, "listing", lambda force=False: {
+        "rows": [], "deleted": [], "library": {}, "migration": {}})
+    t0 = time.perf_counter()
+    resp = web.api_form_templates_list(force=False)
+    assert time.perf_counter() - t0 < 1.0
+    assert resp.status_code == 200
+    _wait_calls(calls, 1)
+    assert [(c[0], c[2]) for c in calls] == [("form_templates", {"force": True})]
+
+
+def test_no_timer_without_an_event(monkeypatch, tmp_path):
+    """Без событий библиотека не тянется: ни потока, ни сетевого чтения."""
+    from src.analysis_agent import team_library as tl
+
+    hits = []
+    monkeypatch.setattr(tl, "configured", lambda: True)
+    monkeypatch.setattr(tl, "fetch", lambda kind: hits.append(kind) or tl.empty(kind))
+    # Чтение без force (как при публикации шаблона формы на каждое объявление).
+    for _ in range(3):
+        tl.pull("form_templates")
+    assert hits == []
+    assert not [t for t in threading.enumerate() if t.name.startswith("acl-library-sync-")]
+    source = (ROOT / "src" / "analysis_agent" / "team_library.py").read_text(encoding="utf-8")
+    assert "PULL_EVERY_SECONDS" not in source
 
 
 def test_a_failing_refresh_does_not_break_the_page(monkeypatch, tmp_path):
-    from src.analysis_agent import targeting_registry as tr
+    from src.analysis_agent import targeting_registry as tr, team_library as tl
 
     done = threading.Event()
 
@@ -106,15 +148,14 @@ def test_a_failing_refresh_does_not_break_the_page(monkeypatch, tmp_path):
         done.set()
         raise OSError("network down")
 
+    monkeypatch.setattr(tl, "configured", lambda: True)
     monkeypatch.setattr(tr, "pull", pull)
     monkeypatch.setattr(web, "get_upload_fb_excel_path", lambda: str(tmp_path / "missing.xlsx"))
-    web._targets_refreshing = False
+    _wait_idle()
     assert "targetings" in web._load_ref_options()
     assert done.wait(2)
-    deadline = time.monotonic() + 2
-    while web._targets_refreshing and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert web._targets_refreshing is False
+    _wait_idle()
+    assert "targets" not in tl._bg_running
 
 
 def test_no_forced_library_pull_left_on_the_render_path():

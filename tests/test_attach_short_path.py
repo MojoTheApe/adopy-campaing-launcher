@@ -169,6 +169,7 @@ def test_the_long_spelling_is_still_enough_on_its_own(wired):
 def test_a_window_without_a_debug_port_is_reopened_only_after_both_spellings(wired, monkeypatch):
     """Настоящий «открыт вручную»: сначала пробуем прицепиться по обоим именам
     папки, и только потом — мягкий перезапуск, как у Publish (ACL-1234)."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")  # ACL-2785: текст «открыт вручную» для RPA
     provider = wired(_Provider(knows="ни то ни другое"))
     from src.fb_ads_rpa import browser as rpa_browser
 

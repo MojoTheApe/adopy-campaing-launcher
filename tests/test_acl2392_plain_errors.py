@@ -169,11 +169,12 @@ def test_an_unknown_result_that_the_readback_finds_keeps_todays_path(tmp_path):
     assert out.error == "" and any("reconciled" in s for s in out.steps)
 
 
-def test_a_plain_unknown_result_still_blocks_the_job(tmp_path):
+def test_a_plain_unknown_result_that_repeats_stops_only_its_campaign(tmp_path):
+    """Owner rule 12.11: the write is re-sent once; if that is unknown too, this campaign stops, not the job."""
     meta = FakeMeta()
-    meta.fail_next["adsets"] = "unsent"
+    meta.fail_next["adsets"] = "unsent_stuck"
     out, _client = _run(meta, _draft(tmp_path, ads=1))
-    assert out.stop_kind == "unknown"
+    assert out.stop_kind == "unknown" and out.run_continues is True
     assert out.failure.key == "graph_write_unconfirmed"
 
 
@@ -277,7 +278,7 @@ def _halted_job_error(stop):
     (g.RateLimited(f"Graph API rate limit (17): User request limit reached [type=OAuthException, {RAW_TRACE}]",
                    code=17), "Meta is limiting requests"),
     (g.PolicyBlocked(f"Graph API refused (368): temporarily blocked [{RAW_TRACE}]", code=368),
-     "do not retry now"),
+     "check this account in Ads Manager"),
     (g.CallBudget(f"call budget used up [{RAW_TRACE}]", code=None), "Meta is limiting requests"),
     (g.PageFailed(f"page helper failed (#100) [{RAW_TRACE}]", code=None), "see details in Recent runs"),
 ])
