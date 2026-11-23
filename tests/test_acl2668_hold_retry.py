@@ -82,7 +82,7 @@ def test_campaign_command_sessions_and_the_shut_off_button_are_buyer_actions(mon
     seen = []
 
     @contextmanager
-    def fake_session(account, *, commands=False, photo=False):
+    def fake_session(account, *, commands=False, photo=False, **_kw):
         seen.append(blocks.buyer_started() and blocks.current_action() == "a campaign change")
         yield SimpleNamespace()
 
@@ -156,20 +156,22 @@ def test_an_automatic_open_of_a_held_profile_is_still_refused(monkeypatch):
 
 # ───────────────────────── Open profile ─────────────────────────
 
-def test_open_profile_of_a_held_account_queues_the_retry_read(monkeypatch):
+def test_open_profile_is_a_buyer_action_and_its_read_passes_a_hold(monkeypatch):
+    """ACL-2653 made Open a person's read through any hold; ACL-2668 keeps it in the buyer actions."""
     from src.analysis_agent import account_refresh
-    from src.web import warm_api
 
-    asked = []
+    assert "open" in blocks.BUYER_ACTIONS
+    with blocks.problem_action(blocks.action_for_trigger("open")):
+        assert blocks.buyer_started()
+    monkeypatch.setattr(account_refresh, "_profile_held", lambda label: True)
+    assert account_refresh._held_blocks("Held", "open", True) is False
+    assert account_refresh._held_blocks("Held", "schedule", True) is True
 
-    class Q:
-        def request(self, account, trigger, *, force=False, window=""):
-            asked.append((account, trigger, force))
-            return {"queued": True}
 
-    monkeypatch.setattr(account_refresh, "queue", lambda: Q())
-    monkeypatch.setattr(account_refresh, "_profile_held", lambda label: label == "Held")
-    assert warm_api.request_status_read("Held") == "queued"
-    assert warm_api.request_status_read("Free") == "queued"
-    assert asked == [("Held", "retry", True), ("Free", "open", True)]
-    assert account_refresh._held_blocks("Held", "retry") is False      # the queue lets that read through
+def test_a_person_write_leaves_a_code_31_hold_to_meta_answer(monkeypatch):
+    blocks.note_stop("k", "B97", Checkpoint("c"))
+    monkeypatch.setattr(blocks, "is_auth_hold", lambda key: True)
+    with blocks.problem_action("command"):
+        assert blocks.lift_after_probe("k") is False and blocks.is_held("k")
+    with blocks.problem_action("retry"):
+        assert blocks.lift_after_probe("k") is True

@@ -172,7 +172,7 @@ def test_reused_child_paused_by_an_older_run_is_left_alone_and_accepted(tmp_path
 
 def test_partial_rerun_adds_only_missing_children_as_active(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, ads=2))
     assert first.stop_kind == "unknown"
     old_adset = _objs(meta, "adset")[0]
@@ -198,7 +198,7 @@ def test_campaign_not_confirmed_paused_stops_before_any_child_write(tmp_path, st
 
 def test_reused_campaign_turned_on_by_a_person_blocks_new_children(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, ads=2))
     assert first.stop_kind == "unknown"
     before = list(meta.posts)

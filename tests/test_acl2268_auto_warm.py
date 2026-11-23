@@ -127,15 +127,18 @@ def api(rig, monkeypatch):
     monkeypatch.setattr(warm_api, "_sleep", lambda s: None)
     timers = []
     monkeypatch.setattr(warm_api, "_timer", lambda delay, fn: timers.append((delay, fn)))
+    reads = []
+    monkeypatch.setattr(warm_api, "request_status_read", lambda label: reads.append(label) or "queued")
     snap = {"waiting": [], "running": [], "settings": {"ceiling": 2}, "next": {"allow": True}}
     monkeypatch.setattr("src.web.publish_jobs.slots_snapshot", lambda: snap)
     monkeypatch.setattr("src.web.publish_api._cooldown", lambda label: (0.0, ""))
     warm_api._AUTO.clear()
     warm_api._AUTO_QUEUE.clear()
+    warm_api._AUTO_ADMITTED.clear()
     events = []
     monkeypatch.setattr("src.fb_ads_rpa.run_telemetry.record", lambda *a, **k: events.append(("row", a, k)))
     monkeypatch.setattr("src.acl_event_log.emit", lambda *a, **k: events.append(("event", a, k)))
-    return SimpleNamespace(snap=snap, timers=timers, events=events, rig=rig)
+    return SimpleNamespace(snap=snap, timers=timers, events=events, rig=rig, reads=reads)
 
 
 def run_queue():
@@ -170,8 +173,11 @@ def test_feature_off_queues_nothing(api, monkeypatch):
     assert warm_api._AUTO_QUEUE == [] and not auto_warm_store._path().exists()
 
 
-def test_feature_is_off_by_default():
-    assert connection.DEFAULTS["auto_warm"] is False
+def test_feature_is_on_by_default_and_the_setting_is_only_an_off_switch():
+    # ACL-2668 №39: готовая функция включена у байеров; ключ в connection_settings.json — аварийное выключение.
+    assert connection.DEFAULTS["auto_warm"] is True
+    assert warm_api.auto_enabled() is True
+    connection.save_settings({"auto_warm": False})
     assert warm_api.auto_enabled() is False
 
 
@@ -188,6 +194,15 @@ def test_closed_profile_is_opened_once_through_prepare_existing(api, monkeypatch
     assert len(api.rig.started) == 1
     assert warm_api._AUTO["Acc"]["status"] == "done" and warm_api._AUTO["Acc"]["code"] == "started"
     assert api.rig.reg.is_warm(PID)
+
+
+def test_auto_open_does_not_pause_after_a_start(api, monkeypatch):
+    # ACL-2668 #14: после запуска профиля автооткрытие больше не ждёт 5–10 с.
+    slept = []
+    monkeypatch.setattr(warm_api, "_sleep", slept.append)
+    ensure()
+    run_queue()
+    assert warm_api._AUTO["Acc"]["code"] == "started" and slept == []
 
 
 def test_repeat_inside_the_window_starts_nothing(api):
@@ -227,12 +242,14 @@ def test_every_refusal_starts_nothing_and_uses_the_attempt(api, monkeypatch, why
     elif why == "closing":
         api.rig.scan_result[PID] = ("closing", None)
     elif why == "machine_busy":
-        monkeypatch.setattr(api.rig.reg, "load_snapshot", lambda pid="": {"busy": True})
+        monkeypatch.setattr(api.rig.reg, "load_snapshot",
+                            lambda pid="": {"busy": True, "reasons": ["cpu_high"]})
     ensure()
     run_queue()
     assert warm_api._AUTO["Acc"]["status"] == "refused" and warm_api._AUTO["Acc"]["code"] == why
     assert api.rig.started == [] and api.rig.stopped == []
     assert ensure()[0]["accounts"]["Acc"] == "recent"          # the refusal used the attempt
+    assert api.reads == []                                      # a refusal queues no status read
 
 
 def test_ceiling_counts_warm_sessions_and_queue_without_double_counting(api):
@@ -251,6 +268,88 @@ def test_already_open_profile_is_not_started_again(api):
     ensure()
     run_queue()
     assert warm_api._AUTO["Acc"]["code"] == "already_open" and api.rig.started == []
+    assert api.reads == ["Acc"]
+
+
+# ───────────── ACL-2668 №39: status read after the bring-up, parallel bring-ups ─────────────
+
+def test_a_successful_bring_up_queues_one_status_read_like_open_profile(api):
+    ensure()
+    run_queue()
+    assert warm_api._AUTO["Acc"]["code"] == "started" and api.reads == ["Acc"]
+    row = next(e for e in api.events if e[0] == "row")
+    assert row[2]["diag"]["status_read"] == "queued"
+
+
+def test_the_status_read_reuses_the_open_profile_path(monkeypatch):
+    from src.analysis_agent import account_refresh
+
+    asked = []
+
+    class Q:
+        def request(self, label, why, force=False):
+            asked.append((label, why, force))
+            return {"queued": True}
+
+    monkeypatch.setattr(account_refresh, "queue", lambda: Q())
+    monkeypatch.setattr("src.fb_ads_rpa.run_telemetry.record", lambda *a, **k: None)
+    monkeypatch.setattr("src.acl_event_log.emit", lambda *a, **k: None)
+    warm_api._AUTO["Acc"] = {"status": "opening", "code": ""}
+    warm_api._finish("Acc", "started", started=True)
+    assert asked == [("Acc", "open", True)]
+
+
+def test_each_request_gets_its_own_thread_no_machine_wide_queue(monkeypatch):
+    started = []
+
+    class T:
+        def __init__(self, target, args, **_kw):
+            self.args = args
+
+        def start(self):
+            started.append(self.args)
+
+    monkeypatch.setattr(warm_api.threading, "Thread", T)
+    monkeypatch.setattr(warm_api, "_AUTO_RUNNING", [0])
+    warm_api._AUTO_QUEUE[:] = ["A", "B", "C"]
+    warm_api._start_worker_locked()
+    assert started == [("A",), ("B",), ("C",)] and warm_api._AUTO_QUEUE == []
+    assert warm_api._AUTO_RUNNING[0] == 3
+
+
+def test_another_profile_warming_up_is_not_a_refusal(api, monkeypatch):
+    monkeypatch.setattr(api.rig.reg, "warming_others", lambda pid="": ["other-pid"])
+    monkeypatch.setattr(api.rig.reg, "load_snapshot",
+                        lambda pid="": {"busy": True, "reasons": ["profiles_warming_up"]})
+    why, _numbers = warm_api._admission(api.rig.reg, PID)
+    assert why == ""
+
+
+def test_parallel_bring_ups_share_the_profile_ceiling(api):
+    api.snap["settings"] = {"ceiling": 2}
+    warm_api._AUTO_ADMITTED.add("other-pid-1")                 # one automatic bring-up is in flight
+    why, numbers = warm_api._admission(api.rig.reg, PID)
+    assert why == "" and numbers["open_profiles"] == 1
+    warm_api._AUTO_ADMITTED.add("other-pid-2")
+    why, numbers = warm_api._admission(api.rig.reg, PID)
+    assert why == "ceiling" and numbers["open_profiles"] == 2
+
+
+def test_the_ceiling_place_is_given_back_after_the_bring_up(api):
+    ensure()
+    run_queue()
+    assert warm_api._AUTO["Acc"]["code"] == "started" and warm_api._AUTO_ADMITTED == set()
+
+
+def test_a_person_s_open_profiles_job_is_waited_for(monkeypatch):
+    waits = []
+    running = iter([True, True, False])
+    monkeypatch.setattr(warm_api, "_manual_job_running", lambda: next(running))
+    monkeypatch.setattr(warm_api, "_sleep", lambda s: waits.append(s))
+    monkeypatch.setattr(warm_api, "_auto_one", lambda label: waits.append(label))
+    monkeypatch.setattr(warm_api, "_AUTO_RUNNING", [1])
+    warm_api._auto_worker("Acc")
+    assert waits == [1.0, 1.0, "Acc"] and warm_api._AUTO_RUNNING[0] == 0
 
 
 def test_lease_busy_means_one_relook_after_a_minute_then_busy(api, monkeypatch):
@@ -315,11 +414,13 @@ def test_state_shows_the_auto_status_and_the_reason_for_the_tooltip(api, monkeyp
 def test_telemetry_row_and_event_carry_codes_and_numbers_only(api):
     ensure()
     run_queue()
-    kinds = [e[0] for e in api.events]
+    # ACL-2822: the open path also writes its own profile.open summary; this test checks only the auto-warm event.
+    events = [e for e in api.events if not (e[0] == "event" and e[1] and e[1][0] == "profile.open")]
+    kinds = [e[0] for e in events]
     assert kinds.count("row") == 1 and kinds.count("event") == 1
-    blob = json.dumps([e[1:] for e in api.events], default=str)
+    blob = json.dumps([e[1:] for e in events], default=str)
     assert PID not in blob and "token" not in blob.lower() and "http" not in blob
-    row = next(e for e in api.events if e[0] == "row")
+    row = next(e for e in events if e[0] == "row")
     assert row[2]["note"] == "auto_warm" and row[2]["diag"]["outcome"] == "started"
 
 

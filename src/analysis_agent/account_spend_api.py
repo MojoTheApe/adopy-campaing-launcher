@@ -1,6 +1,6 @@
 """Чтение спенда, состояния кабинета и дерева через Graph API внутри профиля (ACL-1760).
 
-Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+По умолчанию (ACL-2785) работает API; `ACL_FB_BACKEND=rpa` в `.env` машины включает RPA вручную. Тогда
 «Read spend» / «Read all spend» и разбивка по странам идут не кликами по Ads
 Manager, а GET-запросами `fetch()` из своей вкладки профиля (`src/fb_api`,
 ACL-1756). Ответ — ровно тот же `SpendReading` / `CountrySplit`, что отдаёт
@@ -84,9 +84,10 @@ COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0
 
 
 def backend() -> str:
-    """`api` или `rpa` (по умолчанию). Незнакомое значение — это `rpa`."""
-    value = (os.environ.get(BACKEND_ENV) or "").strip().lower()
-    return "api" if value == "api" else "rpa"
+    """`api` (по умолчанию, ACL-2785) или `rpa` — только при явном `ACL_FB_BACKEND=rpa`."""
+    from src.fb_api import backend as _backend
+
+    return _backend.backend()
 
 
 def api_enabled() -> bool:
@@ -579,7 +580,8 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
             _as._set_wait_note(account, _as.STARTING_NOTE.format(account=account))
         from src.fb_api import mlx_session as _mlx
 
-        with _mlx.scope(account=account):
+        # ACL-2821: у чтения своя пачка — отказанный слот в её пределах не стартуем снова и снова.
+        with _mlx.scope(account=account, batch=f"read-{uuid.uuid4().hex[:12]}"):
             opened = _open_profile(profile_id, folder_id, instance)
     except BaseException:
         if gated and not shared:
@@ -623,7 +625,8 @@ def _warm_registry():
 
 
 @contextmanager
-def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False):
+def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False,
+                  preview: bool = False):
     """ACL-1862 (G1): сессия на тёплой вкладке всегда под замком физического профиля.
 
     Замок реентерантный: чтение/команда/публикация, уже державшие его, не ждут и не берут другой ключ;
@@ -640,6 +643,8 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
         raise ApiReadError(str(exc), code="profile_lease") from exc
     try:
         extra = {"photo": True} if photo else {}        # ACL-2533: only when set, so older call shapes stay valid
+        if preview:
+            extra["preview"] = True
         with _warm_session_held(account, act, key, profile_id, commands, **extra) as sess:
             yield sess
     finally:
@@ -647,7 +652,8 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
 
 
 @contextmanager
-def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False):
+def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False,
+                       preview: bool = False):
     """Сессия поверх тёплой вкладки: замок профиля, ворота, проверка живости, клиент.
 
     Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения,
@@ -656,12 +662,16 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
     """
     from src.fb_api import warm as _warm
 
-    mode = "photo" if photo else (f"commands:{act}" if commands else "read")
+    # ACL-2791: the preview of a command takes the SAME graph mode as its execute (reads only: the client
+    # below stays without writes), so the kept light tab already holds that graph and execute needs no new
+    # capture tab and no second token hand-over. A lost tab simply gets one lease as before.
+    with_object_edits = bool(commands or preview)
+    mode = "photo" if photo else (f"commands:{act}" if with_object_edits else "read")
 
     def make(tab):
         if photo:
             return _make_graph(tab, photo=True)
-        return _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
+        return _make_graph(tab, commands_act=act) if with_object_edits else _make_graph(tab)
 
     release_frozen_tab_cooldown(key)
     try:
@@ -699,6 +709,7 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
                 _start_cooldown(key, client.stopped, account)
                 stop = stop or client.stopped
             sess.notes["calls"] = client.calls
+            _blocks.settle_person_probe(key, client)      # ACL-2652: Meta answered a person's write: the code-31 hold ends
     finally:
         lease.release(stop)
 
@@ -714,17 +725,18 @@ def _touch_kept_window(account: str) -> None:
 
 
 @contextmanager
-def _session(account: str, *, commands: bool = False, photo: bool = False):
+def _session(account: str, *, commands: bool = False, photo: bool = False, preview: bool = False):
     """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
-    from src.analysis_agent.account_refresh_state import read_session, target_activity
+    from src.analysis_agent.account_refresh_state import target_activity
 
     try:
-        # Вызывающий уже держит физическую аренду профиля. Порядок тот же
-        # у чтения после команды/публикации: профиль, затем одна общая читалка.
+        # Вызывающий уже держит физическую аренду профиля. ACL-2668: общей машинной
+        # читалки нет — чтения разных аккаунтов идут параллельно.
         with (target_activity(_as._profile_key(account)),
-              read_session(priority=commands),
               _blocks.problem_action("command" if commands else "read", only_if_unset=True)):
             extra = {"photo": True} if photo else {}    # ACL-2533: only when set
+            if preview:
+                extra["preview"] = True                  # ACL-2791: only when set
             with _open_session(account, commands=commands, **extra) as sess:
                 yield sess
     finally:
@@ -732,7 +744,7 @@ def _session(account: str, *, commands: bool = False, photo: bool = False):
 
 
 @contextmanager
-def _open_session(account: str, *, commands: bool = False, photo: bool = False):
+def _open_session(account: str, *, commands: bool = False, photo: bool = False, preview: bool = False):
     """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
     ТОЛЬКО на правку существующих объектов (статус/бюджет/ставка)."""
     entry = _as._entry_for(account)
@@ -760,9 +772,11 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
     # only right before it. If the action does not go through the warm path, the pause stands.
     frozen_deferred = left > 0 and why == "page_unresponsive" and frozen_tab_replaceable(key)
     # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab) is refused for everything
-    # except an action a person started on purpose (Retry / Read / command / Check plan, ACL-2668): that one
+    # except an action a person started on purpose (Retry / Read / Open / command / Check plan, ACL-2668): that one
     # looks at the page, and lifts the hold below once the page is healthy.
-    probing = left == float("inf") and _blocks.buyer_started()
+    # ACL-2652: a person's own write may also pass a code-31 hold (one attempt; the hold is cleared only after Meta answers).
+    probing = left == float("inf") and ((_blocks.buyer_started() and not _blocks.lock_seen_now(key))
+                                        or _blocks.person_auth_probe(key))
     blocked = None if probing else _blocks.refusal(
         key, account, "read", timed=(left, why) if left > 0 and not frozen_deferred else None, replaceable=False)
     if blocked:
@@ -781,6 +795,8 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
         raise
     if managed:
         extra = {"photo": True} if photo else {}
+        if preview:
+            extra["preview"] = True
         with _warm_session(account, act, key, profile_id, commands, **extra) as warm_sess:
             yield warm_sess
         return
@@ -880,6 +896,7 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
                 _start_cooldown(key, client.stopped, account)
                 problem = client.stopped
             sess.notes["calls"] = client.calls
+            _blocks.settle_person_probe(key, client)      # ACL-2652: Meta answered a person's write: the code-31 hold ends
     except BaseException as exc:
         problem = problem or exc
         raise
@@ -896,7 +913,7 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
             _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next),
                                 grace_s=(sess.keep_grace_s if sess else None),
                                 convenience=bool(sess and sess.keep_convenience),
-                                problem=problem)
+                                problem=problem, api=True)
         except Exception:
             log.exception("Could not finish the profile the read started (%s)", account)
 
@@ -937,9 +954,11 @@ def _failure(account: str, exc: BaseException) -> tuple[str, str]:
 
 
 def _telemetry(kind: str, account: str, ok: bool, took_s: float, sess_notes: dict,
-               error: str = "", stop: str = "") -> None:
+               error: str = "", stop: str = "", extra: dict | None = None) -> None:
     event = {"event": "fb_api_read", "kind": kind, "source": "api", "ok": ok,
              "took_s": round(took_s, 1), "calls": sess_notes.get("calls", 0)}
+    if extra:
+        event.update(extra)    # ACL-2850: wait_s / capture_s / call_s у чтений списков
     if error:
         event["error"] = error[:200]
     if stop:
@@ -1396,7 +1415,8 @@ def _turn_off_locked(account: str, level: str, object_id: str, *, parent_id: str
     wrote = [False]
     try:
         # Читатель браузера: обновление программы видит запись в полёте (как у команд ACL-1800).
-        with browser_operation.reading(), _session(account, commands=True) as sess:
+        # ACL-2652: the shut-off is a person's write: it may pass a code-31 hold, only after the busy check above.
+        with _blocks.person_edit(), browser_operation.reading(), _session(account, commands=True) as sess:
             _turn_off_in_session(out, sess, parent_id, expected_name, wrote)
     except Exception as exc:  # noqa: BLE001 — любой исход оставляет след в журнале
         if out.state not in ("off", "already_off"):

@@ -46,18 +46,21 @@ _TIMED_META_TTL_S = 3600.0
 
 _ACTION: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_action", default="")
 #: True when an entry point named the action itself (not a `only_if_unset` default). The var lives in the
-#: thread that runs the operation: `read_session`/the queued dispatcher run it in the caller's thread.
+#: thread that runs the operation: the queued dispatcher runs each read (and sets this) in that read's own thread.
 _EXPLICIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_problem_action_explicit", default=False)
 #: Actions a person starts on purpose; only these may probe a held profile (and lift the hold).
 #: ACL-2668 (решение 15): Publish, команды по кампаниям и Check plan — тоже действие человека и работают
 #: как Retry. Автоматические чтения (`schedule`, `attention`, `action`) сюда не входят и держат паузу.
-BUYER_ACTIONS = ("retry", "read", "publish", "command", "check_plan")
+#: ACL-2668/2847: the profile whose tab was found on a login/checkpoint page by this action's own tab look.
+_LOCK_SEEN: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_lock_seen", default="")
+BUYER_ACTIONS = ("retry", "read", "open", "publish", "command", "check_plan")
 
 ACTION_TEXT = {
     "schedule": "a scheduled read",
     "attention": "a background read",
     "action": "a refresh after your action",
     "retry": "Retry",
+    "open": "Open profile",
     "read": "Read",
     "check_plan": "Check plan",
     "publish": "Publish",
@@ -73,9 +76,12 @@ def problem_action(action: str, *, only_if_unset: bool = False) -> Iterator[None
     keep = (only_if_unset and _ACTION.get()) or not action
     token = _ACTION.set(_ACTION.get() if keep else str(action))
     etoken = _EXPLICIT.set(_EXPLICIT.get() or (not keep and not only_if_unset))
+    stoken = _LOCK_SEEN.set("") if not keep else None      # a new action starts without a lock seen
     try:
         yield
     finally:
+        if stoken is not None:
+            _LOCK_SEEN.reset(stoken)
         _EXPLICIT.reset(etoken)
         _ACTION.reset(token)
 
@@ -84,6 +90,12 @@ def buyer_started() -> bool:
     """Did a person start the running action (Retry, Read, Publish, a campaign command, Check plan)?
     Schedules, background reads, refreshes after an action and a defaulted `a read` are not."""
     return bool(_EXPLICIT.get()) and _ACTION.get() in BUYER_ACTIONS
+
+
+def lock_seen_now(key: str) -> bool:
+    """ACL-2668: this action's own tab look just found the profile on a login/checkpoint page: that look is the
+    probe's answer, so the hold stands and its text is shown (no second probe through a session)."""
+    return bool(key) and _LOCK_SEEN.get() == key
 
 
 def lift_after_probe(key: str) -> bool:
@@ -95,6 +107,8 @@ def lift_after_probe(key: str) -> bool:
     """
     if not buyer_started():
         return False
+    if _ACTION.get() in ("publish", "command", "check_plan") and is_auth_hold(key):
+        return False        # ACL-2652: a person's write clears the code-31 hold only after Meta answered (settle/_finish_open)
     return clear(key, _ACTION.get() or "retry")
 
 
@@ -107,10 +121,8 @@ def current_action() -> str:
 def action_for_trigger(trigger: str) -> str:
     """Map a read trigger (`schedule`, `attention`, `action`, `retry`, `button`...) to an action name."""
     trig = str(trigger or "").strip().lower()
-    if trig in ("schedule", "attention", "action", "retry"):
-        return trig
-    if trig == "open":      # a page open reads in the background
-        return "attention"
+    if trig in ("schedule", "attention", "action", "retry", "open"):
+        return trig     # ACL-2653: `open` is the person's Open button: it may probe a held profile
     return "read"
 
 
@@ -188,7 +200,8 @@ def is_hold_stop(stop: Any, *, replacement_spent: bool = True) -> bool:
     return False
 
 
-def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_spent: bool = True) -> bool:
+def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_spent: bool = True,
+              page: str = "", title: str = "") -> bool:
     """Record a stop. Returns True when a persisted hold was set (False: timed or ignored).
 
     `action` defaults to the one named by the entry point (`problem_action`). Timed kinds only remember
@@ -207,12 +220,86 @@ def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_
         return False
     with _LOCK:
         holds = _load()
+        now = time.time()
+        old = holds.get(key) or {}
+        # ACL-2653: the same stop found again keeps its first-seen date; only `seen` moves.
+        again = old.get("kind") == kind and old.get("code") == _code_of(stop)
         holds[key] = {"kind": kind, "code": _code_of(stop), "label": str(label or ""), "action": action,
-                      "at": time.time(), "target_id": str(getattr(stop, "target_id", "") or "")}
+                      "at": old.get("at", now) if again else now, "target_id": str(getattr(stop, "target_id", "") or "")}
+        # ACL-2841: the tab it was seen on (`login`) and Meta's own page title, shown on the row.
+        if page:
+            holds[key]["page"] = page
+        if title:
+            holds[key]["title"] = title
+        if again:
+            holds[key]["seen"] = now
         if not _save(holds):
             return False        # fail open: the caller keeps its timer
     _event("profile_block_set", kind=kind, code=_code_of(stop), action=action, timed=False,
            page_seen=bool(getattr(stop, "page_seen", False)))
+    return True
+
+
+def is_person_lock(held: dict[str, Any] | None) -> bool:
+    """ACL-2653: a Facebook user lock / security check of the person (not "confirm this account", code 31)."""
+    return bool(held) and held.get("kind") == "checkpoint" and held.get("code") != AUTH_REQUIRED_CODE
+
+
+def _clean_title(title: str) -> str:
+    """ACL-2841: the tab title as Meta wrote it: one line, no control characters, bounded."""
+    return " ".join(str(title or "").split())[:200]
+
+
+def note_person_lock(key: str, label: str, action: str = "", *, page: str = "", title: str = "") -> bool:
+    """Record a person-level Facebook lock (no Graph code). Keeps the original `at` of a hold that already exists.
+
+    `page="login"`: the tab is on the Facebook login page (the profile is logged out). `title`: Meta's page title.
+    Returns True when a new hold was written. Nothing here talks to Meta; only a person's Retry clears it.
+    """
+    if not key:
+        return False
+    title = _clean_title(title)
+    if is_held(key):
+        _touch_seen(key, title)
+        return False
+    from src.fb_api.graph import Checkpoint
+
+    text = "the profile is logged out of Facebook" if page == "login" else "the profile is on a Facebook checkpoint"
+    return note_stop(key, label, Checkpoint(text), action or current_action(), page=page, title=title)
+
+
+def _touch_seen(key: str, title: str = "") -> None:
+    """The time the lock was last seen (read time of the refusal); the first date `at` stays."""
+    with _LOCK:
+        holds = _load()
+        if key in holds:
+            holds[key]["seen"] = time.time()
+            if title and holds[key].get("kind") == "checkpoint":
+                holds[key]["title"] = title
+            _save(holds)
+
+
+def note_tab_url(key: str, label: str, url: str, action: str = "", title: str = "") -> bool:
+    """ACL-2653: a profile tab on facebook.com/checkpoint/... is a Facebook lock: record the hold (once) and say so.
+
+    ACL-2841: the login/recover page counts too (the profile is logged out); `title` is the tab title, Meta's own text.
+    No Graph call, only the address. True when the address is a lock."""
+    import urllib.parse
+
+    from src.fb_api.graph import classify_stop_url
+
+    try:
+        parts = urllib.parse.urlsplit(url or "")
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower()
+    if not (host == "facebook.com" or host.endswith(".facebook.com")):
+        return False
+    where = classify_stop_url(parts.path)
+    if where not in ("checkpoint", "login"):
+        return False
+    _LOCK_SEEN.set(key)
+    note_person_lock(key, label, action, page="login" if where == "login" else "", title=title)    # keeps the `at` of an existing hold
     return True
 
 
@@ -244,7 +331,7 @@ def clear(key: str, by: str = "retry", *, kind: str = "") -> bool:
 
 
 def lift_auth_hold(key: str, by: str = "publish") -> bool:
-    """ACL-2595: a person-started Publish lifts the "Meta asks to confirm this account" hold (code 31) and goes on.
+    """ACL-2595/2652: a person-started Publish, budget/status edit or shut-off lifts the "Meta asks to confirm this account" hold (code 31) and goes on.
 
     Only that kind of hold: every other checkpoint still clears through Retry. If the check is still pending, Meta
     answers 31/3858385 again, the sticky `AuthRequired` stop sets the hold again after at most one refused call.
@@ -253,6 +340,80 @@ def lift_auth_hold(key: str, by: str = "publish") -> bool:
     if not held or held.get("kind") != "checkpoint" or held.get("code") != AUTH_REQUIRED_CODE:
         return False
     return clear(key, by, kind="checkpoint")
+
+
+_PERSON_EDIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_person_edit", default=False)
+
+
+@contextlib.contextmanager
+def person_edit() -> Iterator[None]:
+    """ACL-2652: the running action is a person's own write (budget/status edit, shut-off). Only inside it may
+    a session pass a code-31 hold; the file is cleared afterwards, and only once Meta has answered (`settle_person_probe`)."""
+    token = _PERSON_EDIT.set(True)
+    try:
+        yield
+    finally:
+        _PERSON_EDIT.reset(token)
+
+
+#: key -> monotonic time of a person's "Open profile" press whose one status read is still to run.
+_PERSON_OPEN: dict[str, float] = {}
+_PERSON_OPEN_TTL_S = 600.0
+
+
+def mark_person_open(key: str) -> None:
+    """ACL-2652: a person pressed Open profile (single or `open_many`); its one status read may pass a code-31 hold."""
+    if key:
+        with _LOCK:
+            _PERSON_OPEN[key] = time.monotonic()
+
+
+def person_open_pending(key: str) -> bool:
+    with _LOCK:
+        at = _PERSON_OPEN.get(key)
+        if at is not None and time.monotonic() - at > _PERSON_OPEN_TTL_S:
+            _PERSON_OPEN.pop(key, None)
+            at = None
+    return at is not None
+
+
+def consume_person_open(key: str) -> bool:
+    """True once for each pressed Open: the status read that follows it runs as the person's own."""
+    pending = person_open_pending(key)
+    if pending:
+        with _LOCK:
+            _PERSON_OPEN.pop(key, None)
+    return pending
+
+
+def is_auth_hold(key: str) -> bool:
+    held = hold_of(key)
+    return bool(held and held.get("kind") == "checkpoint" and held.get("code") == AUTH_REQUIRED_CODE)
+
+
+def person_auth_probe(key: str) -> bool:
+    """A person-started write meets an auth-required hold: it may make its one attempt."""
+    return _PERSON_EDIT.get() and is_auth_hold(key)
+
+
+def clear_auth_hold(key: str, by: str = "command") -> bool:
+    """Clear the code-31 hold after Meta answered without a stop. Other holds are never cleared here."""
+    return is_auth_hold(key) and clear(key, by, kind="checkpoint")
+
+
+def settle_person_probe(key: str, client: Any, by: str = "command") -> bool:
+    """End of a person's write session: no Graph call, or a stop, keeps (a stop re-notes) the hold; a clean answer ends it."""
+    if not _PERSON_EDIT.get() or client is None or getattr(client, "stopped", None) is not None:
+        return False
+    if not int(getattr(client, "calls", 0) or 0):
+        return False
+    return clear_auth_hold(key, by)
+
+
+def lift_frozen_hold(key: str, by: str = "open") -> bool:
+    """ACL-2652: the owner reopened the profile (Open profile) or its tab answered: a persisted "tab stopped answering"
+    hold ends. Only that kind; a still-frozen tab sets the hold again on the very next read."""
+    return clear(key, by, kind="page_unresponsive")
 
 
 def forget_timed(key: str) -> None:
@@ -284,7 +445,7 @@ def _reason(kind: str, label: str, action: str, code: int | None, same_profile: 
 
 def _next_step(kind: str, code: int | None, *, mins: int = 0, replaceable: bool = False) -> str:
     if kind == "checkpoint" and code == AUTH_REQUIRED_CODE:
-        return ("Open Ads Manager in this profile and complete the check, then publish again. "
+        return ("Open Ads Manager in this profile and complete the check, then press Retry on this profile. "
                 "Existing ads keep running.")
     if kind == "checkpoint":
         return "Solve the checkpoint in the open profile window, then press Retry."
@@ -304,6 +465,17 @@ def _next_step(kind: str, code: int | None, *, mins: int = 0, replaceable: bool 
     if kind == "page_unresponsive":
         return "The next action opens a fresh tab." if replaceable else "Press Retry to open a fresh tab."
     return f"Waiting about {max(1, mins)} min."
+
+
+#: ACL-2847: the one text of a profile that is logged out of Facebook (a login-page tab or a Graph logout).
+LOGIN_REASON = "Logged out of Facebook."
+LOGIN_NEXT = "Open the profile, log in to Ads Manager, then publish again."
+
+
+def is_login_hold(held: dict[str, Any] | None) -> bool:
+    """ACL-2847: a hold of a profile that is logged out (login-page tab, or a Graph answer that said so)."""
+    return bool(held) and (held.get("kind") == "logged_out"
+                           or (held.get("kind") == "checkpoint" and held.get("page") == "login"))
 
 
 def _suffix(verb: str) -> str:
@@ -327,11 +499,17 @@ def refusal(key: str, label: str, verb: str = "", *, timed: tuple[float, str] | 
     explained with the same texts (the old "waiting about 10 min" lines are gone).
     """
     held = _load().get(key) if key else None
+    # ACL-2847: Publish and Check plan quote the one text; a read keeps its own wording for a Graph logout.
+    if is_login_hold(held) and (held.get("kind") != "logged_out" or verb == "publish" or _ACTION.get() == "check_plan"):
+        _event("profile_block_refused", kind=held["kind"], verb=verb, action_of_block=held.get("action"))
+        return f"{LOGIN_REASON} {LOGIN_NEXT}", ACCOUNT_BLOCKED_CODE     # ACL-2847: the same words everywhere, no suffix
     if held:
         reason, step = describe(held["kind"], held.get("label") or label, held.get("action") or _FALLBACK_ACTION,
                                 held.get("code"), same_profile=bool(label and held.get("label") not in ("", label)))
         _event("profile_block_refused", kind=held["kind"], verb=verb, action_of_block=held.get("action"))
-        return f"{reason} {step}{_suffix(verb)}", ACCOUNT_BLOCKED_CODE
+        # ACL-2652: a frozen tab is not a problem of the account; its code stays the tab's own.
+        code_out = "page_unresponsive" if held["kind"] == "page_unresponsive" else ACCOUNT_BLOCKED_CODE
+        return f"{reason} {step}{_suffix(verb)}", code_out
     if timed is not None and timed[0] > 0:
         left, kind = timed
         with _LOCK:
@@ -360,9 +538,14 @@ def view(labels: dict[str, str] | list[str]) -> dict[str, dict[str, Any]]:
             continue
         reason, step = describe(held["kind"], held.get("label") or label, held.get("action") or _FALLBACK_ACTION,
                                 held.get("code"), same_profile=held.get("label") not in ("", label))
+        login = is_login_hold(held)
+        if login:
+            reason, step = LOGIN_REASON, LOGIN_NEXT
         out[label] = {"kind": held["kind"], "code": held.get("code"), "reason": reason, "next": step,
                       "action": held.get("action") or "", "at": held.get("at"), "left_s": None,
-                      "window_open": None, "can_retry": True, "needs_confirm": held["kind"] == "policy_block"}
+                      "window_open": None, "can_retry": True, "needs_confirm": held["kind"] == "policy_block",
+                      "person_lock": is_person_lock(held) or login, "seen": held.get("seen") or held.get("at"),
+                      "page": "login" if login else (held.get("page") or ""), "title": held.get("title") or ""}
     return out
 
 

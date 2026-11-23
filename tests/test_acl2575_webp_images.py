@@ -166,13 +166,23 @@ def test_graph_treats_a_non_transient_file_type_answer_as_a_refusal():
 
 
 def test_a_transient_or_other_500_stays_unknown():
-    for reply in (_file_error(is_transient=True), _file_error(error_subcode=1)):
+    # ACL-2814: only a 500 that is transient, or has no Meta user text, is still unknown
+    textless = _file_error(error_subcode=1, error_user_title=None, error_user_msg=None)
+    for reply in (_file_error(is_transient=True), textless):
         c = _graph_with(reply)
         with pytest.raises(g.WriteUnknown):
             c.post(f"/{ACT}/adimages", {}, files={"filename": b"x"}, filename="a.png")
     c = _graph_with(_file_error())
     with pytest.raises(g.WriteUnknown):
         c.post(f"/{ACT}/adcreatives", {"name": "x"})
+
+
+def test_a_non_transient_500_with_meta_text_and_another_subcode_is_a_definite_refusal():
+    # ACL-2814: is_transient=False + error_user_title/msg is Meta saying no in so many words
+    c = _graph_with(_file_error(error_subcode=1))
+    with pytest.raises(g.GraphError) as caught:
+        c.post(f"/{ACT}/adimages", {}, files={"filename": b"x"}, filename="a.png")
+    assert not isinstance(caught.value, g.WriteUnknown) and not c.unreconciled
 
 
 def test_file_type_refusal_is_reported_with_the_file_name_and_no_ads_manager_advice(tmp_path):
