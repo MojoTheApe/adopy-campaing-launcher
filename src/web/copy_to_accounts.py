@@ -72,8 +72,8 @@ def _target(label: str, source_act: str, source_currency: str, entry: AccountMap
     if pixel:
         out["notes"].append(f"Pixel {pixel} from the account map.")
     else:
-        out["notes"].append("No pixel in the account map: Check plan uses the account's only pixel and "
-                            "stops if it has several. Set the pixel in the account map to avoid that.")
+        out["notes"].append("Pixel: Automatic (the source pixel is not copied). Check plan uses the account's "
+                            "only pixel; if it has several, choose one in the Pixel field of the copy.")
     # The builder keeps the Page choice on the campaign: a copy always starts as Automatic.
     out["notes"].append("Page: Automatic (the source Page is not copied).")
     out["notes"].append("Tracking link: the target account's own. Instant Form ids are cleared.")

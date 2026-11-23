@@ -4,6 +4,7 @@ Three machine settings live in the machine `.env` and are applied to the running
 process at once (`update_machine_env` also sets `os.environ`):
 
 * `ACL_MAX_PROFILES`        - how many Multilogin profiles run at once (the ceiling);
+                              unset - by machine memory (ACL-2668, `profile_slots.ceiling_for_memory`);
 * `ACL_WARM_MAX_HEAVY`      - how many heavy account actions run at once;
 * `ACL_MEMORY_MAX_USED_PCT` - the share of memory in use above which no new profile starts.
 
@@ -30,10 +31,9 @@ HEAVY_BOUNDS = (1, 3)
 SHARE_BOUNDS = (50.0, 95.0)
 
 #: Выше этих значений страница просит подтверждение (один диалог на всё сохранение).
+#: ACL-2668: для потолка порог — не ниже потолка этой машины по памяти (`confirm_ceiling_above`).
 CONFIRM_CEILING_ABOVE = 3
 CONFIRM_SHARE_ABOVE = 80.0
-#: Мягкое предупреждение: потолок выше 3 на машине с памятью меньше этого (МБ).
-WARN_SMALL_MACHINE_MB = 32 * 1024
 
 FIELDS = ("ceiling", "warm_heavy", "memory_max_used_pct")
 
@@ -48,13 +48,19 @@ class NeedsConfirm(RunLimitError):
 
 def defaults() -> dict[str, float | int]:
     from src.web import profile_slots as ps
-    return {"ceiling": ps.DEFAULT_CEILING, "warm_heavy": 1,
+    return {"ceiling": ps.default_ceiling(), "warm_heavy": 1,
             "memory_max_used_pct": ps.DEFAULT_MAX_USED_PCT}
 
 
 def bounds() -> dict[str, list]:
     return {"ceiling": list(CEILING_BOUNDS), "warm_heavy": list(HEAVY_BOUNDS),
             "memory_max_used_pct": list(SHARE_BOUNDS)}
+
+
+def confirm_ceiling_above() -> int:
+    """ACL-2668: подтверждение — только выше потолка, который машина и так получает по памяти."""
+    from src.web import profile_slots as ps
+    return max(CONFIRM_CEILING_ABOVE, ps.default_ceiling())
 
 
 def _number(raw: Any, label: str) -> float:
@@ -133,9 +139,12 @@ def _context() -> dict[str, Any]:
 
 def warnings_for(values: dict, total_mb: int | None) -> list[str]:
     out = []
-    if values["ceiling"] > CONFIRM_CEILING_ABOVE and (total_mb is None or total_mb < WARN_SMALL_MACHINE_MB):
-        out.append("Each profile takes about 2-3.5 GB. More than 3 profiles at once on a computer "
-                   "with less than 32 GB can overload it.")
+    from src.web import profile_slots as ps
+    # ACL-2668: предупреждаем, только если потолок выше того, что эта машина тянет по памяти.
+    fits = ps.ceiling_for_memory(total_mb) if total_mb else CONFIRM_CEILING_ABOVE
+    if values["ceiling"] > fits:
+        out.append("Each profile takes about 2-3.5 GB. More than %d profiles at once on this computer "
+                   "can overload it." % fits)
     if values["memory_max_used_pct"] > CONFIRM_SHARE_ABOVE:
         out.append("A high memory share leaves little room for the system and can freeze tabs.")
     return out
@@ -145,7 +154,7 @@ def current() -> dict[str, Any]:
     values = effective()
     ctx = _context()
     return {**values, "defaults": defaults(), "bounds": bounds(),
-            "confirm_above": {"ceiling": CONFIRM_CEILING_ABOVE, "memory_max_used_pct": CONFIRM_SHARE_ABOVE},
+            "confirm_above": {"ceiling": confirm_ceiling_above(), "memory_max_used_pct": CONFIRM_SHARE_ABOVE},
             "memory_readable": ctx["total_mb"] is not None, **ctx,
             "warnings": warnings_for(values, ctx["total_mb"])}
 
@@ -173,8 +182,9 @@ def save(ceiling: Any = None, warm_heavy: Any = None, memory_max_used_pct: Any =
     if not confirm and not reset:
         # Диалог страницы - только удобство: сервер сам не принимает рискованное повышение без confirm.
         risky = []
-        if CEILING_KEY in values and int(values[CEILING_KEY]) > CONFIRM_CEILING_ABOVE                 and int(values[CEILING_KEY]) > old["ceiling"]:
-            risky.append("more than %d profiles at once" % CONFIRM_CEILING_ABOVE)
+        above = confirm_ceiling_above()
+        if CEILING_KEY in values and int(values[CEILING_KEY]) > above                 and int(values[CEILING_KEY]) > old["ceiling"]:
+            risky.append("more than %d profiles at once" % above)
         if SHARE_KEY in values and float(values[SHARE_KEY]) > CONFIRM_SHARE_ABOVE                 and float(values[SHARE_KEY]) > old["memory_max_used_pct"]:
             risky.append("more than %g%% memory in use" % CONFIRM_SHARE_ABOVE)
         if risky:

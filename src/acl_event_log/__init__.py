@@ -15,3 +15,9 @@ def wake_shipper() -> None:
     from src.acl_event_log import shipper
 
     shipper.wake_shipper()
+
+
+def emit_machine_profile() -> None:
+    from src.acl_event_log import machine_profile
+
+    machine_profile.emit_machine_profile()

@@ -196,6 +196,15 @@ def test_closed_profile_is_opened_once_through_prepare_existing(api, monkeypatch
     assert api.rig.reg.is_warm(PID)
 
 
+def test_auto_open_does_not_pause_after_a_start(api, monkeypatch):
+    # ACL-2668 #14: после запуска профиля автооткрытие больше не ждёт 5–10 с.
+    slept = []
+    monkeypatch.setattr(warm_api, "_sleep", slept.append)
+    ensure()
+    run_queue()
+    assert warm_api._AUTO["Acc"]["code"] == "started" and slept == []
+
+
 def test_repeat_inside_the_window_starts_nothing(api):
     ensure()
     assert ensure()[0]["accounts"]["Acc"] == "queued"          # in flight: no second queue entry
@@ -405,11 +414,13 @@ def test_state_shows_the_auto_status_and_the_reason_for_the_tooltip(api, monkeyp
 def test_telemetry_row_and_event_carry_codes_and_numbers_only(api):
     ensure()
     run_queue()
-    kinds = [e[0] for e in api.events]
+    # ACL-2822: the open path also writes its own profile.open summary; this test checks only the auto-warm event.
+    events = [e for e in api.events if not (e[0] == "event" and e[1] and e[1][0] == "profile.open")]
+    kinds = [e[0] for e in events]
     assert kinds.count("row") == 1 and kinds.count("event") == 1
-    blob = json.dumps([e[1:] for e in api.events], default=str)
+    blob = json.dumps([e[1:] for e in events], default=str)
     assert PID not in blob and "token" not in blob.lower() and "http" not in blob
-    row = next(e for e in api.events if e[0] == "row")
+    row = next(e for e in events if e[0] == "row")
     assert row[2]["note"] == "auto_warm" and row[2]["diag"]["outcome"] == "started"
 
 

@@ -29,20 +29,20 @@ def test_creatives_are_never_looked_up_with_a_name_filter(tmp_path):
     assert len(creative_gets) == 1                       # список кабинета — раз на кампанию
 
 
-def test_unknown_creative_send_stays_blocked_until_an_object_is_reconciled(tmp_path):
+def test_a_rerun_right_after_an_unresolved_creative_goes_ahead(tmp_path):
+    """Owner decision 17.11: no 15-minute refusal. The rerun reads back; nothing found -> the creative is written again."""
     meta = FakeMeta()
-    meta.fail_next["adcreatives"] = "unsent"
+    meta.fail_next["adcreatives"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, ads=2))
     assert first.stop_kind == "unknown"
-    before = list(meta.posts)
     second, client = _run(meta, _draft(tmp_path, ads=2))
-    assert second.stop_kind == "creative_unknown" and not second.ad_ids
-    assert client.writes == 0 and meta.posts == before
+    assert second.error == "" and len(second.ad_ids) == 2
+    assert client.writes > 0
 
 
 def test_a_creative_left_without_its_ad_is_reused_not_duplicated(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, ads=1))
     assert first.stop_kind == "unknown"
     second, _ = _run(meta, _draft(tmp_path, ads=1))

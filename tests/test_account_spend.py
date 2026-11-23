@@ -540,3 +540,9 @@ def _owned_attach(entry, label):
     from src.fb_ads_rpa.operations import profile_lock
     with profile_lock(entry.profile_id):
         return sp._attach_only(entry, label)
+
+
+@pytest.fixture(autouse=True)
+def _rpa_backend_explicit(monkeypatch):
+    """ACL-2785: по умолчанию теперь api; эти тесты проверяют ветку RPA, поэтому выбирают её явно."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
