@@ -1,5 +1,23 @@
 # System history
 
+## ACL-2697 — Report rebuild waits only for low memory, not for a publish — 2026-11-23
+
+The report no longer defers its own rebuild because a publish is running; it waits only while the computer is short of memory (the same 92 % gate as a new profile). Refresh is never deferred.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1697).
+
+## ACL-2677 — Timed Meta pause no longer refuses actions the person started — 2026-11-23
+
+After a Meta stop, the timed per-profile pause (rate limit, frozen tab) holds only automatic background reads. Publish, Check plan, commands and Read/Retry started by the person go at once. Persisted holds (checkpoint, login page, policy block) are unchanged, and the account row still shows the reason.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1677).
+
+## ACL-2735 — No limit on heavy account actions at once — 2026-11-16
+
+The "Heavy actions at once" limit (default 1, `ACL_WARM_MAX_HEAVY`) is removed by the owner's decision on audit row 3:
+publish, Check plan, commands and reads on different accounts no longer wait for each other. How many run at once is
+decided only by the memory gate and "Profiles at once". Two actions on the same profile still never run together
+(the profile lock). The field is gone from Settings → Run limits; an old `ACL_WARM_MAX_HEAVY` value in `.env` is ignored.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1735).
+
 ## ACL-2870 — Home: Open on one account no longer blocks the others — 2026-11-23
 
 Pressing Open on one account disables only that account's button; other accounts and the warm bar stay usable, and the server accepts open jobs for different accounts at once.
