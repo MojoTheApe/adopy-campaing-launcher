@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2881 — Landing search is faster: one reused connection and a 1-second pending poll — 2026-11-23
+
+The landing picker now keeps one open connection to JCloudFront for later searches instead of connecting for every call, and repeats a "preparing the catalog" answer every second instead of every three. A repeated search takes about 0.2 s instead of 1.3 s, a new code about 0.5 s instead of 5 s. The first search after a long idle still waits while JCloudFront prepares its catalog.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1881).
+
+## ACL-2878 — Landing preview frame is no longer blocked by the dashboard policy — 2026-11-23
+
+The hover preview of a landing in the builder showed an empty grey box because the dashboard's Content-Security-Policy had no `frame-src`. It now allows https pages in the preview frame; the frame stays sandboxed and the dashboard itself still cannot be framed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1878).
+
+## ACL-2876 — Landing picker: the hover preview stays beside the results list — 2026-11-23
+
+The landing preview in the builder is now placed relative to the window next to the hovered row (right of the list, else left, else at the right edge) instead of at a fixed offset, so it no longer lands over the scrollbar in a narrow panel.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1876).
+
 ## ACL-2872 — Landing picker: grouped Variant search by configuration — 2026-11-23
 
 Searching a Variant code such as `1_ar_fm` now finds it inside longer landing addresses and shows one card per unique configuration with the number of pages in it, plus a "unique configurations · landings" line. A pasted URL shows the grouped variants of its template on all domains. The Asset filter narrows the same grouped search.

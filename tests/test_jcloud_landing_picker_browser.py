@@ -20,6 +20,8 @@ TEMPLATE = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
 # Строка из настоящего шаблона: тест видит ту же разметку, что и билдер.
 ROW = TEMPLATE[TEMPLATE.index("<div class=\"cb-preflight-row cb-landings\""):TEMPLATE.index("{# Account config row #}")]
 ROW = ROW.replace("{{ acc_label | e }}", "Demo")
+# Правило окна предпросмотра из настоящего шаблона: позиция считается относительно окна браузера.
+PREVIEW_CSS = re.search(r"\.cb-landing-preview \{[^}]*\}", TEMPLATE).group(0)
 
 
 def _card(lid, title):
@@ -235,6 +237,35 @@ def test_use_landing_opens_the_picker_prefilled_and_searches(page):
     assert page.locator("[data-landings-query]").input_value() == "aipl_en_1_lp"
     assert page.searches[-1]["query"] == "aipl_en_1_lp"
     assert page.evaluate("cbUseLanding('Other', 'x')") is False
+
+
+def _hover_first_row(page):
+    page.add_style_tag(content=PREVIEW_CSS + " .cb-landing-popup { width: 300px; }")
+    page.click("[data-landings-open]")
+    page.fill("[data-landings-query]", "x")
+    page.click("[data-landings-go]")
+    row = page.locator("[data-landing-id]").first
+    row.wait_for()
+    row.hover()
+    page.locator("[data-landings-preview] iframe").wait_for()
+    page.wait_for_function("document.querySelector('[data-landings-preview]').style.left !== ''")
+    return page.evaluate("""() => {
+        const p = document.querySelector('[data-landings-preview]').getBoundingClientRect();
+        const l = document.querySelector('[data-landings-results]').getBoundingClientRect();
+        return {p: [p.left, p.top, p.right, p.bottom], l: [l.left, l.right], w: innerWidth, h: innerHeight};
+    }""")
+
+
+def test_preview_stays_inside_the_window_in_a_narrow_panel(page):
+    page.set_viewport_size({"width": 600, "height": 700})
+    r = _hover_first_row(page)
+    assert r["p"][0] >= 0 and r["p"][2] <= r["w"] and r["p"][1] >= 0 and r["p"][3] <= r["h"]
+
+
+def test_preview_sits_beside_the_list_when_there_is_room(page):
+    page.set_viewport_size({"width": 1400, "height": 800})
+    r = _hover_first_row(page)
+    assert r["p"][0] >= r["l"][1] and r["p"][2] <= r["w"]
 
 
 def test_cards_show_instance_count_and_the_grouped_totals(page):

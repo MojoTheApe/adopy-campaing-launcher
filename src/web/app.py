@@ -1710,7 +1710,10 @@ def _secure_headers(response: Response, *, keep_cache_control: bool = False) -> 
         "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; "
         "script-src 'self' 'unsafe-inline' https://unpkg.com; "
         "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
-        "media-src 'self' blob:; connect-src 'self'"
+        "media-src 'self' blob:; connect-src 'self'; "
+        # ACL-2878: окно предпросмотра лендинга в билдере грузит чужую https-страницу;
+        # без frame-src её режет default-src 'self'. Сам iframe в песочнице без allow-same-origin.
+        "frame-src https:"
     )
     return response
 
