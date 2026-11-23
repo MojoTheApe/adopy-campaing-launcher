@@ -7,9 +7,12 @@
 Что вводит человек, определяется по виду строки:
   https://…   -> kind=url
   /путь       -> kind=path
-  Variant     -> название лендинга из статистики. На песочнице `title` лендинга
-                 совпадает с путём без «/», поэтому сначала ищем как путь
-                 `/<Variant>`, а если там пусто — как часть названия шаблона.
+  Variant     -> код из статистики (1_ar_fm), уходит как набрано с kind=variant:
+                 JCloudFront сам проверяет точный путь, затем код внутри адреса.
+Выдача всегда сгруппирована по конфигурации (ACL-1872): одна карточка на уникальную
+конфигурацию, `count` — сколько лендингов в группе; выбирается представитель группы.
+Полный URL сначала превращается в лендинг (kind=url), затем берутся варианты его
+шаблона по `source_landing_id` на всех доменах.
 """
 from __future__ import annotations
 
@@ -25,6 +28,8 @@ PAGE_SIZE = 20
 TIMEOUT_S = 25.0
 #: Поля карточки, которые отдаём в браузер. Полный ответ MCP наружу не уходит.
 ITEM_FIELDS = ("id", "title", "url", "domain", "path", "template", "language", "status", "page_type")
+#: Карточка группы: поля представителя + число лендингов и id конфигурации.
+GROUP_FIELDS = ITEM_FIELDS + ("count", "configuration_id")
 
 _MESSAGES = {
     "not_configured": "JCloudFront is not connected on this machine (no MCP address or token).",
@@ -252,8 +257,14 @@ def _call(tool: str, args: dict) -> dict:
     return _worker.call(tool, args)
 
 
-def _item(raw: dict) -> dict:
-    return {k: raw.get(k) for k in ITEM_FIELDS}
+def _group(raw: dict) -> dict:
+    """Карточка группы: представитель (его и сохраняем как выбранный лендинг) + число и id конфигурации."""
+    rep = raw.get("representative") if isinstance(raw.get("representative"), dict) else raw
+    card = {k: rep.get(k) for k in ITEM_FIELDS}
+    config = raw.get("configuration") if isinstance(raw.get("configuration"), dict) else {}
+    card["count"] = raw.get("count") or 1
+    card["configuration_id"] = config.get("id")
+    return card
 
 
 def _shape(data: dict, *, searched_as: str, page: int) -> dict:
@@ -269,9 +280,11 @@ def _shape(data: dict, *, searched_as: str, page: int) -> dict:
         return {"ok": True, "state": "pending", "searched_as": searched_as,
                 "retry_after_seconds": data.get("retry_after_seconds") or 3,
                 "stage": data.get("stage"), "page": page}
-    items = [_item(i) for i in (data.get("items") or []) if isinstance(i, dict)]
+    items = [_group(i) for i in (data.get("items") or []) if isinstance(i, dict)]
     return {"ok": True, "state": "ready", "searched_as": searched_as, "page": data.get("page") or page,
-            "items": items, "total": data.get("total", len(items)), "has_more": bool(data.get("has_more")),
+            "items": items, "total": data.get("total", len(items)),
+            "matching_landings": data.get("matching_landings", data.get("total", len(items))),
+            "has_more": bool(data.get("has_more")),
             "snapshot_id": data.get("snapshot_id"), "complete": data.get("complete", True) is not False,
             "unclassified_count": data.get("unclassified_count") or 0}
 
@@ -296,8 +309,9 @@ def find_stocks(query: str) -> dict:
 
 def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: str | None = None,
            stock_id: int | None = None) -> dict:
-    """Поиск лендингов. `mode` (path|template|url) повторяет уже выбранный способ при листании и ожидании.
+    """Сгруппированный поиск лендингов (одна карточка на конфигурацию).
 
+    `mode` оставлен для старых вызовов и не нужен: способ поиска определяется видом строки.
     `stock_id` — фильтр по ассету. Без текста поиск идёт только по ассету.
     """
     kind, q = classify_query(query)
@@ -307,12 +321,16 @@ def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: s
         return _error("not_configured")
     page = max(1, int(page or 1))
 
-    def run(args: dict, searched_as: str) -> dict:
-        args = {**args, "page": page, "page_size": PAGE_SIZE}
-        if stock_id:
-            args["stock_ids"] = [int(stock_id)]
-        if snapshot_id:
-            args["snapshot_id"] = snapshot_id
+    def call(args: dict, searched_as: str, *, grouped: bool = True) -> dict:
+        args = dict(args)
+        if grouped:
+            args.update(group_by="configuration", page=page, page_size=PAGE_SIZE)
+            if snapshot_id:
+                args["snapshot_id"] = snapshot_id
+            if stock_id:
+                args["stock_ids"] = [int(stock_id)]
+        else:
+            args.update(page=1, page_size=1)
         try:
             return _shape(_call("search_landing_catalog", args), searched_as=searched_as, page=page)
         except ImportError:
@@ -321,16 +339,17 @@ def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: s
             return _error(_classify_exception(exc))
 
     if not q:
-        return run({}, "asset")
+        return call({}, "asset")
     if kind == "url":
-        return run({"query": q, "kind": "url"}, "url")
+        # Сначала сам лендинг, затем варианты его шаблона по всем доменам.
+        found = call({"query": q, "kind": "url"}, "url", grouped=False)
+        if found.get("state") != "ready" or not found.get("ok"):
+            return found
+        first_id = (found["items"][0] or {}).get("id") if found["items"] else None
+        if not str(first_id or "").isdigit():
+            # Адрес не нашёлся или пришёл без id - вариантов шаблона искать не по чему.
+            return {**found, "items": [], "total": 0, "matching_landings": 0, "page": page}
+        return call({"source_landing_id": int(first_id)}, "url")
     if kind == "path":
-        return run({"query": q, "kind": "path"}, "path")
-    # Variant: сначала как путь /<Variant>, затем как часть названия шаблона.
-    if mode == "template":
-        return run({"query": q, "kind": "template", "template_match": "contains"}, "template")
-    result = run({"query": "/" + q, "kind": "path"}, "path")
-    # `mode == "path"` — повтор после `pending`: первый ответ был «готовится», шаблон ещё не пробовали.
-    if mode in (None, "path") and result.get("ok") and result.get("state") == "ready" and not result.get("total"):
-        return run({"query": q, "kind": "template", "template_match": "contains"}, "template")
-    return result
+        return call({"query": q, "kind": "path"}, "path")
+    return call({"query": q, "kind": "variant"}, "variant")

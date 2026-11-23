@@ -2008,9 +2008,14 @@ async def acl_update_check(request: Request) -> JSONResponse:
             # Установленный ACL.exe: выпуски GitHub, не git (ACL-1240).
             from src.web import release_updates
             force = (request.query_params.get("force") or "").strip().lower() in {"1", "true", "yes"}
-            return JSONResponse(await run_in_threadpool(release_updates.check, force=force))
-        # `git fetch` ждёт сеть до двух минут — не в цикле событий (ACL-1399).
-        return JSONResponse(await run_in_threadpool(acl_update.check, fetch=not skip_fetch))
+            state = await run_in_threadpool(release_updates.check, force=force)
+        else:
+            # `git fetch` ждёт сеть до двух минут — не в цикле событий (ACL-1399).
+            state = await run_in_threadpool(acl_update.check, fetch=not skip_fetch)
+        # ACL-2668 №11: обновление, ждущее конца публикации, видно и после
+        # перезагрузки страницы — состояние на сервере, не в странице.
+        from src.web import update_queue
+        return JSONResponse({**state, "queued": update_queue.status()})
     except Exception as exc:  # pragma: no cover - defensive
         return JSONResponse(
             {"ok": False, "available": False, "note": f"Update check failed: {exc}"}
@@ -2022,8 +2027,9 @@ async def acl_update_apply() -> JSONResponse:
     """Hand the update to the launcher and stop, so it can restart us into it.
 
     Every refusal below is a case where clicking would have produced a dashboard
-    that does not come back: no supervising launcher, a run in flight, or a
-    candidate the launcher would reject anyway.
+    that does not come back: no supervising launcher, or a candidate the
+    launcher would reject anyway. A campaign job in flight is not a refusal
+    (ACL-2668 №11): the update is queued and starts by itself when it ends.
     """
     from src.web import acl_update
     from src.web.publish_jobs import active_job_count
@@ -2042,16 +2048,10 @@ async def acl_update_apply() -> JSONResponse:
             status_code=409,
         )
 
-    busy = active_job_count()
-    if busy:
-        return JSONResponse(
-            {
-                "ok": False,
-                "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACM, which would abandon them half-built.",
-            },
-            status_code=409,
-        )
+    from src.web import publish_jobs, update_queue
+
+    if update_queue.is_waiting():
+        return _queued_update_response()
 
     acl_update.forget_cache()
     state = acl_update.check(fetch=True, use_cache=False)
@@ -2063,42 +2063,78 @@ async def acl_update_apply() -> JSONResponse:
 
     candidate = state.get("candidate") or {}
     target = candidate.get("tag") or candidate.get("short") or ""
-    acl_update.request_restart(target=target)
-    acl_update.schedule_exit()
-    return JSONResponse({"ok": True, "target": target})
+
+    def start() -> None:
+        acl_update.request_restart(target=target)
+        acl_update.schedule_exit()
+
+    if publish_jobs.reserve_update():
+        try:
+            start()
+        except BaseException:
+            publish_jobs.release_update()
+            raise
+        return JSONResponse({"ok": True, "target": target})
+    # ACL-2668 №11: идёт публикация — не отказ, а очередь до её конца.
+    update_queue.queue(target, reserve=publish_jobs.reserve_update, start=start,
+                       cancel=publish_jobs.release_update)
+    return _queued_update_response()
+
+
+def _queued_update_response() -> JSONResponse:
+    """Ответ кнопке: обновление ждёт конца публикации и начнётся само."""
+    from src.web import update_queue
+
+    queued = update_queue.status()
+    return JSONResponse({"ok": True, "queued": True, "target": queued.get("target", ""),
+                         "message": update_queue.WAITING_TEXT})
 
 
 async def _apply_release_update(active_jobs) -> JSONResponse:
-    """Serialize the download and reserve an idle runtime before restarting."""
-    from starlette.concurrency import run_in_threadpool
-    from src.web import acl_update, release_updates, publish_jobs
-    from src.fb_ads_rpa.operations import browser_operation
+    """Serialize the download and reserve an idle runtime before restarting.
 
+    ACL-2668 №11: идёт публикация — обновление встаёт в очередь и начинается
+    само после неё (`update_queue`); чтение аккаунта обновление не держит —
+    рестарт его обрывает, очередь чтений после рестарта ставит его заново.
+    `active_jobs` оставлен ради прежней сигнатуры: занятость решает
+    `reserve_update()` под замком заданий, иначе задание, начатое между
+    проверкой и рестартом, оборвалось бы.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from src.web import acl_update, release_updates, publish_jobs, update_queue
+
+    if update_queue.is_waiting():
+        return _queued_update_response()
     if not release_updates.apply_lock.acquire(blocking=False):
         return JSONResponse({"ok": False, "error": "An update is already in progress."}, status_code=409)
-    restarting = reserved = browser_held = False
+    handed_off = reserved = False
     try:
-        if active_jobs():
-            return JSONResponse({"ok": False, "error": "Wait for campaign jobs to finish before updating."}, status_code=409)
         setup, manifest = await run_in_threadpool(release_updates.download)
-        if active_jobs() or not publish_jobs.reserve_update():
-            return JSONResponse({"ok": False, "error": "Campaign jobs started during the download; try again when they finish."}, status_code=409)
-        reserved = True
-        browser_held = browser_operation.acquire(blocking=False)
-        if not browser_held:
-            return JSONResponse({"ok": False, "error": "Wait for browser reading to finish before updating."}, status_code=409)
-        release_updates.start_helper(setup, manifest)
-        acl_update.schedule_exit()
-        restarting = True
-        return JSONResponse({"ok": True, "target": manifest["version"]})
+
+        def start() -> None:
+            release_updates.start_helper(setup, manifest)
+            acl_update.schedule_exit()
+
+        def cancel() -> None:
+            publish_jobs.release_update()
+            release_updates.apply_lock.release()
+
+        if publish_jobs.reserve_update():
+            reserved = True
+            start()
+            handed_off = True
+            return JSONResponse({"ok": True, "target": manifest["version"]})
+        # Замок обновления переходит ожидающему потоку: второй установки не будет.
+        update_queue.queue(manifest["version"], reserve=publish_jobs.reserve_update,
+                           start=start, cancel=cancel)
+        handed_off = True
+        return _queued_update_response()
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
         message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
-        if not restarting:
-            if browser_held:
-                browser_operation.release()
+        if not handed_off:
             if reserved:
                 publish_jobs.release_update()
             release_updates.apply_lock.release()
@@ -3405,19 +3441,15 @@ async def api_save_run_limits(request: Request) -> JSONResponse:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
-    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset", "confirm"}:
+    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset"}:
         return JSONResponse({"ok": False, "error": "Unknown setting in the request"}, status_code=400)
     if "reset" in data and not isinstance(data["reset"], bool):
         return JSONResponse({"ok": False, "error": "Expected true or false for reset"}, status_code=400)
-    if "confirm" in data and not isinstance(data["confirm"], bool):
-        return JSONResponse({"ok": False, "error": "Expected true or false for confirm"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
         result = await run_in_threadpool(
-            lambda: run_limits.save(data.get("ceiling"), data.get("memory_max_used_pct"), reset=bool(data.get("reset")),
-                                    confirm=data.get("confirm") is True))
-    except run_limits.NeedsConfirm as exc:
-        return JSONResponse({"ok": False, "needs_confirm": True, "error": str(exc)}, status_code=409)
+            lambda: run_limits.save(data.get("ceiling"), data.get("memory_max_used_pct"),
+                                    reset=bool(data.get("reset"))))
     except run_limits.RunLimitError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, **result})

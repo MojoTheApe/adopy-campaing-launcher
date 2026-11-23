@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2872 — Landing picker: grouped Variant search by configuration — 2026-11-23
+
+Searching a Variant code such as `1_ar_fm` now finds it inside longer landing addresses and shows one card per unique configuration with the number of pages in it, plus a "unique configurations · landings" line. A pasted URL shows the grouped variants of its template on all domains. The Asset filter narrows the same grouped search.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1872).
+
+## ACL-2694 — Run limits save without a confirm dialog; memory threshold 0-95 % — 2026-11-23
+
+Settings saves any in-bounds run limit at once: no confirm dialog, no warning text, no `confirm` flag in the API. The memory threshold accepts 0-95 % (default 92 %); Profiles at once stays 1-8.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1694).
+
+## ACL-2692 — Publish, commands, Check plan and Open profile work as Retry on a held profile — 2026-11-23
+
+A person-started Publish, campaign command (incl. shut-off), Check plan or Open profile now probes a held profile like Retry: a healthy page lifts the hold, a page that still has the problem sets it again and the row shows the reason. Automatic reads keep respecting the hold. A code-31 hold is still cleared only after Meta answered a person's write.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1692).
+
 ## ACL-2697 — Report rebuild waits only for low memory, not for a publish — 2026-11-23
 
 The report no longer defers its own rebuild because a publish is running; it waits only while the computer is short of memory (the same 92 % gate as a new profile). Refresh is never deferred.

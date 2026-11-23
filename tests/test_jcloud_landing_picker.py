@@ -41,69 +41,84 @@ def test_classify_query(text, kind, query):
     assert jc.classify_query(text) == (kind, query)
 
 
-def test_variant_is_searched_as_path_first(monkeypatch):
+def _group(lid, title, count, cfg):
+    return {"configuration": {"id": cfg, "profile": "page-settings-v1"}, "count": count,
+            "representative": _landing(lid, title)}
+
+
+def test_variant_is_sent_as_typed_with_kind_variant_and_grouping(monkeypatch):
     calls = []
-    monkeypatch.setattr(jc, "_call", lambda tool, args: calls.append((tool, args)) or _ready([_landing()]))
-    out = jc.search("aipl_en_1_lp")
-    assert calls[0][1]["query"] == "/aipl_en_1_lp" and calls[0][1]["kind"] == "path"
-    assert out["ok"] and out["searched_as"] == "path" and out["items"][0]["id"] == 21101
-    assert len(calls) == 1
+    monkeypatch.setattr(jc, "_call", lambda tool, args: calls.append((tool, args)) or _ready([_group(1, "a", 2, "c1")]))
+    out = jc.search("1_ar_fm")
+    assert calls == [("search_landing_catalog", {"query": "1_ar_fm", "kind": "variant", "group_by": "configuration",
+                                                 "page": 1, "page_size": jc.PAGE_SIZE})]
+    assert out["ok"] and out["searched_as"] == "variant"
 
 
-def test_variant_without_path_match_falls_back_to_template(monkeypatch):
+def test_path_search_is_grouped_too(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([]))
+    jc.search("/x")
+    assert seen[0]["kind"] == "path" and seen[0]["group_by"] == "configuration"
+
+
+def test_one_card_per_configuration_with_instance_count_and_totals(monkeypatch):
+    raw = _ready([_group(1, "a", 2, "c1"), _group(3, "b", 1, "c2")], total=2, matching_landings=3)
+    monkeypatch.setattr(jc, "_call", lambda tool, args: raw)
+    out = jc.search("1_ar_fm")
+    assert [(i["id"], i["count"], i["configuration_id"]) for i in out["items"]] == [(1, 2, "c1"), (3, 1, "c2")]
+    assert out["total"] == 2 and out["matching_landings"] == 3
+    assert out["items"][0]["url"] == "https://test.example.com/a"  # представитель, а не вся конфигурация
+
+
+def test_url_resolves_the_landing_then_asks_template_variants_across_domains(monkeypatch):
     seen = []
 
     def fake(tool, args):
         seen.append(args)
-        return _ready([]) if args["kind"] == "path" else _ready([_landing()])
+        return _ready([_landing(57150)]) if args.get("kind") == "url" else _ready([_group(57150, "a", 114, "c1")])
 
     monkeypatch.setattr(jc, "_call", fake)
-    out = jc.search("aipl")
-    assert [a["kind"] for a in seen] == ["path", "template"]
-    assert seen[1]["template_match"] == "contains"
-    assert out["searched_as"] == "template" and out["total"] == 1
+    out = jc.search("https://a.example.com/x", stock_id=48)
+    assert seen[0]["kind"] == "url" and "group_by" not in seen[0] and "stock_ids" not in seen[0]
+    assert seen[1] == {"source_landing_id": 57150, "group_by": "configuration", "page": 1,
+                       "page_size": jc.PAGE_SIZE, "stock_ids": [48]}
+    assert out["items"][0]["count"] == 114
 
 
-def test_template_fallback_also_runs_on_the_repeat_after_pending(monkeypatch):
-    # ACL-2859: первый запрос по пути ответил `pending`, UI повторяет его с mode=path.
-    seen = []
-
-    def fake(tool, args):
-        seen.append(args["kind"])
-        return _ready([]) if args["kind"] == "path" else _ready([_landing()])
-
-    monkeypatch.setattr(jc, "_call", fake)
-    out = jc.search("aipl", mode="path")
-    assert seen == ["path", "template"] and out["searched_as"] == "template" and out["total"] == 1
-
-
-def test_repeat_with_path_results_does_not_fall_back(monkeypatch):
-    seen = []
-    monkeypatch.setattr(jc, "_call", lambda t, a: seen.append(a["kind"]) or _ready([_landing()]))
-    assert jc.search("aipl_en_1_lp", mode="path")["searched_as"] == "path" and seen == ["path"]
-
-
-def test_url_and_path_do_not_fall_back(monkeypatch):
+def test_url_that_is_not_in_the_catalog_finds_nothing_without_a_second_call(monkeypatch):
     seen = []
     monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([]))
-    assert jc.search("https://a.example.com/x")["total"] == 0
-    assert jc.search("/x")["total"] == 0
-    assert [a["kind"] for a in seen] == ["url", "path"]
+    out = jc.search("https://a.example.com/x")
+    assert out["total"] == 0 and out["items"] == [] and len(seen) == 1
 
 
-def test_paging_keeps_mode_and_snapshot(monkeypatch):
+def test_url_hit_without_an_id_finds_nothing_instead_of_failing(monkeypatch):
     seen = []
-    monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([_landing()]))
-    jc.search("aipl", page=2, snapshot_id="snap", mode="template")
-    assert seen == [{"query": "aipl", "kind": "template", "template_match": "contains",
-                     "page": 2, "page_size": jc.PAGE_SIZE, "snapshot_id": "snap"}]
+    monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([{"url": "https://a.example.com/x"}]))
+    out = jc.search("https://a.example.com/x")
+    assert out["total"] == 0 and out["items"] == [] and len(seen) == 1
+
+
+def test_url_resolving_that_is_pending_is_returned_as_pending(monkeypatch):
+    monkeypatch.setattr(jc, "_call", lambda t, a: {"ok": True, "state": "pending", "retry_after_seconds": 3})
+    assert jc.search("https://a.example.com/x")["state"] == "pending"
+
+
+def test_paging_keeps_snapshot_and_filters(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([_group(1, "a", 1, "c")]))
+    jc.search("1_ar_fm", page=2, snapshot_id="snap", stock_id=418)
+    assert seen == [{"query": "1_ar_fm", "kind": "variant", "group_by": "configuration", "page": 2,
+                     "page_size": jc.PAGE_SIZE, "snapshot_id": "snap", "stock_ids": [418]}]
 
 
 def test_items_carry_only_card_fields(monkeypatch):
-    raw = {**_landing(), "secret_extra": "x"}
+    raw = _group(1, "a", 2, "c1")
+    raw["representative"]["secret_extra"] = "x"
     monkeypatch.setattr(jc, "_call", lambda tool, args: _ready([raw]))
-    item = jc.search("/aipl_en_1_lp")["items"][0]
-    assert set(item) == set(jc.ITEM_FIELDS)
+    item = jc.search("/a")["items"][0]
+    assert set(item) == set(jc.GROUP_FIELDS)
 
 
 # ───────────────────────── фильтр по ассету ─────────────────────────
@@ -114,13 +129,14 @@ def test_asset_only_search_sends_stock_ids_without_a_query(monkeypatch):
     out = jc.search("", stock_id=418)
     assert seen[0][0] == "search_landing_catalog" and seen[0][1]["stock_ids"] == [418]
     assert "query" not in seen[0][1] and out["searched_as"] == "asset" and out["ok"]
+    assert seen[0][1]["group_by"] == "configuration"
 
 
 def test_asset_filter_combines_with_text(monkeypatch):
     seen = []
     monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([_landing()]))
     jc.search("aipl_en_1_lp", stock_id=418)
-    assert seen[0]["query"] == "/aipl_en_1_lp" and seen[0]["stock_ids"] == [418]
+    assert seen[0]["query"] == "aipl_en_1_lp" and seen[0]["kind"] == "variant" and seen[0]["stock_ids"] == [418]
 
 
 def test_no_text_and_no_asset_is_still_invalid():
@@ -154,8 +170,8 @@ def test_stock_endpoints(monkeypatch):
 def test_pending_is_returned_with_pause(monkeypatch):
     monkeypatch.setattr(jc, "_call", lambda t, a: {"ok": True, "state": "pending", "stage": "catalog",
                                                    "retry_after_seconds": 3})
-    out = jc.search("aipl", mode="template")
-    assert out["state"] == "pending" and out["retry_after_seconds"] == 3 and out["searched_as"] == "template"
+    out = jc.search("aipl")
+    assert out["state"] == "pending" and out["retry_after_seconds"] == 3 and out["searched_as"] == "variant"
 
 
 @pytest.mark.parametrize("code,fragment", [
