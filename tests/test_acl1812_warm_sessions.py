@@ -965,6 +965,22 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
         assert text in js or text == "Opened by hand"
 
 
+def test_open_profiles_never_asks_and_close_promises_no_wait():
+    """ACL-2668 #32: «Open profiles for today» стартует сразу при любом числе аккаунтов;
+    «Close profiles» спрашивает, но больше не обещает ждать ~3 минуты перед повторным открытием."""
+    root = Path(__file__).resolve().parents[1] / "src"
+    js = (root / "web" / "static" / "warm_sessions.js").read_text(encoding="utf-8")
+    body = js.split("function openProfiles(grid) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "aclConfirm" not in body and "runOpen(grid" in body
+    close = js.split("function runClose(grid, labels) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "window.aclConfirm(" in close, "Close profiles keeps its confirmation"
+    sources = [js, (root / "web" / "static" / "acm_commands.js").read_text(encoding="utf-8"),
+               (root / "fb_api" / "warm.py").read_text(encoding="utf-8"),
+               (root / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")]
+    for text in sources:
+        assert "about 3 minutes" not in text and "wait about 3" not in text
+
+
 def test_chip_texts_for_every_state_come_from_the_server(rig):
     texts = {"Warm · since", "Open", "Closed", "Logged out", "Opened by hand", "Closing…"}
     src = Path(warm.__file__).read_text(encoding="utf-8")
