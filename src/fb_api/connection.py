@@ -91,6 +91,14 @@ def user_started_action(allowed=True):
         _USER_ACTION.reset(token)
 
 
+def person_started():
+    """ACL-2668: the running action was started by the person (button, command, Check plan, Publish).
+
+    Read straight from the flags, not through `may_start_closed_profile` (that one is a test seam for
+    the cold-open gate). Background and scheduled reads set neither flag."""
+    return bool(_USER_ACTION.get() or _OPEN_CLOSED.get())
+
+
 def may_start_closed_profile():
     """True inside a user-started action; `opening_closed_profile()` (Check plan/Publish/prepare) counts too."""
     return _USER_ACTION.get() or _OPEN_CLOSED.get()
