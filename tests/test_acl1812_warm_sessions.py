@@ -131,7 +131,7 @@ class Rig:
         self.reg = warm.WarmRegistry(
             store=self.store, wall=lambda: self.now[0], scan=self._scan, tab_factory=self._tab,
             start_profile=self._start, close_window=self._stop, slot_queue=lambda: FakeQueue(self),
-            gate=self.gate, sleep=self._sleep_fake, cpu=lambda: 10.0, stagger=lambda: 7.0, stops=self.stops,
+            gate=self.gate, sleep=self._sleep_fake, cpu=lambda: 10.0, stops=self.stops,
             pid_alive=lambda pid, created: pid in self.alive_pids,
             pending_close=lambda pid: self.pending.pop(pid, None),
             pending_restore=lambda pid, prev: self.pending.setdefault(pid, prev),
@@ -215,6 +215,12 @@ def entry(pid=PID, label="Acc"):
 @pytest.fixture
 def rig(tmp_path):
     return Rig(tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def _three_minute_cooldown(monkeypatch):
+    # ACL-2818: код по умолчанию — 0 с. Этот файл проверяет паузу в 3 минуты, поэтому включает её явно.
+    monkeypatch.setenv(warm.RESTART_COOLDOWN_ENV, "180")
 
 
 # ───────────────────────── одна вкладка на все действия ─────────────────────────
@@ -564,19 +570,20 @@ def test_already_open_profile_is_kept_warm_but_not_marked_as_ours(rig):
     assert rig.reg.session(PID).dashboard_started is False
 
 
-def test_starts_are_staggered_only_between_real_starts(rig):
+def test_starts_follow_each_other_without_a_pause(rig):
+    # ACL-2668 #14: случайной паузы 5–10 с между запусками больше нет.
     pids = [f"{i:08d}-0000-4000-8000-000000000000" for i in range(4)]
-    rig.scan_result[pids[1]] = ("port", 9555)       # этот уже открыт: пауза после него не нужна
+    rig.scan_result[pids[1]] = ("port", 9555)
     items = [(f"A{i}", entry(pid)) for i, pid in enumerate(pids)]
     results = rig.reg.open_many(items)
     assert [r["code"] for r in results.values()] == ["started", "already_open", "started", "started"]
-    assert rig.sleeps == [7.0, 7.0], rig.sleeps    # после 1-го и после 3-го настоящего запуска
+    assert rig.sleeps == [], rig.sleeps
 
 
-def test_default_stagger_is_between_five_and_ten_seconds(tmp_path):
+def test_registry_has_no_stagger(tmp_path):
     reg = warm.WarmRegistry(store=warm.WarmStore(tmp_path / "w.json"), scan=lambda ids: {})
-    values = [reg._stagger() for _ in range(200)]
-    assert min(values) >= 5.0 and max(values) <= 10.0 and len(set(values)) > 1
+    assert not hasattr(reg, "_stagger")
+    assert not hasattr(warm, "STAGGER_MIN_S") and not hasattr(warm, "STAGGER_MAX_S")
 
 
 # ───────────────────────── Close profiles ─────────────────────────
@@ -714,7 +721,7 @@ def test_closed_profile_gives_a_clear_refusal_and_forgets_the_record(rig):
 def test_everything_is_switched_off_without_the_api_backend(monkeypatch):
     from src.web import warm_api
 
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     out = warm_api.state(["Acc"])
     assert out["available"] is False and out["accounts"] == {}
     data, code = warm_api.start_open(["Acc"])
@@ -888,7 +895,7 @@ def test_routes_are_registered_and_refuse_under_rpa(monkeypatch):
 
     from src.web import app as web
 
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     paths = {(r.path, tuple(sorted(r.methods))) for r in web.app.routes if hasattr(r, "methods")}
     for want in (("/warm/state", ("GET",)), ("/warm/open", ("POST",)),
                  ("/warm/job/{job_id}", ("GET",)), ("/warm/close", ("POST",))):
@@ -937,6 +944,22 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
         assert forbidden not in js, f"opening a list must not trigger {forbidden}"
     for text in ("Open profiles for today", "Close profiles", "Opened by hand"):
         assert text in js or text == "Opened by hand"
+
+
+def test_open_profiles_never_asks_and_close_promises_no_wait():
+    """ACL-2668 #32: «Open profiles for today» стартует сразу при любом числе аккаунтов;
+    «Close profiles» спрашивает, но больше не обещает ждать ~3 минуты перед повторным открытием."""
+    root = Path(__file__).resolve().parents[1] / "src"
+    js = (root / "web" / "static" / "warm_sessions.js").read_text(encoding="utf-8")
+    body = js.split("function openProfiles(grid) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "aclConfirm" not in body and "runOpen(grid" in body
+    close = js.split("function runClose(grid, labels) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "window.aclConfirm(" in close, "Close profiles keeps its confirmation"
+    sources = [js, (root / "web" / "static" / "acm_commands.js").read_text(encoding="utf-8"),
+               (root / "fb_api" / "warm.py").read_text(encoding="utf-8"),
+               (root / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")]
+    for text in sources:
+        assert "about 3 minutes" not in text and "wait about 3" not in text
 
 
 def test_chip_texts_for_every_state_come_from_the_server(rig):
@@ -1508,7 +1531,7 @@ def test_hand_message_names_the_right_button_per_backend(monkeypatch):
     monkeypatch.setenv("ACL_FB_BACKEND", "api")
     # ACL-2262: on the API backend nothing depends on the button; the dashboard opens the profile itself.
     assert sp.hand_message() == warm.HAND_MESSAGE and "Open profiles for today" not in sp.hand_message()
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     assert "open profile button on this row" in sp.hand_message()
     assert "Open profiles for today" not in sp.hand_message()
 

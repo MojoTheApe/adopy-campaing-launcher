@@ -97,7 +97,7 @@ def world(tmp_path, monkeypatch, meta):
     state = SimpleNamespace(sessions=0, clients=[])
 
     @contextmanager
-    def fake_session(account, *, commands=False):
+    def fake_session(account, *, commands=False, **_kw):
         state.sessions += 1
         client = g.GraphClient(meta, allow_writes=commands, min_interval_s=0.0, max_calls=80,
                                sleep=lambda s: None)
@@ -343,7 +343,7 @@ def test_the_route_refuses_while_a_publish_job_runs_in_the_profile(meta, monkeyp
 
 
 def test_the_route_keeps_the_rpa_path_when_the_backend_is_rpa(monkeypatch):
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     seen = {}
 
     def rpa(account, level, object_id, **kw):

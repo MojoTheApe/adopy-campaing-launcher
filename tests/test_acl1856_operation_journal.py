@@ -276,13 +276,8 @@ def test_a_crash_at_any_write_resumes_without_duplicates(tmp_path, journal, cloc
     assert first.stop_kind == "unexpected" and first.error == cr.MSG_UNEXPECTED
     assert first.operation["state"] == oj.OP_FAILED
     meta.crash_at = None
-    clock.t += oj.UNKNOWN_HOLD_S + 1                 # удержание неизвестной записи прошло
+    clock.t += oj.UNKNOWN_RECENT_WORDING_S + 1       # запись уже не «недавняя» для текста подсказки
     second, _ = _go(meta, _draft(tmp_path, ads=2), journal)
-    if n in (4, 7) and phase == "before":
-        # Креатив имеет свою прежнюю квитанцию (creative_recovery): оборванная запись креатива требует сверки руками.
-        assert "earlier creative write has an unknown result" in second.error
-        assert _count(meta, "creative") <= want["creative"] and len(meta.posts) == n - 1
-        return
     assert second.error == "", second.error
     assert {k: _count(meta, k) for k in want} == want
     assert len(meta.posts) - (1 if phase == "after" else 0) <= want_posts + (1 if phase == "before" else 0)
@@ -340,7 +335,7 @@ def test_a_lost_confirmation_record_is_only_a_note_and_the_next_run_adopts(tmp_p
 def test_an_unsent_write_found_nowhere_is_written_again_without_waiting(tmp_path, journal):
     """ACL-2250 contract: the earlier run looked and found nothing; a rerun does not wait 10 minutes."""
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"                  # ответа нет, объект не создан
+    meta.fail_next["ads"] = "unsent_stuck"            # ответа нет, объект не создан
     first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
     assert first.stop_kind == "unknown"
     assert first.operation["stages"][-1]["state"] == oj.UNKNOWN
@@ -471,7 +466,7 @@ def test_a_renamed_ad_set_stops_the_resume(tmp_path, journal):
     assert out.stop_kind == "resume_mismatch" and len(meta.posts) == posts
 
 
-def test_a_video_that_is_not_ready_stops_the_resume(tmp_path, journal):
+def test_a_failed_video_stops_the_resume(tmp_path, journal):
     meta = FakeMeta(video_states=("ready",))
     done, _ = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
     assert done.error == ""
@@ -481,8 +476,21 @@ def test_a_video_that_is_not_ready_stops_the_resume(tmp_path, journal):
             o["_polls"] = 0
     posts = len(meta.posts)
     out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
-    assert out.stop_kind == "resume_mismatch" and "still processing or was rejected" in out.error
+    assert out.stop_kind == "resume_mismatch" and "could not process the video" in out.error
     assert len(meta.posts) == posts
+
+
+def test_a_video_still_processing_does_not_stop_the_resume(tmp_path, journal):
+    """ACL-2668, решение 16: обработка у Meta - не стоп при повторе; ждём и дописываем."""
+    meta = FakeMeta(video_states=("ready",))
+    done, _ = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert done.error == ""
+    meta.video_states = ["processing", "processing", "ready"]
+    for o in meta.objects.values():
+        if o["_kind"] == "video":
+            o["_polls"] = 0
+    out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.error == "" and out.stop_kind != "resume_mismatch", out.error
 
 
 def test_changed_file_bytes_are_a_new_operation(tmp_path, journal):
@@ -784,7 +792,7 @@ def test_next_action_never_tells_to_wait_for_a_sent_stage(journal, clock):
     op = journal.open(ACT, "tag", "fp-hold", "C")
     op.begin("campaign", "campaign", name="C")
     assert op.next_action().startswith("Publish again") and "minutes" not in op.next_action()
-    clock.t += oj.UNKNOWN_HOLD_S + 1
+    clock.t += oj.UNKNOWN_RECENT_WORDING_S + 1
     assert op.next_action().startswith("Publish again")
 
 
@@ -819,7 +827,7 @@ def test_next_action_agrees_with_every_failed_result(tmp_path, journal, monkeypa
     if scenario == "crash":
         meta.crash_at, meta.phase = 4, "after"
     elif scenario == "unknown":
-        meta.fail_next["ads"] = "unsent"
+        meta.fail_next["ads"] = "unsent_stuck"
     elif scenario == "cancel":
         flag = {"stop": False}
         real = meta.write
@@ -898,7 +906,7 @@ def test_a_lifetime_plan_with_a_start_today_keeps_its_operation_when_the_clock_m
 
     monkeypatch.setenv("ACL_TEAM_TIMEZONE", "America/New_York")
     meta = ZoneMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first = _zone_run(meta, _life(tmp_path, start="2026-10-20T09:00"), _at(9, 30), journal)    # start moves to 09:45
     assert first.error and first.operation["stages"]
     ops = list(journal.root.glob("op-*.json"))
@@ -936,7 +944,7 @@ def test_a_step_sent_long_ago_by_a_dead_run_can_be_taken_over(journal, clock):
     a = journal.open(ACT, "t", "f", "C")
     b = journal.open(ACT, "t", "f", "C")
     a.begin("ad 1", "ad")
-    clock.t += oj.UNKNOWN_HOLD_S + 1
+    clock.t += oj.UNKNOWN_RECENT_WORDING_S + 1
     b.begin("ad 1", "ad")
     assert journal.read(a.id)["stages"]["ad 1"]["owner"] == b.owner
 

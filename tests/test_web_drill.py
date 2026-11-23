@@ -15,7 +15,7 @@ from src.analysis_agent.analyze_fb_stats import aggregate_combos
 from src.analysis_agent.morning_report import build_country_section
 from src.web.app import mlx_instance_labels, _anchor_slug, _enrich_country_overview, details, templates
 
-def _render_html(report: dict) -> str:
+def _render_html(report: dict, fb_backend: str = "rpa") -> str:
     """Render report.html the way the app does.
 
     Every test that built this context by hand drifted from the real one and
@@ -38,6 +38,9 @@ def _render_html(report: dict) -> str:
         ref_options_json={},
         account_alias_map_json={},
         draft_status={},
+        # ACL-2785: без явного значения страница теперь идёт по API; эти тесты
+        # описывают поток RPA, API-вариант просят отдельным fb_backend="api".
+        fb_backend=fb_backend,
     )
     # ACL-1819: страница теперь закрывает Publish, пока нет pre-flight audit (ворота наглухо).
     # Эти тесты проверяют очередь и ящик, а не аудит: ворота здесь пропускают. Сам гейт —

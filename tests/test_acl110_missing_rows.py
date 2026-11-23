@@ -170,7 +170,7 @@ def test_account_map_fragment_keeps_both_periods_and_does_not_mutate_cached_repo
         seen.append((start, end))
         return deepcopy(report if start == '2026-10-08' else compare._report)
 
-    def view(r, df, start, end, span=''):
+    def view(r, df, start, end, span='', **_kw):
         assert r.get('marker') != 'unfiltered', 'fragment used the unfiltered workbook'
         if start != '2026-10-08':
             return {'countries': [{'country': 'Costa Rica', 'book': metrics(), 'rows': []},

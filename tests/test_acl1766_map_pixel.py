@@ -94,9 +94,9 @@ def test_no_map_pixel_and_one_account_pixel_works_as_before(tmp_path):
     assert (plan.pixel_id, plan.pixel_source) == ("222", "account default")
 
 
-def test_no_map_pixel_and_two_account_pixels_keeps_the_previous_error(tmp_path):
+def test_no_map_pixel_and_two_account_pixels_asks_to_choose_in_the_pixel_field(tmp_path):
     plan = _plan(tmp_path)
-    with pytest.raises(cr.PlanError, match="2 pixels/datasets; the API backend needs exactly one"):
+    with pytest.raises(cr.PlanError, match="2 pixels/datasets. Choose one in the Pixel field"):
         cr.resolve_page_pixel(plan, _facts(TwoPixelMeta(["222", "333"])))
 
 
