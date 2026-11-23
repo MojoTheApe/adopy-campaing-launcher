@@ -2527,6 +2527,11 @@ def _alias_by_tail(label: str, known: dict) -> str:
     # букв — это чьё-то имя или бренд, а не номер аккаунта.
     from src.analysis_agent.analyze_fb_stats import normalize_account_alias
 
+    # Имя уже в стиле книги (`FacebookDoc446 - …`) — догадка по хвосту не нужна
+    # и ошибается: цепляет чужую серию (Doc405 → FacebookMKTO1405). Хвостом
+    # пользуются только имена Multilogin (`KLD_…`); суффикс id — как прежде.
+    if str(label or "").strip().casefold().startswith("facebook"):
+        return _alias_without_id_suffix(label, known)
     tail = _account_tail(normalize_account_alias(label))
     if not tail or not any(ch.isdigit() for ch in tail):
         return ""

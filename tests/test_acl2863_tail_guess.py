@@ -22,9 +22,14 @@ def test_person_name_annotation_does_not_make_the_tail():
     assert web_app.workbook_alias_for(df, "Ecuador", label) == label
 
 
-def test_tail_comes_from_the_own_name_when_annotated():
-    known = {"FacebookDoc446": {}}
-    assert web_app._alias_by_tail("Doc446 - Khalid Ahmed", known) == "FacebookDoc446"
+def test_facebook_named_label_never_tail_guesses():
+    assert web_app._alias_by_tail("FacebookDoc405 - X", {"FacebookMKTO1405": {}}) == ""
+    for other in ("Facebook_6446", "FacebookUL446"):
+        assert web_app._alias_by_tail("FacebookDoc446 - X", {other: {}}) == ""
+
+
+def test_kld_label_still_tail_guesses():
+    assert web_app._alias_by_tail("KLD_BFL_F91", {"FacebookElf91": {}}) == "FacebookElf91"
 
 
 def test_letters_only_tail_never_matches():
