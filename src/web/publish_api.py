@@ -206,12 +206,6 @@ def _frozen_api(account_label: str):
         return None, ""
 
 
-def _frozen_tab_replaceable(account_label: str) -> bool:
-    """ACL-2262: the frozen-tab pause may be lifted once, right before the warm checkout replaces the tab."""
-    _api, key = _frozen_api(account_label)
-    return bool(_api is not None and _api.frozen_tab_replaceable(key))
-
-
 def _release_frozen_tab_cooldown(account_label: str) -> None:
     _api, key = _frozen_api(account_label)
     if _api is not None:
@@ -554,23 +548,22 @@ class ApiPublisher:
         except Exception:  # noqa: BLE001 - a failed look is only "not detected"
             log.debug("tab look before the open failed", exc_info=True)
         left, why = _cooldown(account_label)
-        # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
-        frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
         from src.fb_api import account_blocks as _blocks
 
         key = _frozen_api(account_label)[1]
         # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
-        # and a timed pause are explained by the one owner of that state.
-        # ACL-2652: only a bare hold is passed; a timed pause (rate limit, frozen tab) still refuses
-        # ACL-2652: a held frozen tab is about the tab, not the account: Publish / Check plan opens a fresh tab itself and the
-        # hold ends in `_note_tab_recovered` once the page answers; a page that is still frozen sets it again (code page_unresponsive).
+        # is explained by the one owner of that state.
+        # ACL-2668 (decision 7): a timed pause after a Meta stop (rate limit, frozen tab) no longer refuses Publish /
+        # Check plan: the person pressed, the action goes. The pause holds background reads only.
+        # ACL-2652: only a bare hold is passed; a held frozen tab is about the tab, not the account: Publish / Check plan
+        # opens a fresh tab itself and the hold ends in `_note_tab_recovered` once the page answers; a page that is still
+        # frozen sets it again (code page_unresponsive).
         frozen_probe = left == float("inf") and why == "page_unresponsive"
         blocked = None if (self._auth_probe or frozen_probe) and left == float("inf") else _blocks.refusal(
-            key, account_label, "publish", timed=(left, why) if left > 0 and not frozen_deferred else None)
+            key, account_label, "publish")
         if blocked:
-            held = _blocks.is_held(key)
-            raise ApiPublishError(blocked[0], code=blocked[1] if held else (
-                "page_unresponsive" if why == "page_unresponsive" else ""))
+            raise ApiPublishError(blocked[0], code=blocked[1])
+
         def frozen_error() -> ApiPublishError:
             # Built only when it is raised: building it explains (and logs) a refusal that never happens.
             return ApiPublishError(
@@ -584,8 +577,8 @@ class ApiPublisher:
 
         if self._open_warm(account_label, profile_id):
             return
-        if frozen_deferred or frozen_probe:
-            raise frozen_error()      # not the warm path: nothing replaces the hung tab, the pause stands
+        if frozen_probe:
+            raise frozen_error()      # not the warm path: nothing replaces the hung tab, the hold stands
         self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
 
