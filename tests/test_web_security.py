@@ -72,6 +72,12 @@ def test_security_headers_are_on_local_responses() -> None:
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
+def test_csp_lets_the_landing_preview_frame_load_https_pages() -> None:
+    # ACL-2878: без frame-src окно предпросмотра лендинга пустое (default-src 'self').
+    csp = asyncio.run(_request("GET", "/favicon.ico")).headers["content-security-policy"]
+    assert "frame-src https:" in csp and "frame-ancestors 'none'" in csp
+
+
 def test_jinja_json_cannot_break_out_of_script_tag() -> None:
     payload = {"name": "</script><script>alert(1)</script>"}
 
