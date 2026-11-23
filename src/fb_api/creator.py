@@ -277,6 +277,7 @@ CALLS_UPLOAD_WINDOW_RAMP = 6
 VIDEO_POLL_S = 15.0
 VIDEO_POLL_MAX_S = 60.0
 VIDEO_POLL_SLOW_AFTER = 20
+VIDEO_CANCEL_SLICE_S = 1.0      # пауза опроса режется на куски: отмена слышна за секунду
 
 #: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
 #: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
@@ -1997,6 +1998,17 @@ def video_error_reason(status: dict) -> str:
     if text and text not in texts:
         texts.append(text)
     return "; ".join(texts)
+
+
+def video_failed(status: dict, state: str) -> bool:
+    """Конечное состояние без готовности (ACL-2668): `error`, `expired` или ошибка любой фазы - ждать дальше нечего."""
+    if state in ("error", "expired"):
+        return True
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        if str(part.get("status") or "").lower() in ("error", "expired"):
+            return True
+    return False
 
 
 def video_progress_text(status: dict) -> str:
@@ -4178,19 +4190,24 @@ class CampaignCreator:
                 state = str(status.get("video_status") or "").lower()
                 if state == "ready":
                     break
-                if state == "error":
-                    reason = video_error_reason(status)
+                if video_failed(status, state):
+                    reason = video_error_reason(status) or (f"video status {state}" if state else "")
                     raise CreationStopped(
                         f"{who}: Meta could not process the video" + (f": {reason}" if reason else ""),
                         created=out.created, kind="video_error")
                 if not announced:
-                    self._step(out, f"{who}: video processing at Meta - waiting until it is ready")
                     self._waiting("video_processing")
                     announced = True
                 self._beat()
                 self.live_progress(f"{who}: video processing at Meta{video_progress_text(status)}, "
                                    f"{_wait_span(self.clock() - began)}")
-                self.sleep(self.video_poll_s if polls < VIDEO_POLL_SLOW_AFTER else self.video_poll_max_s)
+                # Пауза короткими кусками: Stop слышен за секунду, а не после полного шага опроса (до 60 с).
+                left = self.video_poll_s if polls < VIDEO_POLL_SLOW_AFTER else self.video_poll_max_s
+                while left > 0:
+                    self._check_cancel(out)
+                    piece = min(left, VIDEO_CANCEL_SLICE_S)
+                    self.sleep(piece)
+                    left -= piece
         finally:
             if announced:
                 self._waiting("")

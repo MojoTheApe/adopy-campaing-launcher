@@ -773,11 +773,9 @@ def test_long_video_processing_never_stops_the_publish(tmp_path):
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
     assert out.error == "" and out.readback["ok"] is True, out.error
     assert len(_video_polls(meta)) >= 40 and now[0] > 300
-    video_naps = [n for n in naps if n in (cr.VIDEO_POLL_S, cr.VIDEO_POLL_MAX_S)]
-    assert video_naps[:cr.VIDEO_POLL_SLOW_AFTER - 1] == [cr.VIDEO_POLL_S] * (cr.VIDEO_POLL_SLOW_AFTER - 1)
-    assert video_naps[-1] == cr.VIDEO_POLL_MAX_S
+    assert max(naps) <= cr.VIDEO_CANCEL_SLICE_S          # pauses are sliced so a Stop is heard within a second
+    assert now[0] >= (cr.VIDEO_POLL_SLOW_AFTER - 1) * cr.VIDEO_POLL_S + 19 * cr.VIDEO_POLL_MAX_S
     assert any("video processing at Meta (40%)" in t and "min" in t for t in shown)
-    assert any("waiting until it is ready" in s for s in out.steps)
     assert [p.rsplit("/", 1)[1] for p, _ in meta.posts].count("ads") == 1
 
 
@@ -811,6 +809,46 @@ def test_cancel_still_works_while_the_video_is_processing(tmp_path):
     out, _ = _run(meta, _draft(tmp_path, video=True, ads=1), cancelled=cancelled)
     assert out.stop_kind == "cancelled" and len(_video_polls(meta)) == 3
     assert not [p for p, _ in meta.posts if p.endswith(("/adcreatives", "/ads"))]
+
+
+def test_cancel_during_a_slow_poll_pause_is_heard_within_seconds(tmp_path):
+    """The longest pause (60 s) is sliced: Stop lands within a slice, far inside the 60 s cancel deadline."""
+    meta = FakeMeta(video_states=("processing",))
+    now = [0.0]
+    stop_at = [None]
+
+    def sleep(s):
+        now[0] += s
+
+    def cancelled():
+        if len(_video_polls(meta)) >= cr.VIDEO_POLL_SLOW_AFTER and stop_at[0] is None:
+            stop_at[0] = now[0] + 3.0
+        return stop_at[0] is not None and now[0] >= stop_at[0]
+
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=400)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=sleep,
+                                 clock=lambda: now[0], cancelled=cancelled)
+    out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
+    assert out.stop_kind == "cancelled"
+    assert now[0] - stop_at[0] < 2 * cr.VIDEO_CANCEL_SLICE_S
+
+
+@pytest.mark.parametrize("failed", [
+    {"video_status": "expired"},
+    {"video_status": "processing", "processing_phase": {"status": "error",
+                                                         "errors": [{"message": "Codec not supported"}]}},
+    {"video_status": "processing", "uploading_phase": {"status": "error"}},
+    {"video_status": "upload_complete", "publishing_phase": {"status": "expired"}},
+])
+def test_terminal_video_states_end_the_wait_with_metas_reason(tmp_path, failed):
+    meta = FakeMeta(video_states=("processing", failed))
+    out, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
+    assert out.stop_kind == "video_error" and "Meta could not process the video" in out.error
+    assert len(_video_polls(meta)) == 2
+    assert not [p for p, _ in meta.posts if p.endswith(("/adcreatives", "/ads"))]
+    if "errors" in str(failed):
+        assert "Codec not supported" in out.error
 
 
 def test_video_error_reason_reads_every_phase():
