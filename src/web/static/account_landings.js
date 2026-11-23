@@ -5,6 +5,8 @@
   'use strict';
   var MAX = 3;
   var PREVIEW_DELAY_MS = 400;
+  // ACL-2881: `pending` повторяем раз в секунду (JCloud обычно готов за 1–2 с), а не по retry_after_seconds.
+  var PENDING_POLL_MS = 1000;
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -155,7 +157,7 @@
             note('JCloudFront is preparing the catalog…');
             setTimeout(function () {
               if (mine === token && !search.hidden) { clearNotes(); run(text, page, data.searched_as, snapshot, mine, stock); }
-            }, Math.max(1, Number(data.retry_after_seconds) || 3) * 1000);
+            }, PENDING_POLL_MS);
             return;
           }
           if (page === 1 && !data.items.length) { note('Nothing found.'); return; }

@@ -17,8 +17,11 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import contextlib
 import os
 import re
+import threading
 from typing import Any
 
 PAGE_SIZE = 20
@@ -91,25 +94,167 @@ def _classify_exception(exc: BaseException) -> str:
     return "failed"
 
 
-async def _call_tool(tool: str, args: dict) -> dict:
+#: Сколько сессия MCP живёт без вызовов. Дольше не держим: сервер мог её закрыть.
+IDLE_S = 120.0
+#: Потолки на открытие (рукопожатие) и закрытие сессии; вызов ограничен TIMEOUT_S + 5.
+OPEN_S = TIMEOUT_S
+CLOSE_S = 5.0
+#: Сколько вызывающий ждёт ответ фонового потока; после этого поток считается зависшим и заменяется.
+CALL_WAIT_S = TIMEOUT_S * 2 + 10
+
+
+@contextlib.asynccontextmanager
+async def _open_session(url: str, token: str):
+    """Одно соединение с MCP: исходит из httpx, нужен только заголовок Authorization."""
     import httpx
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
-    url, token = _settings()
     async with httpx.AsyncClient(headers={"Authorization": "Bearer " + token}, timeout=TIMEOUT_S) as client:
         async with streamable_http_client(url, http_client=client) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                response = await session.call_tool(tool, args)
+                yield session
+
+
+async def _invoke(session, tool: str, args: dict) -> dict:
+    response = await session.call_tool(tool, args)
     data = getattr(response, "structuredContent", None)
     if getattr(response, "isError", False) or not isinstance(data, dict):
         raise RuntimeError("JCloudFront returned an invalid response")
     return data
 
 
+def _finish(fut: concurrent.futures.Future, *, result=None, exc: BaseException | None = None) -> None:
+    """Ответ вызывающему; вызывающий мог уже уйти по таймауту, тогда это не ошибка."""
+    if fut.done():
+        return
+    if exc is not None:
+        fut.set_exception(exc)
+    else:
+        fut.set_result(result)
+
+
+class _Worker:
+    """Фоновый поток держит одну открытую сессию MCP и обслуживает вызовы по очереди (ACL-2881).
+
+    Сессию открывает и закрывает одна и та же задача: так требует anyio. Устаревшая сессия
+    переоткрывается, вызов повторяется один раз; после IDLE_S простоя или смены адреса/токена
+    следующий вызов открывает новую. Открытие, рукопожатие и закрытие ограничены по времени;
+    если поток всё равно завис, вызывающий по таймауту бросает его и следующий вызов запускает
+    новый поток со свежей очередью.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._queue: asyncio.Queue | None = None
+        self._thread: threading.Thread | None = None
+
+    def _ensure(self) -> tuple[asyncio.AbstractEventLoop, asyncio.Queue]:
+        with self._lock:
+            if not (self._thread and self._thread.is_alive() and self._loop):
+                ready = threading.Event()
+                box: dict = {}
+
+                def run() -> None:
+                    loop = asyncio.new_event_loop()
+                    queue: asyncio.Queue = asyncio.Queue()
+                    box["pair"] = (loop, queue)
+                    ready.set()
+                    try:
+                        loop.run_until_complete(self._serve(queue))
+                    finally:
+                        loop.close()
+
+                self._thread = threading.Thread(target=run, name="jcloud-mcp", daemon=True)
+                self._thread.start()
+                ready.wait(5)
+                self._loop, self._queue = box["pair"]
+            return self._loop, self._queue
+
+    @staticmethod
+    async def _serve(queue: asyncio.Queue) -> None:
+        pending = None  # (tool, args, future, retries, settings)
+        while True:
+            if pending is None:
+                pending = await queue.get()
+                if pending is None:
+                    return
+            settings = pending[4]
+            opened = False
+            stack = contextlib.AsyncExitStack()
+            try:
+                async with asyncio.timeout(OPEN_S):
+                    session = await stack.enter_async_context(_open_session(*settings))
+                opened = True
+                while True:
+                    if pending is None:
+                        try:
+                            pending = await asyncio.wait_for(queue.get(), IDLE_S)
+                        except asyncio.TimeoutError:
+                            break  # простой: закрываем, следующий вызов откроет заново
+                        if pending is None:
+                            return
+                    tool, args, fut, retries, wanted = pending
+                    if wanted != settings:
+                        break  # адрес или токен сменились: переоткрываем, вызов не теряем
+                    try:
+                        data = await asyncio.wait_for(_invoke(session, tool, args), TIMEOUT_S + 5)
+                    except Exception as exc:  # noqa: BLE001
+                        if retries < 1:
+                            pending = (tool, args, fut, retries + 1, wanted)  # устаревшая сессия
+                        else:
+                            _finish(fut, exc=exc)
+                            pending = None
+                        break
+                    _finish(fut, result=data)
+                    pending = None
+            except Exception as exc:  # noqa: BLE001 — не открылось соединение или рукопожатие
+                # Сбой уже начатой сессии не трогает вызов: он повторится или уже завершён.
+                if pending is not None and not opened:
+                    _finish(pending[2], exc=exc)
+                    pending = None
+            finally:
+                try:
+                    async with asyncio.timeout(CLOSE_S):
+                        await stack.aclose()
+                except BaseException as exc:  # noqa: BLE001 — зависшее/упавшее закрытие не должно держать поток
+                    if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                        raise
+
+    def call(self, tool: str, args: dict) -> dict:
+        loop, queue = self._ensure()
+        fut: concurrent.futures.Future = concurrent.futures.Future()
+        loop.call_soon_threadsafe(queue.put_nowait, (tool, args, fut, 0, _settings()))
+        try:
+            return fut.result(timeout=CALL_WAIT_S)
+        except concurrent.futures.TimeoutError:
+            self._abandon(loop, queue)
+            raise
+
+    def _abandon(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue) -> None:
+        """Поток завис: следующий вызов получит новый; старый уйдёт, если когда-нибудь отвиснет."""
+        with self._lock:
+            if self._queue is queue:
+                self._thread = self._loop = self._queue = None
+        with contextlib.suppress(RuntimeError):
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+    def stop(self) -> None:
+        with self._lock:
+            thread, loop, queue = self._thread, self._loop, self._queue
+            self._thread = self._loop = self._queue = None
+        if thread and thread.is_alive() and loop and queue:
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+            thread.join(5)
+
+
+_worker = _Worker()
+
+
 def _call(tool: str, args: dict) -> dict:
-    return asyncio.run(asyncio.wait_for(_call_tool(tool, args), TIMEOUT_S + 5))
+    return _worker.call(tool, args)
 
 
 def _group(raw: dict) -> dict:
