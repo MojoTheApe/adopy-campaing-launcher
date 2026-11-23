@@ -267,6 +267,7 @@ def test_preview_sits_beside_the_list_when_there_is_room(page):
     r = _hover_first_row(page)
     assert r["p"][0] >= r["l"][1] and r["p"][2] <= r["w"]
 
+
 def test_cards_show_instance_count_and_the_grouped_totals(page):
     page.click("[data-landings-open]")
     page.fill("[data-landings-query]", "x")
