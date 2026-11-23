@@ -215,3 +215,9 @@ def test_outside_a_run_the_folder_is_the_base(tmp_path):
 
     t = threading.Thread(target=other); t.start(); t.join(5)
     assert seen["dir"] == tmp_path / "shots"
+
+
+@pytest.fixture(autouse=True)
+def _rpa_backend_explicit(monkeypatch):
+    """ACL-2785: по умолчанию теперь api; эти тесты проверяют ветку RPA, поэтому выбирают её явно."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")

@@ -245,7 +245,8 @@ def test_halt_without_cooldown_does_not_lift_by_time(env):
 def test_classify_variants():
     assert ar.classify(ci.Snapshot(account="A", state="ok")) == "ok"
     assert ar.classify(_failed("A", "x", "call_budget")) == "global"
-    assert ar.classify(_failed("A", "The A profile is on a Facebook checkpoint")) == "global"
+    # ACL-2653: a checkpoint holds only its own profile, it is not a machine-wide stop.
+    assert ar.classify(_failed("A", "The A profile is on a Facebook checkpoint")) == "person"
     assert ar.classify(_failed("A", "Meta rate limit reached; the read was stopped.")) == "global"
     assert ar.classify(_failed("A", "x", "mlx_session_lost")) == "global"
     assert ar.classify(_failed("A", "no access to the ad account")) == "account"
@@ -305,11 +306,11 @@ def test_partial_with_stop_halts_and_is_not_fresh(env):
     q.request("A", "attention")
     q.request("B", "schedule")
     q._drain_once()
-    assert [a for a, _ in env.read] == ["A"]
+    assert [a for a, _ in env.read] == ["A", "B"]   # ACL-2653: the neighbour is not stopped by A's checkpoint
     st = q.state()
-    assert st["halt"] and st["halt"]["until"] is None  # чекпоинт: только явный Retry
+    assert st["halt"] is None
     assert st["rows"]["A"]["state"] == "failed"
-    assert ar.classify(env.failures["A"]) == "global"
+    assert ar.classify(env.failures["A"]) == "person"
     env.snaps["A"] = env.failures["A"]
     assert not ar.is_fresh("A", now=NOW)
     env.snaps["A"] = ci.Snapshot(account="A", state="partial", finished_at_utc=_iso(NOW),
@@ -476,22 +477,16 @@ def test_skip_telemetry_is_not_an_api_read(monkeypatch):
 
 # ───────── ACL-2063: разбор ревью очереди ─────────
 
-def test_success_of_another_account_does_not_clear_a_checkpoint_halt(env):
+def test_a_checkpoint_of_one_account_does_not_halt_the_others(env):
     env.failures["A"] = ci.Snapshot(account="A", state="failed", error="Facebook checkpoint", stop="checkpoint")
     q = _queue(env)
     q.request("A", "attention")
     q._drain_once()
-    halt = q.state()["halt"]
-    assert halt and halt["kind"] == "checkpoint" and halt["account"] == "A" and halt["until"] is None
-    # Явный Retry соседа читается мимо паузы, но его удача чекпоинт A не снимает.
-    assert q.request("B", "retry", force=True) == {"queued": True, "reason": "queued"}
+    assert q.state()["halt"] is None and q.state()["rows"]["A"]["state"] == "failed"
+    # ACL-2653: a neighbour is read by an ordinary request, not only by a bypassing Retry.
+    assert q.request("B", "attention") == {"queued": True, "reason": "queued"}
     q._drain_once()
     assert [a for a, _ in env.read] == ["A", "B"]
-    assert q.state()["halt"] is not None
-    # Удачный Retry самого A снимает.
-    del env.failures["A"]
-    q.request("A", "retry", force=True)
-    q._drain_once()
     assert q.state()["halt"] is None
 
 
@@ -528,20 +523,19 @@ def test_start_after_timed_out_stop_keeps_a_worker(env):
     q.stop()
 
 
-def test_checkpoint_halt_is_restored_from_the_store(env):
+def test_checkpoint_in_the_store_is_not_restored_as_a_halt(env):
     env.stops["A"] = ("checkpoint", _iso(NOW - 60))
     q = _queue(env)  # новый процесс или рестарт: в памяти ничего нет
-    halt = q.state()["halt"]
-    assert halt and halt["kind"] == "checkpoint" and halt["account"] == "A"
-    assert q.request("B", "attention") == {"queued": True, "reason": "halted"}
+    assert q.state()["halt"] is None            # ACL-2653: only the profile's hold remembers it
+    assert q.request("B", "attention") == {"queued": True, "reason": "queued"}
     q._drain_once()
-    assert env.read == []
+    assert [a for a, _ in env.read] == ["B"]
     # Retry самого A мимо паузы; удача перезаписала запись (остановки в хранилище больше нет).
     q.request("A", "retry", force=True)
     env.stops.clear()
     q._drain_once()
     assert q.state()["halt"] is None
-    assert [a for a, _ in env.read] == ["A", "B"]
+    assert [a for a, _ in env.read] == ["B", "A"]
 
 
 def test_timed_stop_in_the_store_expires_with_its_cooldown(env):

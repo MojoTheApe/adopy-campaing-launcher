@@ -361,6 +361,7 @@ def _wait_for(predicate, seconds=5.0):
 
 
 def test_read_all_with_closed_profiles_respects_the_slots(monkeypatch, tmp_path, page_reads):
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")  # ACL-2785: по умолчанию api; здесь описано чтение через RPA
     accounts = [f"Facebook_{n}" for n in (1001, 1002, 1003, 1004)]
     entries = {a: SimpleNamespace(profile_id=fake_profile(a), folder_id="f", multilogin_instance="A",
                                   ad_account_id="act_123") for a in accounts}

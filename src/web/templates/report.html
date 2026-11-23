@@ -54,7 +54,7 @@
   <script>
     // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
     // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
-    try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
+    try { window.ACL_FB_BACKEND = {{ (fb_backend or 'api') | tojson }}; } catch(e) {}
     // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
     try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
     try { window.CB_ACCOUNT_FACTS = {{ (account_facts_json or {}) | tojson }}; } catch(e) {}
@@ -959,6 +959,31 @@
     .cb-field-save-btn:hover { background: var(--accent-strong); }
     .cb-field-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .cb-field-status { font-size: var(--adopy-text-sm); min-width: 4rem; }
+    /* Лендинги аккаунта из JCloudFront (ACL-2852) */
+    .cb-landings-val { flex-direction: column; align-items: stretch; gap: 0.4rem; position: relative; }
+    .cb-landing-chosen { display: flex; align-items: center; gap: 0.5rem; font-size: var(--adopy-text-table); }
+    .cb-landing-chosen-name { font-weight: 600; min-width: 9rem; }
+    .cb-landing-chosen-meta { color: var(--muted); font-size: var(--adopy-text-sm); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cb-landing-chosen-path { flex: 1; }
+    .cb-landing-chosen .cb-landing-pct { width: 4rem; flex: 0 0 4rem; text-align: right; }
+    .cb-landing-remove { background: none; border: none; color: var(--bad); cursor: pointer; font-size: var(--adopy-text-sm); }
+    .cb-landings-actions, .cb-landing-search-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .cb-landing-secondary { background: transparent; color: var(--text); border: 1px solid var(--border-strong); }
+    .cb-landing-secondary:hover { background: var(--bg-elev); }
+    .cb-landing-asset-row { margin-top: .4rem; }
+    .cb-landing-asset-chip[hidden] { display: none; }
+    .cb-landing-asset-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); font-size: .85rem; }
+    .cb-landing-popup { max-width: 34rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); max-height: 18rem; overflow-y: auto; }
+    .cb-landing-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); font-size: var(--adopy-text-table); }
+    .cb-landing-row:last-child { border-bottom: none; }
+    .cb-landing-row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .cb-landing-main { flex: 1; min-width: 0; }
+    .cb-landing-title { font-weight: 600; }
+    .cb-landing-sub { color: var(--muted); font-size: var(--adopy-text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cb-landing-note { color: var(--muted); font-size: var(--adopy-text-sm); padding: 0.35rem 0.6rem; }
+    /* Справа от списка, а не поверх него: иначе закрывает кнопки Select и Open. */
+    .cb-landing-preview { position: absolute; left: 35rem; top: 4.2rem; z-index: 30; width: 22rem; height: 30rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); box-shadow: 0 8px 24px rgba(0,0,0,.25); overflow: hidden; pointer-events: none; }
+    .cb-landing-preview iframe { width: 100%; height: 100%; border: 0; background: #fff; }
     /* Account map field rows */
     .cb-map-field-row {
       display: flex; align-items: center; gap: 0.4rem; flex-wrap: nowrap;
@@ -2091,7 +2116,7 @@
     .aov-row[hidden] + .hc-acct-child { display: none; }
     .aov-table tr.hc-acct-child > td { padding: 0; white-space: normal; background: var(--adopy-surface); }
     /* На Home аккаунты не опрашиваются: кнопки чтения и открытия профиля дерева живут только в Manage. */
-    .aov .hc-rc, .aov .hc-ro, .aov .amap-pstate { display: none !important; }
+    .aov .hc-rc:not([data-hold]), .aov .hc-ro, .aov .amap-pstate { display: none !important; }  /* ACL-2652: Retry stays for a profile with a hold */
     @media (max-width: 699px) {
       .aov { padding: 0 var(--adopy-space-3) var(--adopy-space-3); }
       .aov-view { width: 100%; height: var(--adopy-touch-target); } .aov-vbtn { flex: 1; justify-content: center; }
@@ -3485,6 +3510,8 @@
     .rv-grey { color: var(--muted); font-size: var(--adopy-text-sm); }
     .rv-edit { display: inline-block; margin: 0.2rem 0 0.2rem 1rem; font-size: var(--adopy-text-sm); color: var(--accent); }
     .rv-btn { margin-left: 0.4rem; cursor: pointer; }
+    .rv-x { margin-left: 0.4rem; cursor: pointer; border: 0; background: transparent; color: inherit; font-size: 1.1em; line-height: 1; padding: 0 0.3rem; opacity: 0.7; }
+    .rv-x:hover, .rv-x:focus-visible { opacity: 1; }
     .rv-vis { margin: 0.2rem 0 0 1rem; }
     .pc-budget, .pc-checked { margin-top: 0.3rem; font-size: var(--adopy-text-sm); color: var(--muted); }
     .rv-foot-wrap { flex: none; margin-top: 0.5rem; font-size: var(--adopy-text-sm); color: var(--muted); }
@@ -4506,7 +4533,7 @@
   <div class="head-meta">
     <dl class="brand-meta">
       <div><dt>Last updated:</dt>
-      <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
+      <dd id="acl-built-at" title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
       {%- if report.source_info %}
       <div><dt>Figures:</dt>
       <dd id="acl-source-info" data-source-name="{{ report.source_info.description }}" data-source-currency="{{ report.source_info.currency_code }}" data-source-prev-currency="{{ source_comparison_info().currency_code }}" data-source-comparable="{{ 'true' if source_comparison_info().comparable else 'false' }}" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} · incomplete metadata{% endif %}</dd></div>
@@ -4636,6 +4663,7 @@ async function dashRefresh(ev) {
       btn.disabled = false;
       btn.textContent = prev;
       aclInlineError(btn, 'Refresh failed: ' + err);
+      dashRefreshUpdateCheck();
       return false;
     }
     btn.textContent = 'Reloading…';
@@ -4645,8 +4673,15 @@ async function dashRefresh(ev) {
     btn.disabled = false;
     btn.textContent = prev;
     aclInlineError(btn, 'Refresh failed: ' + (e && e.message ? e.message : e));
+    dashRefreshUpdateCheck();
   }
   return false;
+}
+// ACL-2668: Refresh — событие проверки выпуска. Успешный Refresh перезагружает
+// страницу, и проверка идёт при загрузке; здесь — когда перезагрузки не было.
+// Не ждём ответа: проверка не задерживает и не ломает Refresh.
+function dashRefreshUpdateCheck() {
+  try { if (typeof window.aclUpdateCheck === 'function') window.aclUpdateCheck(); } catch (_e) {}
 }
 
 // ── Update to a newer ACL release ────────────────────────────────────────
@@ -4661,9 +4696,11 @@ async function dashRefresh(ev) {
   var btn = document.getElementById('acl-update-btn');
   if (!btn) return;
 
-  // Дешборд держат открытым днями: первая проверка при загрузке страницы идёт
-  // с force=1 (свежий выпуск виден сразу, ACL-2655), ежеминутная берёт кэш
-  // сервера (до минуты). Сбой сети не стирает уже известный выпуск.
+  // ACL-2668 (решение 23): никакого таймера — проверяем только по событиям
+  // байера, всегда с force=1 (свежий выпуск виден сразу, ACL-2655). Загрузка
+  // страницы покрывает успешный Refresh и смену периода: оба перезагружают
+  // страницу. Refresh, который страницу не перезагрузил, зовёт
+  // window.aclUpdateCheck. Сбой сети не стирает уже известный выпуск.
   function aclCheck(force) {
     if (btn.disabled) return;
     fetch('/acl/update/check' + (force ? '?force=1' : ''), { credentials: 'same-origin' })
@@ -4687,8 +4724,8 @@ async function dashRefresh(ev) {
       })
       .catch(function () { /* offline, or not a git install — no button, no noise */ });
   }
+  window.aclUpdateCheck = function () { aclCheck(true); };
   aclCheck(true);
-  setInterval(function () { aclCheck(false); }, 60 * 1000);
 
   btn.addEventListener('click', function () {
     if (btn.disabled) return;
@@ -5115,11 +5152,11 @@ async function dashRefresh(ev) {
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem">
       <label style="flex:2 1 18rem">
         <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Ad title</div>
-        <input id="at-name" type="text" placeholder="ES how much" style="width:100%">
+        <input id="at-name" type="text" style="width:100%">
       </label>
       <label style="flex:0 0 6rem">
         <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Language</div>
-        <input id="at-language" type="text" placeholder="AR" style="width:100%">
+        <input id="at-language" type="text" style="width:100%">
       </label>
       <label style="flex:1 1 10rem">
         <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Asset</div>
@@ -5129,11 +5166,11 @@ async function dashRefresh(ev) {
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;margin-top:0.6rem">
       <label style="flex:2 1 22rem">
         <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Headline</div>
-        <input id="at-headline" type="text" placeholder="Registre-se agora&gt;&gt;&gt;" style="width:100%">
+        <input id="at-headline" type="text" style="width:100%">
       </label>
       <label style="flex:1 1 12rem">
         <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Description</div>
-        <input id="at-description" type="text" placeholder="★★★★⯪4.6k" style="width:100%">
+        <input id="at-description" type="text" style="width:100%">
       </label>
     </div>
     <label style="display:block;margin-top:0.6rem">
@@ -5614,6 +5651,39 @@ async function dashRefresh(ev) {
         </div>
       </div>
 
+      {# Landings row (ACL-2852): pick up to 3 landings from JCloudFront for this account #}
+      <div class="cb-preflight-row cb-landings" data-landings-account="{{ acc_label | e }}">
+        <span class="cb-preflight-label">Landings</span>
+        <div class="cb-preflight-val cb-landings-val">
+          <div data-landings-list></div>
+          <div class="cb-landings-actions">
+            <button type="button" class="cb-field-save-btn" data-landings-open>Pick landing</button>
+            <button type="button" class="cb-field-save-btn cb-landing-secondary" disabled
+                    title="Generating a landing comes with the Keitaro connection">Generate</button>
+            <span class="cb-field-status" data-landings-status></span>
+          </div>
+          <div data-landings-search hidden>
+            <div class="cb-landing-search-row">
+              <input type="text" class="cb-input cb-input-url" data-landings-query
+                     placeholder="Variant, /path or full URL">
+              <button type="button" class="cb-field-save-btn" data-landings-go>Search</button>
+              <button type="button" class="cb-field-save-btn cb-landing-secondary" data-landings-close>Close</button>
+            </div>
+            <div class="cb-landing-search-row cb-landing-asset-row">
+              <input type="text" class="cb-input cb-input-url" data-landings-asset
+                     placeholder="Asset (optional): start typing a name" autocomplete="off">
+              <span class="cb-landing-asset-chip" data-landings-asset-chip hidden>
+                <span data-landings-asset-name></span>
+                <button type="button" class="cb-landing-remove" data-landings-asset-clear title="Remove the asset filter">×</button>
+              </span>
+            </div>
+            <div class="cb-landing-popup" data-landings-asset-list hidden></div>
+            <div class="cb-landing-popup" data-landings-results hidden></div>
+          </div>
+          <div class="cb-landing-preview" data-landings-preview hidden></div>
+        </div>
+      </div>
+
       {# Account config row #}
       <div class="cb-preflight-row" style="align-items:center">
         <span class="cb-preflight-label">Account config</span>
@@ -5777,7 +5847,8 @@ async function dashRefresh(ev) {
   {% for row in c.variants %}
     {% set breakdown_prev = compare.breakdown(c.country, 'variants', row) if compare else false %}
     <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
-      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% if c.open_recs %} <button type="button" class="cb-field-save-btn" style="margin-left:0.4rem"
+          onclick="cbUseLandingFromStats({{ cid | tojson | forceescape }}, {{ row.variant | tojson | forceescape }})">Use landing</button>{% endif %}{% endif %}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
       {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else ''), prev=breakdown_prev) }}
       <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, breakdown_prev.get('net') if breakdown_prev else none)) }}{% endif %}</td>
     </tr>
@@ -6230,9 +6301,15 @@ async function dashRefresh(ev) {
  *
  * Сервер недоступен — всё работает как раньше, на одном localStorage.
  */
+/* ACL-2780: черновики — у байера, под которым открыта страница. Суффикс пустой у
+ * байера по умолчанию (прежние ключи), у остальных свой: чужие черновики не
+ * всплывают в localStorage и не уходят в набор нового байера. */
+window.ACL_BUILDER_BUYER = {{ (builder_buyer|default({}))|tojson }};
+window.ACL_BSFX = window.ACL_BUILDER_BUYER.suffix || '';
 window.cbSrv = (function () {
-  var URL = '/api/builder-state';
-  var SYNC_KEY = 'acl.builder.sync';
+  var BUYER = (window.ACL_BUILDER_BUYER || {}).name || '';
+  var URL = '/api/builder-state' + (BUYER ? '?buyer=' + encodeURIComponent(BUYER) : '');
+  var SYNC_KEY = 'acl.builder.sync' + (window.ACL_BSFX || '');
   var DEBOUNCE_MS = 800;
   var regs = {};          // имя → {snapshot, legacyAt, apply}
   var last = {};          // имя → последний замеченный снимок (строкой)
@@ -6268,7 +6345,7 @@ window.cbSrv = (function () {
     var reg = regs[name];
     var at = stamp(name);
     var generation = generations[name] || 0;
-    var body = JSON.stringify({ name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() });
+    var body = JSON.stringify(Object.assign(BUYER ? { buyer: BUYER } : {}, { name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() }));
     var request = {};
     inFlight[name] = request;
     dirty[name] = false;
@@ -6283,8 +6360,7 @@ window.cbSrv = (function () {
         if (j.accepted || (generations[name] || 0) !== generation) return;
         /* Сервер новее (писали с другого адреса/вкладки): берём его. */
         reg.apply(j.doc);
-        last[name] = snap(name);
-        setStamp(name, j.doc.saved_at, j.doc.saved_at);
+        afterApply(name, j.doc);
       })
       .catch(function () { if (inFlight[name] === request) dirty[name] = true; })
       .then(function () {
@@ -6298,6 +6374,37 @@ window.cbSrv = (function () {
       });
   }
 
+  /* Ключи по алфавиту: сервер отдаёт документ с отсортированными ключами, а
+     слитый локальный собран в другом порядке — сравнивать надо по смыслу. */
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
+
+  /* После применения серверной копии (ACL-2669): модуль мог слить её со своим
+     и получить больше, чем у сервера (своя кампания, своё надгробие). Тогда
+     слитое надо отправить — иначе сервер так и останется без него. Сервер
+     слитое примет как есть (accepted=true), цикла нет. */
+  var reposted = {};      // имя → saved_at серверной копии, ради которой уже перепостили
+  function afterApply(name, doc) {
+    last[name] = snap(name);
+    setStamp(name, doc.saved_at, doc.saved_at);
+    var mine;
+    try { mine = canon(regs[name].snapshot()); } catch (e) { return; }
+    if (mine === canon(doc.data)) return;
+    /* сервер держит то, что клиент не принимает (validate вырезает): без этой метки пост→ответ→пост шёл бы по кругу */
+    var theirs = canon(doc.data);
+    if (reposted[name] && (reposted[name].at === doc.saved_at || reposted[name].data === theirs)) return;
+    reposted[name] = { at: doc.saved_at, data: theirs };
+    generations[name] = (generations[name] || 0) + 1;
+    setStamp(name, Math.max(Date.now(), doc.saved_at + 1));
+    dirty[name] = true;
+    if (ready) schedule(name);
+  }
+
   function reconcile(name, doc) {
     var reg = regs[name];
     var at = stamp(name);
@@ -6309,8 +6416,7 @@ window.cbSrv = (function () {
       if (at) post(name);
     } else if (doc.saved_at > at) {
       reg.apply(doc);
-      last[name] = snap(name);
-      setStamp(name, doc.saved_at, doc.saved_at);
+      afterApply(name, doc);
     } else if (doc.saved_at < at) {
       meta.base[name] = doc.saved_at; persist();
       post(name);
@@ -6383,10 +6489,10 @@ window.cbSrv = (function () {
  * Закрывают ящик ровно две вещи: язычок и крестик.
  */
 window.cbDrawer = (function () {
-  var KEY = 'acl.builder.open';
+  var KEY = 'acl.builder.open' + (window.ACL_BSFX || '');
   /* ACL-1871: размер ящика — отдельная запись: 'wide', 'normal' или число
      пикселей после перетаскивания. Закрытие размер не сбрасывает. */
-  var SIZE_KEY = 'acl.builder.width';
+  var SIZE_KEY = 'acl.builder.width' + (window.ACL_BSFX || '');
   var NORMAL_W = 480, MIN_W = 320, WIDE_AT = 800, DRAG_PX = 4, STEP = 40;
   var HANDLE_W = 40, EDGE = 16;
   /* Сколько страницы должно остаться видимым при протяжке (сайдбар 232 + не
@@ -6646,18 +6752,31 @@ window.cbDrawer = (function () {
  * едут: у десяти байеров десять разных наборов, общего места для них
  * нет.
  *
- * Хранилище само ничего не забывает, поэтому забывать приходится нам:
- * без срока годности через месяц здесь лежат позапрошлые черновики.
+ * Черновик никогда не уменьшается сам (ACL-2669): срока годности нет, а
+ * запись уходит только тогда, когда человек сам убрал кампанию
+ * (`cbRemoveSlot`) — это пишется надгробием в `removed`. Всё остальное —
+ * сбой, чужая вкладка, старая копия с сервера, форма, которой сейчас нет
+ * на странице — черновика не трогает: выбросить чужую работу хуже, чем
+ * подержать лишнее.
  */
 window.cbKeep = (function () {
-  var KEY = 'acl.builder.v2';
+  var KEY = 'acl.builder.v2' + (window.ACL_BSFX || '');
   var VERSION = 4;
-  /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
-     нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
-  var STALE_MS = 14 * 24 * 60 * 60 * 1000;
+  /* Срока годности нет (ACL-2669): черновик живёт, пока человек сам его не
+     убрал. Выбросить чужую работу хуже, чем подержать лишнее. */
 
-  var state = { v: VERSION, forms: {} };
+  var state = { v: VERSION, forms: {}, removed: {} };
   var restoring = false;
+
+  /* Стабильный id кампании: переживает перезагрузку и перенумерацию карточек,
+     по нему сервер и вкладки узнают одну и ту же кампанию. Лежит на карточке
+     (`data-cbd-id`); у копии карточки (Duplicate / Copy to) его нет, поэтому
+     она получает свой новый id. */
+  function newId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function slotId(slot) {
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = newId();
+    return slot.dataset.cbdId;
+  }
 
   /* v2 -> v3 (ACL-1767): появились пол, языки, устройства, версия ОС и старт. Поля v2
      сохраняются как есть; новые - пустые (умолчание = прежнее поведение). Кнопку не трогаем:
@@ -6707,14 +6826,28 @@ window.cbKeep = (function () {
 
   /* Годен ли документ: и из localStorage, и с сервера (ACL-1681) — те же правила. */
   function validate(parsed) {
+    /* входной документ не трогаем: migrate и чистка id работают с копией */
+    try { parsed = JSON.parse(JSON.stringify(parsed)); } catch (e) { return null; }
     parsed = migrate(parsed);
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
-    var fresh = {}, now = Date.now();
+    var fresh = {};
     Object.keys(parsed.forms).forEach(function (k) {
       var entry = parsed.forms[k];
-      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; }) && entry.touched <= now && (now - (entry.touched || 0)) < STALE_MS) fresh[k] = entry;
+      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; })) {
+        /* id кампании необязателен (старые черновики без него); не строка — выбрасываем */
+        entry.campaigns.forEach(function(c) { if ('id' in c && typeof c.id !== 'string') delete c.id; });
+        fresh[k] = entry;
+      }
     });
-    return { v: VERSION, forms: fresh };
+    /* надгробия «человек убрал сам»: только числовые отметки времени */
+    var removed = {};
+    if (parsed.removed && typeof parsed.removed === 'object' && !Array.isArray(parsed.removed)) {
+      Object.keys(parsed.removed).forEach(function (k) {
+        var t = parsed.removed[k];
+        if (typeof t === 'number' && isFinite(t)) removed[k] = t;
+      });
+    }
+    return { v: VERSION, forms: fresh, removed: removed };
   }
 
   function write() {
@@ -6784,6 +6917,7 @@ window.cbKeep = (function () {
     /* ACL-1768: подсказки таргетинга по наборам (у набора 0 - прежнее поле `hint`). */
     var hints = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hint'), function (h) { return h.textContent; });
     var out = {
+      id: slotId(slot),
       fields: fields,
       shown: shown,
       hint: hint ? hint.textContent : '',
@@ -6797,10 +6931,25 @@ window.cbKeep = (function () {
   }
 
   function writeSlot(slot, data) {
+    /* id кампании едет вместе с карточкой; в старом черновике его нет — появится при первом сохранении */
+    if (typeof data.id === 'string' && data.id) slot.dataset.cbdId = data.id;
     /* ACL-1768: сначала наборы - поля и принадлежность объявлений ложатся по готовым разделам.
        Нет сохранённого числа (старый черновик) - один набор. */
     var wantSets = parseInt(data.fields && data.fields.adset_count, 10) || 1;
     var haveSets = slot.querySelectorAll('.cb-adset-sec').length;
+    /* Обновление на месте (ACL-2669): если в копии наборов или объявлений
+       меньше, лишние убираем тем же путём, что и кнопки ×, иначе следующее
+       сохранение вернёт убранное. Надгробий это не пишет: они только на
+       кампании, а тут cbKeep раскладывает копию сам. */
+    for (; haveSets > wantSets && haveSets > 1 && window.cbRemoveAdset; haveSets -= 1) {
+      if (!window.cbRemoveAdset(slot, haveSets - 1)) break;
+    }
+    var wantAds = data.ads || 1;
+    var rowsNow = slot.querySelectorAll('.cb-ad-row');
+    for (var ri = rowsNow.length - 1; ri >= wantAds && ri > 0 && window.cbRemoveAd; ri -= 1) {
+      var rb = rowsNow[ri].querySelector('.cb-remove-ad-btn');
+      if (rb) window.cbRemoveAd(rb);
+    }
     for (var ks = haveSets; ks < wantSets && ks < 10 && window.cbAddAdset; ks += 1) window.cbAddAdset(slot, { noAd: true });
     var have = slot.querySelectorAll('.cb-ad-row').length;
     var addAd = slot.querySelector('.cb-add-btn-sm');
@@ -6862,29 +7011,305 @@ window.cbKeep = (function () {
     return Array.prototype.slice.call(document.querySelectorAll('form.open-account-form'));
   }
 
+  /* Запись формы без того, что человек сам убрал: кампании с надгробием
+     новее правки и форма целиком, если надгробие ключа не старше записи.
+     Вернёт null, если ничего не осталось. */
+  function isLegacyId(id) { return typeof id === 'string' && id.indexOf('legacy-') === 0; }
+  function pruned(key, entry, removed) {
+    var t = entry.touched || 0;
+    if (typeof removed[key] === 'number' && removed[key] >= t) return null;
+    var kept = entry.campaigns.filter(function (c, i) {
+      var cid = c.id || 'legacy-' + key + '-' + i;
+      var bareLegacy = /^legacy-(\d+)$/.exec(cid);   // голый номер промежуточной сборки
+      if (bareLegacy) cid = 'legacy-' + key + '-' + bareLegacy[1];
+      var ts = removed[key + '#' + cid];
+      if (typeof ts !== 'number') return true;
+      /* R12/R15: любое надгробие абсолютно, и у legacy-id тоже */
+      return false;
+    });
+    if (!kept.length) return null;
+    return kept.length === entry.campaigns.length ? entry : { touched: entry.touched, tracking: entry.tracking, campaigns: kept };
+  }
+
+  /* Совпадают ли кампании с прежними. id в сравнении участвует: у старой записи
+     без id чужой новый id — не изменение (иначе первое же сохранение подняло бы
+     `touched` нетронутой формы и старая копия перебила бы настоящую правку). */
+  function sameContent(o, n) {
+    var a = Object.assign({}, o), b = Object.assign({}, n);
+    delete a.id; delete b.id; delete a.touched; delete b.touched;
+    return canon(a) === canon(b);
+  }
+
+  function has0(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function noTouched(c) { var d = Object.assign({}, c); delete d.touched; return d; }
   function save() {
     if (restoring) return;          // раскладываем своё же — записывать нечего
     var now = Date.now();
+    /* ACL-2669: начинаем с копии прежнего — формы, которых нет на странице, и
+       форма без карточек переходят как есть; уходит запись только по надгробию
+       человека. Для формы на странице её собственные карточки — правда. */
     var next = {};
+    var removed = state.removed || {};
+    Object.keys(state.forms).forEach(function (k) {
+      var kept = pruned(k, state.forms[k], removed);
+      if (kept) next[k] = kept;
+    });
     forms().forEach(function (form) {
       var key = stamp(form);
       if (!key) return;
       var slots = form.querySelectorAll('.cb-slot');
-      if (!slots.length) return;    // пустой аккаунт не занимает места
+      if (!slots.length) return;
       var campaigns = Array.prototype.map.call(slots, readSlot);
       var link = form.querySelector('[name="tracking_link"]');
       var tracking = link ? link.value : '';
       var old = state.forms[key];
-      var unchanged = old && old.tracking === tracking && JSON.stringify(old.campaigns) === JSON.stringify(campaigns);
-      next[key] = { touched: unchanged ? old.touched : now, campaigns: campaigns, tracking: tracking };
+      /* B1/R17: у каждой кампании своя метка правки. Та же кампания (тот же id) с тем
+         же содержимым оставляет прежнюю метку, иначе — now. Метка записи формы — максимум
+         по кампаниям и правка ссылки; без изменений остаётся прежней. */
+      var oldById = {};
+      if (old && Array.isArray(old.campaigns)) normEntry(old, key).campaigns.forEach(function (o) {
+        if (o && o.id && !has0(oldById, o.id)) oldById[o.id] = o;
+      });
+      var top = 0;
+      campaigns.forEach(function (c) {
+        var o = has0(oldById, c.id) ? oldById[c.id] : null;
+        if (o && sameContent(o, c)) c.touched = typeof o.touched === 'number' ? o.touched : (old.touched || 0);
+        else c.touched = now;
+        if (c.touched > top) top = c.touched;
+      });
+      var trackChanged = !old || old.tracking !== tracking;
+      next[key] = { touched: trackChanged ? now : Math.max(top, old.touched || 0), campaigns: campaigns, tracking: tracking };
     });
-    state = { v: VERSION, forms: next };
+    state = { v: VERSION, forms: next, removed: removed };
     write();
+  }
+
+  /* Человек убрал кампанию (× или «Remove» в дереве; отмена копии). Только
+     эти пути пишут надгробие: `removed["<форма>#<id>"]` (формы целиком — нет, R11). `slot` уже снят со страницы,
+     `form` — форма, где она стояла. Пока cbKeep сам раскладывает копию
+     (`restoring`), ничего не пишем. Позднейшая правка формы (touched новее
+     надгробия) возвращает ключ — это решает слияние. */
+  function markRemoved(form, slot) {
+    if (restoring || !form) return;
+    var key = stamp(form);
+    if (!key) return;
+    var now = Date.now();
+    var removed = state.removed = state.removed || {};
+    var id = slot && slot.dataset ? slot.dataset.cbdId : '';
+    if (id) removed[key + '#' + id] = now;
+    /* R11: надгробие формы целиком не пишем — оно стирало кампании, которых человек
+       не видел; форма без кампаний и так уходит из слияния и из save() */
+    saveSoon();
+  }
+
+  /* Слияние двух документов `keep` (ACL-2669). То же правило, что у
+     `merge_keep` в src/web/builder_drafts.py, результат совпадает до байта
+     (tests/test_acl2669_merge_parity.py). Сначала кампании без id получают
+     `legacy-<номер>` (R9), дальше — по кампании: на форме побеждает копия с
+     большим `touched` (при равенстве — `incoming`), чужие кампании дописываются
+     в конец, исчезнуть кампания или форма может только по надгробию. */
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
+  function numeric(x) { return typeof x === 'number' && isFinite(x); }
+  function normEntry(entry, key) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var out = Object.assign({}, entry);
+    out.campaigns = entry.campaigns.map(function (c, i) {
+      if (!c || typeof c !== 'object') return c;
+      if (!(typeof c.id === 'string' && c.id)) return Object.assign({}, c, { id: 'legacy-' + key + '-' + i });
+      var m = /^legacy-(\d+)$/.exec(c.id);      // F3: голый legacy-<номер> промежуточной сборки
+      return m ? Object.assign({}, c, { id: 'legacy-' + key + '-' + m[1] }) : c;
+    });
+    return out;
+  }
+  /* R19: у доверенной стороны запись без id нумеруется сперва по равному содержимому
+     с кампанией другой копии, остальные — по номеру, пропуская занятые в записи.
+     То же, что `_number_trusted` в builder_drafts.py. */
+  function numberTrusted(entry, other, key) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
+    var camps = entry.campaigns;
+    if (!camps.some(function (c) { return isObj(c) && !cidOf(c); })) return normEntry(entry, key);
+    var normId = function (id) { var m0 = /^legacy-(\d+)$/.exec(id); return m0 ? 'legacy-' + key + '-' + m0[1] : id; };
+    var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
+    var used = {};
+    camps.forEach(function (c) { if (isObj(c) && cidOf(c)) used[normId(cidOf(c))] = true; });
+    var free = otherCamps.filter(function (c) { return isObj(c) && cidOf(c) && !used[normId(cidOf(c))]; });
+    var content = function (c) { var d = Object.assign({}, c); delete d.id; delete d.touched; return canon(d); };
+    var given = {};
+    camps.forEach(function (c, i) {
+      if (!isObj(c) || cidOf(c)) return;
+      var mine = content(c);
+      for (var j = 0; j < free.length; j += 1) {
+        if (content(free[j]) === mine) { given[i] = normId(cidOf(free[j])); used[given[i]] = true; free.splice(j, 1); break; }
+      }
+    });
+    camps.forEach(function (c, i) {
+      if (!isObj(c) || cidOf(c) || (i in given)) return;
+      var j = i;
+      while (used['legacy-' + key + '-' + j]) j += 1;
+      given[i] = 'legacy-' + key + '-' + j;
+      used[given[i]] = true;
+    });
+    var out = Object.assign({}, entry);
+    out.campaigns = camps.map(function (c, i) { return i in given ? Object.assign({}, c, { id: given[i] }) : c; });
+    return normEntry(out, key);
+  }
+  /* R13: кампании без id (страница старой версии) берут id у другой копии формы:
+     сначала по равному содержимому, потом по порядку среди оставшихся; каждый id
+     не больше раза. То же правило, что `_adopt_ids` в builder_drafts.py. */
+  function adoptIds(entry, other, key, removed) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var camps = entry.campaigns, idless = [], own = {};
+    camps.forEach(function (c, i) {
+      if (c && typeof c === 'object' && !Array.isArray(c)) { if (cidOf(c)) own[cidOf(c)] = true; else idless.push(i); }
+    });
+    if (!idless.length) return entry;
+    var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
+    var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
+    var normId = function (id) { var m0 = /^legacy-(\d+)$/.exec(id); return m0 ? 'legacy-' + key + '-' + m0[1] : id; };
+    var ownRaw = own; own = {};
+    Object.keys(ownRaw).forEach(function (id) { own[normId(id)] = true; });
+    var free = otherCamps.filter(function (c) {
+      return isObj(c) && cidOf(c) && !own[normId(cidOf(c))]
+        && !Object.prototype.hasOwnProperty.call(removed, key + '#' + normId(cidOf(c)));   // R14
+    });
+    var content = function (c) { var d = Object.assign({}, c); delete d.id; delete d.touched; return canon(d); };
+    var given = {};
+    idless.forEach(function (i) {
+      var mine = content(camps[i]);
+      for (var j = 0; j < free.length; j += 1) {
+        if (content(free[j]) === mine) { given[i] = cidOf(free[j]); free.splice(j, 1); break; }
+      }
+    });
+    var taken = {};
+    Object.keys(own).forEach(function (id) { taken[id] = true; });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    otherCamps.forEach(function (c) {
+      var cid = isObj(c) ? cidOf(c) : '';
+      if (!cid) return;
+      var m = /^legacy-(\d+)$/.exec(cid);
+      taken[m ? 'legacy-' + key + '-' + m[1] : cid] = true;
+    });
+    /* одна и та же кампания без id в обеих копиях: общий id по меньшему номеру */
+    var otherIdless = [];
+    otherCamps.forEach(function (c, j) { if (isObj(c) && !cidOf(c)) otherIdless.push([j, c]); });
+    idless.forEach(function (i) {
+      if (i in given) return;
+      var mine = content(camps[i]);
+      for (var p = 0; p < otherIdless.length; p += 1) {
+        if (content(otherIdless[p][1]) === mine) {
+          var n = Math.min(i, otherIdless[p][0]);
+          while (taken['legacy-' + key + '-' + n] || Object.prototype.hasOwnProperty.call(removed, key + '#legacy-' + key + '-' + n)) n += 1;
+          var cand = 'legacy-' + key + '-' + n;
+          given[i] = cand; taken[cand] = true; otherIdless.splice(p, 1); break;
+        }
+      }
+    });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    /* legacy-id той же позиции — та же кампания по номеру (R9) */
+    idless.forEach(function (i) {
+      if (i in given) return;
+      for (var j = 0; j < free.length; j += 1) {
+        var fid = cidOf(free[j]), bm = /^legacy-(\d+)$/.exec(fid);
+        if ((bm ? 'legacy-' + key + '-' + bm[1] : fid) === 'legacy-' + key + '-' + i) { given[i] = fid; free.splice(j, 1); break; }
+      }
+    });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    /* по порядку — только настоящие id: номер у legacy-id сдвигается (R14) */
+    free = free.filter(function (c) { return !legacyId(cidOf(c)); });
+    idless.forEach(function (i) { if (!(i in given) && free.length) given[i] = cidOf(free.shift()); });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    idless.forEach(function (i) {
+      if (i in given) return;
+      var j = i;
+      while (taken['legacy-' + key + '-' + j] || (otherCamps.length && Object.prototype.hasOwnProperty.call(removed, key + '#legacy-' + key + '-' + j))) j += 1;
+      given[i] = 'legacy-' + key + '-' + j;
+      taken[given[i]] = true;
+    });
+    var out = Object.assign({}, entry);
+    out.campaigns = camps.map(function (c, i) { return i in given ? Object.assign({}, c, { id: given[i] }) : c; });
+    return out;
+  }
+  function touchedOf(entry) { return entry && typeof entry === 'object' && numeric(entry.touched) ? entry.touched : 0; }
+  function legacyId(id) { return id.indexOf('legacy-') === 0; }
+  function cidOf(c) { return c && typeof c === 'object' && typeof c.id === 'string' ? c.id : ''; }
+  function merge(current, incoming) {
+    current = current || {}; incoming = incoming || {};
+    var curForms = current.forms && typeof current.forms === 'object' && !Array.isArray(current.forms) ? current.forms : {};
+    var incForms = incoming.forms && typeof incoming.forms === 'object' && !Array.isArray(incoming.forms) ? incoming.forms : {};
+    var removed = {};
+    [current.removed, incoming.removed].forEach(function (src) {
+      if (!src || typeof src !== 'object') return;
+      Object.keys(src).forEach(function (k0) {
+        var k = k0.replace(/^(.*)#legacy-(\d+)$/, '$1#legacy-$1-$2');   // голый legacy-<номер> промежуточной сборки
+        if (numeric(src[k0]) && (!(k in removed) || src[k0] > removed[k])) removed[k] = src[k0];
+      });
+    });
+    var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+    var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
+    var forms = {};
+    var adoptedCur = {}, adoptedInc = {};
+    keys.forEach(function (key) {
+      var a = numberTrusted(curForms[key], incForms[key], key), b = normEntry(adoptIds(incForms[key], a, key, removed), key);   // R16: недоверенная — только incoming
+      var inCur = has(curForms, key), inInc = has(incForms, key);
+      if (inCur) adoptedCur[key] = a;
+      if (inInc) adoptedInc[key] = b;
+      var newer, older;
+      if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }
+      else { newer = inCur ? a : b; older = null; }
+      var rem = function (k) { return has(removed, k) ? removed[k] : -Infinity; };
+      if (!newer || typeof newer !== 'object' || Array.isArray(newer)) {
+        if (!has(removed, key)) forms[key] = newer;   // не форма билдера: как есть
+        return;
+      }
+      var entry = Object.assign({}, newer);
+      var nCamps = newer.campaigns, oCamps = older && typeof older === 'object' ? older.campaigns : null;
+      if (Array.isArray(nCamps) || Array.isArray(oCamps)) {
+        nCamps = Array.isArray(nCamps) ? nCamps : [];
+        var nT = touchedOf(newer), oT = touchedOf(older);
+        var oList = Array.isArray(oCamps) ? oCamps : [];
+        /* B1/R17: побеждает кампания с большим своим `touched` (нет — метка записи
+           формы той же копии; ничья — копия более новой формы) */
+        var ct = function (c, et) { return c && typeof c === 'object' && numeric(c.touched) ? c.touched : et; };
+        var oById = {};
+        oList.forEach(function (c) { var id = cidOf(c); if (id && !has(oById, id)) oById[id] = c; });
+        var kept = [];
+        nCamps.forEach(function (c) {
+          var cid = cidOf(c);
+          if (cid && rem(key + '#' + cid) !== -Infinity) return;   // R12/R15: любое надгробие абсолютно
+          if (cid && has(oById, cid) && ct(oById[cid], oT) > ct(c, nT)) c = oById[cid];
+          kept.push(c);
+        });
+        var have = {};
+        nCamps.forEach(function (c) { if (cidOf(c)) have[cidOf(c)] = true; });
+        oList.forEach(function (c) {
+          var cid = cidOf(c);
+          if (cid && !have[cid] && rem(key + '#' + cid) === -Infinity) { kept.push(c); have[cid] = true; }
+        });
+        entry.campaigns = kept;
+        if (!kept.length) return;
+      }
+      if (rem(key) >= touchedOf(entry)) return;
+      forms[key] = entry;
+    });
+    /* R21: надгробия не истекают никогда (любой срок воскрешает кампанию из копии вне слияния) */
+    var merged = Object.assign({}, incoming);
+    if ('forms' in current || 'forms' in incoming || Object.keys(forms).length) merged.forms = forms;
+    if (Object.keys(removed).length) merged.removed = removed;
+    var vs = [current.v, incoming.v].filter(numeric);
+    if (vs.length) merged.v = Math.max.apply(null, vs);
+    return merged;
   }
 
   function restore(given) {
     var stored = given || read();
-    if (!stored) { state = { v: VERSION, forms: {} }; return 0; }
+    if (!stored) { state = { v: VERSION, forms: {}, removed: {} }; return 0; }
     state = stored;
     restoring = true;
     var made = 0;
@@ -6901,11 +7326,30 @@ window.cbKeep = (function () {
         if (i < already) return;
         window.cbAddSlot(form);
         var slots = form.querySelectorAll('.cb-slot');
-        writeSlot(slots[slots.length - 1], data);
+        /* Старая запись без id: id по номеру карточки, одинаковый во всех вкладках.
+           Случайные id в двух вкладках дали бы одной кампании две личности, и
+           слияние на сервере оставило бы обе копии. */
+        var bare = typeof data.id === 'string' ? /^legacy-(\d+)$/.exec(data.id) : null;
+        writeSlot(slots[slots.length - 1], data.id && !bare ? data : Object.assign({}, data, { id: 'legacy-' + key + '-' + (bare ? bare[1] : i) }));
         made += 1;
       });
     });
     restoring = false;
+    /* R16: id, которые restore выдал карточкам (`legacy-<форма>-<номер>`), сразу
+       пишем и в state, и в localStorage — без `touched` и без отправки. Иначе
+       state остаётся без id до первого сохранения, и первая же отправка (например,
+       снятие кампании) идёт без id и не совпадает с серверной копией. */
+    var gave = false;
+    Object.keys(state.forms).forEach(function (k) {
+      var e = state.forms[k];
+      if (!e || !Array.isArray(e.campaigns)) return;
+      var named = normEntry(e, k);
+      if (named.campaigns.some(function (c, i) { return c && e.campaigns[i] && c.id !== e.campaigns[i].id; })) {
+        state.forms[k] = named;
+        gave = true;
+      }
+    });
+    if (gave) { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ } }
     return made;
   }
 
@@ -6967,20 +7411,75 @@ window.cbKeep = (function () {
       apply: function (doc) {
         var incoming = validate(doc.data);
         if (!incoming) return;
-        if (Object.keys(state.forms).length && JSON.stringify(state.forms) !== JSON.stringify(incoming.forms)) {
+        /* ACL-2669: страницу не стираем и не раскладываем заново. Сначала
+           сохраняем недосохранённый ввод (его `touched` новее и он выиграет
+           слияние), затем сливаем копию сервера с тем, что есть. */
+        if (timer) { clearTimeout(timer); timer = null; save(); }
+        var merged = merge(state, incoming);
+        var removedNow = merged.removed || {};
+        var normOld = {};
+        Object.keys(state.forms).forEach(function (k) { normOld[k] = normEntry(state.forms[k], k); });
+        if (Object.keys(state.forms).length && JSON.stringify(normOld) !== JSON.stringify(merged.forms)) {
           try { localStorage.setItem(KEY + '.older', JSON.stringify(state)); } catch (e) { /* не помним */ }
         }
-        restoring = true;
-        forms().forEach(function (form) {
-          Array.prototype.slice.call(form.querySelectorAll('.cb-slot')).reverse().forEach(function (slot) {
-            window.cbRemoveSlot(slot);
+        /* какие id кто-то из копий знает: слот, чей id не знает никто, — это
+           набранное прямо сейчас и ещё не сохранённое, его не трогаем */
+        var known = {};
+        [state, incoming].forEach(function (d) {
+          Object.keys(d.forms).forEach(function (k) {
+            var e = normEntry(d.forms[k], k);
+            if (e && Array.isArray(e.campaigns)) e.campaigns.forEach(function (c) { known[k + '#' + c.id] = true; });
           });
         });
-        restoring = false;
-        state = incoming;
+        var active = document.activeElement;
+        var changed = false;
+        restoring = true;
+        try {
+          forms().forEach(function (form) {
+            var key = stamp(form);
+            if (!key) return;
+            var entry = merged.forms[key];
+            var slots = Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
+            var byId = {};
+            slots.forEach(function (s) { if (s.dataset.cbdId) byId[s.dataset.cbdId] = s; });
+            var wanted = {};
+            if (entry) {
+              var link = form.querySelector('[name="tracking_link"]');
+              if (link && typeof entry.tracking === 'string' && link.value !== entry.tracking && active !== link) link.value = entry.tracking;
+              entry.campaigns.forEach(function (c) {
+                wanted[c.id] = true;
+                var slot = byId[c.id];
+                if (!slot) {
+                  window.cbAddSlot(form);
+                  var all = form.querySelectorAll('.cb-slot');
+                  slot = all[all.length - 1];
+                  writeSlot(slot, c);
+                  changed = true;
+                  return;
+                }
+                var typing = active && slot.contains(active) && 'value' in active ? { el: active, value: active.value } : null;
+                if (canon(readSlot(slot)) !== canon(noTouched(c))) {
+                  writeSlot(slot, c);
+                  changed = true;
+                  /* тронут не весь слот: набираемое прямо сейчас поле остаётся как было */
+                  if (typing && document.contains(typing.el) && typing.el.value !== typing.value) typing.el.value = typing.value;
+                }
+              });
+            }
+            /* со страницы уходит только то, что слияние убрало по надгробию */
+            slots.forEach(function (slot) {
+              var id = slot.dataset.cbdId;
+              if (!id || wanted[id] || !known[key + '#' + id]) return;
+              if (typeof removedNow[key + '#' + id] === 'number' || (!entry && typeof removedNow[key] === 'number')) {
+                window.cbRemoveSlot(slot);
+                changed = true;
+              }
+            });
+          });
+        } finally { restoring = false; }
+        state = merged;
         try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
-        var made = restore(incoming);
-        if (made && window.cbTree) window.cbTree.paint();
+        if (changed && window.cbTree) window.cbTree.paint();
       }
     });
   }
@@ -6990,6 +7489,8 @@ window.cbKeep = (function () {
 
   return {
     save: save,
+    markRemoved: markRemoved,
+    slotId: slotId,
     migrate: migrate,
     saveSoon: saveSoon,
     restore: restore,
@@ -6998,8 +7499,8 @@ window.cbKeep = (function () {
     writeSlot: writeSlot,
     all: function () { return state.forms; },
     validate: validate,
-    staleMs: STALE_MS,
-    forget: function () { state = { v: VERSION, forms: {} }; write(); }
+    merge: merge,
+    forget: function () { state = { v: VERSION, forms: {}, removed: {} }; write(); }
   };
 })();
 </script>
@@ -8119,38 +8620,39 @@ window.cbLifetime = (function () {
     return out.join(' · ');
   }
 
-  /* "00:00–18:00, 22:00–24:00" для окон одного дня. */
-  function runsText(wins) {
-    return wins.slice().sort(function (x, y) { return x.start_minute - y.start_minute; }).map(function (w) {
-      return pad2(w.start_minute / 60) + ':00–' + pad2(w.end_minute / 60) + ':00';
-    }).join(', ');
-  }
-  /* "Every day: 00:00–18:00, 22:00–24:00" или "Mon–Fri 00:00–18:00; Sat–Sun 02:00–24:00": дни с одинаковыми часами сжаты. */
-  function convertedText(conv) {
-    var perDay = {}, groups = {}, order = [];
-    conv.forEach(function (w) { w.days.forEach(function (d) { (perDay[d] = perDay[d] || []).push(w); }); });
-    UI_DAYS.forEach(function (d) {
-      if (!perDay[d]) return;
-      var t = runsText(perDay[d]);
-      if (!groups[t]) { groups[t] = []; order.push(t); }
-      groups[t].push(d);
+  /* ACL-2839: часы в поясе кабинета так, как их покажет Ads Manager: "Mon–Thu 08–19, Fri–Sat 08–17, Sun 08–19".
+     Окна уже переведены convertWindows (тот же алгоритм, что у Publish); здесь только запись: дни окна
+     режутся на подряд идущие отрезки, порядок - как у строки Израиля (первый день, начало). */
+  function adsManagerText(conv) {
+    var parts = [];
+    conv.forEach(function (w) {
+      var pos = w.days.map(function (d) { return UI_DAYS.indexOf(d); }).sort(function (x, y) { return x - y; });
+      var i = 0;
+      while (i < pos.length) {
+        var j = i;
+        while (j + 1 < pos.length && pos[j + 1] === pos[j] + 1) j += 1;
+        parts.push({ first: pos[i], start: w.start_minute,
+          text: (j === i ? DAY_NAMES[UI_DAYS[pos[i]]] : DAY_NAMES[UI_DAYS[pos[i]]] + '–' + DAY_NAMES[UI_DAYS[pos[j]]])
+            + ' ' + pad2(w.start_minute / 60) + '–' + pad2(w.end_minute / 60) });
+        i = j + 1;
+      }
     });
-    if (order.length === 1 && groups[order[0]].length === 7) return 'Every day: ' + order[0];
-    return order.map(function (t) { return daysText(groups[t]) + ' ' + t; }).join('; ');
+    return parts.sort(function (x, y) { return x.first - y.first || x.start - y.start; })
+      .map(function (p) { return p.text; }).join(', ');
   }
-  /* Что получит Meta: сетка Израиля в часах кабинета (разница поясов - на дату старта). */
+  /* Что покажет Ads Manager: сетка Израиля в часах кабинета (разница поясов - на дату старта). */
   function accountPreview(slot) {
     if (!isLifetime(slot) || !scheduleOn(slot)) return '';
     var wins = parseWindows(slot);
     if (!wins.length) return '';
     var f = builderAccountFacts(accountOf(slot));
-    if (!validZone(f.timezone_name)) return 'Account time zone is read on Check plan; hours are converted then.';
+    if (!validZone(f.timezone_name)) return 'Ads Manager hours appear after Check plan reads the account time zone';
     var ms = isoToMs(String((fld(slot, 'start_time') || {}).value || '').trim(), teamZone());
     var shift = shiftHoursAt(f.timezone_name, ms == null ? Date.now() : ms);
     if (shift !== Math.round(shift)) {
       return 'The time difference to the account (' + f.timezone_name + ') is not a whole number of hours; Check plan will refuse this schedule.';
     }
-    return 'Meta gets account time (' + f.timezone_name + '): ' + convertedText(convertWindows(wins, shift));
+    return 'In Ads Manager (' + f.timezone_name + '): ' + adsManagerText(convertWindows(wins, shift));
   }
 
   /* Клиентская предпроверка (зеркало серверной): [{id, text}]. */
@@ -8649,12 +9151,14 @@ window.cbTree = (function () {
      то, что есть. Пока список был свой, половина работы была ящику не
      видна, и добавлять приходилось только через него. */
 
-  var seq = 0;
-
   /* Карточке нужно имя, которое переживёт перенумерацию: `data-idx`
      меняется при каждом удалении соседа. */
   function slotId(slot) {
-    if (!slot.dataset.cbdId) slot.dataset.cbdId = 'cbs' + (++seq);
+    /* тот же id, что у черновика (cbKeep): стабильный, не «cbsN» на сессию */
+    if (window.cbKeep) return window.cbKeep.slotId(slot);
+    /* без cbKeep (часть страницы отдельно, тестовая обвязка): свой id на карточке,
+       тот же `data-cbd-id`, который потом подхватит cbKeep */
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     return slot.dataset.cbdId;
   }
 
@@ -9133,7 +9637,7 @@ window.cbTree = (function () {
 
     /* Выбранная кампания получает настоящую форму — ту самую, а не копию, —
        но живёт она в правой колонке. Карточки в дереве нет — отпускаем. */
-    var card = openId ? body.querySelector('.cbd-camp[data-camp="' + openId + '"]') : null;
+    var card = openId ? body.querySelector('.cbd-camp[data-camp="' + CSS.escape(openId) + '"]') : null;
     if (!card && openId) release();
     paintEditor();
 
@@ -10295,9 +10799,17 @@ window.cbTree = (function () {
       else if (act === 'copy-adset') window.cbCopyAdset(cur.camp.slot, setIdx);
       else {
         if (setIdx < 1) return;
-        if (!window.confirm('Remove this ad set and its ads from the campaign?')) return;
-        window.cbRemoveAdset(cur.camp.slot, setIdx);
-        setIdx = Math.max(0, setIdx - 1);
+        /* Свой диалог дашборда вместо window.confirm (ACL-2668 #37). Ответ асинхронный:
+           за это время дерево могли перерисовать — проверяем, что кампания и набор те же. */
+        var askSlot = cur.camp.slot, askIdx = setIdx, askId = openId;
+        window.aclConfirm('', { title: 'Remove this ad set and its ads from the campaign?', okLabel: 'Remove', danger: true })
+          .then(function (yes) {
+            if (!yes || openId !== askId || setIdx !== askIdx || !findCampaign(askId)) return;
+            window.cbRemoveAdset(askSlot, askIdx);
+            setIdx = Math.max(0, setIdx - 1);
+            paint();
+          });
+        return;
       }
       paint();
     } else if (act === 'open-ad') {
@@ -10476,7 +10988,7 @@ window.cbTree = (function () {
      трогать надо только подпись строки. */
   function refreshOpenRow() {
     if (!openId) return;
-    var card = body.querySelector('.cbd-camp[data-camp="' + openId + '"]');
+    var card = body.querySelector('.cbd-camp[data-camp="' + CSS.escape(openId) + '"]');
     var found = findCampaign(openId);
     if (!card || !found) return;
     var c = found.camp;
@@ -10623,7 +11135,7 @@ window.cbMove = (function () {
   /* Names may already be stripped (cbRenumber keeps them in data-renumber-name), so match both. */
   function formIdInput(row) { return row.querySelector('input[name$="_form_id"], input[data-renumber-name$="_form_id"]'); }
   function slotById(id) {
-    return id ? document.querySelector('.cb-slot[data-cbd-id="' + id + '"]') : null;
+    return id ? document.querySelector('.cb-slot[data-cbd-id="' + CSS.escape(id) + '"]') : null;
   }
   function formByKey(key) {
     var hit = null;
@@ -10806,6 +11318,7 @@ window.cbMove = (function () {
         if (!copy.isConnected || formBusy(destForm)) return false;
         copy.remove();
         P.renumber(destForm); window.cbUpdateCount(destForm);
+        if (window.cbKeep) window.cbKeep.markRemoved(destForm, copy);   // отмена копии — решение человека
         repaintTree();
         return true;
       } };
@@ -11453,7 +11966,7 @@ window.cbMove = (function () {
    больше не знает (404 после перезапуска), становится пустым кольцом без
    пульса — «неизвестно», а не «идёт». */
 window.cbBuild = (function () {
-  var KEY = 'acl.builder.jobs';
+  var KEY = 'acl.builder.jobs' + (window.ACL_BSFX || '');
   var KEEP_MS = 12 * 3600 * 1000;   // вчерашние задания не держим
   var POLL_MS = 3000;
   var ACTIVE = { pending: 1, queued: 1, running: 1, cancelling: 1 };
@@ -15096,6 +15609,12 @@ async function amapSend(body, msgEl, errorAnchor, onOk) {
   });
   var data = null;
   try { data = await r.json(); } catch (e) { data = null; }
+  if (data && data.ok && data.changed === false && data.reason) {
+    /* ACL-2853: добавление ничего не изменило — причина рядом с кнопкой, без перезагрузки того же экрана */
+    if (msgEl) { msgEl.textContent = data.reason; msgEl.className = 'amap-msg bad'; }
+    else if (errorAnchor) aclInlineError(errorAnchor, data.reason);
+    return false;
+  }
   if (data && data.ok) {
     /* ACL-2560: Home перерисовывает себя сам (onOk), остальные места — перезагрузка как раньше */
     if (typeof onOk === 'function') { await onOk(); return true; }
@@ -16050,7 +16569,7 @@ else aclMlxExpiryBoot();
 async function amapMlLogout(btn) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
   var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
-  if (!window.confirm('Log out of Multilogin ' + label + ' on this computer?\n\nYou will need to sign in again to use it.')) return;
+  if (!await window.aclConfirm('You will need to sign in again to use it.', { title: 'Log out of Multilogin ' + label + ' on this computer?', okLabel: 'Log out', danger: true })) return;
   btn.disabled = true;
   try {
     var r = await fetch('/multilogin-logout', {method: 'POST', credentials: 'same-origin',
@@ -18211,6 +18730,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   window.cbSyncDestination = function (slot) {
     if (window.cbSyncPlacements) window.cbSyncPlacements(slot);
     if (window.cbSyncPages) window.cbSyncPages(slot);
+    if (window.cbSyncPixels) window.cbSyncPixels(slot);
     var L = window.cbLayout;
     if (!L || !slot || !slot.querySelectorAll) return;
     var secs = Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec'));
@@ -19198,7 +19718,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     // Пропускаются только те, у которых своя логика: имя собирается само,
     // счётчик объявлений ставится при их копировании, а таргетинг и ОС уже
     // скопированы выше вместе со своим видимым текстом.
-    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1, page_id: 1 };
+    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1, page_id: 1, pixel_id: 1 };
     var prefix = 'camp_' + srcIdx + '_';
     srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
       var field = srcInput.name.slice(prefix.length);
@@ -19469,6 +19989,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var form = slot.closest('form');
     slot.remove();
     if (form) { cbRenumber(form); cbUpdateCount(form); }
+    /* ACL-2669: только человек убирает черновик; при раскладке копии cbKeep сам молчит */
+    if (form && window.cbKeep) window.cbKeep.markRemoved(form, slot);
   };
 
   function cbRenumber(form) {
@@ -19685,6 +20207,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<select class="cb-input cb-page-select" aria-label="Facebook Page" onfocus="cbLoadPages(this.closest(\'.cb-slot\'))" onchange="cbPageChanged(this)"><option value="">Automatic — first available Page of this account</option></select>' +
       '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-page-note role="status"></div>' +
       '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPages(this.closest(\'.cb-slot\'), true)">Refresh pages</button></div>' +
+      /* Пиксель кампании выбирается тут же, как Страница; у кампании только с Instant Form поле скрыто (ACL-1775). */
+      '<span class="cb-label" data-pixel-label>Pixel</span>' +
+      '<div class="cb-page-choice cb-pixel-choice"><input type="hidden" name="camp_' + idx + '_pixel_id" value="">' +
+      '<select class="cb-input cb-pixel-select" aria-label="Pixel" onfocus="cbLoadPixels(this.closest(\'.cb-slot\'))" onchange="cbPixelChanged(this)"><option value="">Automatic</option></select>' +
+      '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-pixel-note role="status"></div>' +
+      '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPixels(this.closest(\'.cb-slot\'), true)">Refresh pixels</button></div>' +
       '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
       '</div>' +
       /* Дублирование кампании живёт в её карточке (ACL-1459). */
@@ -20799,7 +21327,11 @@ window.aclPrepareConnection = function (account) {
     // Not an API-bound dashboard, or the profile is busy with another operation: the action
     // itself (queue / duplicate answer / its own wait) deals with it as it did before preparation.
     if (data && (data.code === 'not_loopback' || data.code === 'busy')) return {ok: true, skipped: data.code};
-    if (!data.ok) throw new Error(data.error || data.message || 'Connection preparation failed');
+    if (!data.ok) {
+      var refused = new Error(data.error || data.message || 'Connection preparation failed');
+      refused.code = data.code || '';   // ACL-2847: an account stop is shown in the server's own words
+      throw refused;
+    }
     return data;
   });
 };
@@ -21763,7 +22295,9 @@ function cbPostPublish(fd, onPrepared) {
     (window.aclPrepareConnection ? window.aclPrepareConnection(fd.get('account_label')) : Promise.resolve());
   // A refused or unanswered preparation means nothing was sent: say so for this account only.
   prepare = prepare.catch(function (err) {
-    var stop = new Error('Not submitted: ' + String((err && err.message) || 'the connection could not be prepared'));
+    // ACL-2847: a profile logged out of Facebook says so in the same words as the account row, nothing added.
+    var plain = err && err.code === 'account_blocked';
+    var stop = new Error((plain ? '' : 'Not submitted: ') + String((err && err.message) || 'the connection could not be prepared'));
     stop.cbNotSubmitted = true;
     throw stop;
   });
@@ -22885,7 +23419,7 @@ function _doCbPublish(form) {
     });
     var sum = summaryOf(c);
     if (sum && sum.pixel_source === 'account default') {
-      out.push({ level: 'warn', rule: 'pixel_source', label: 'No pixel in the account map',
+      out.push({ level: 'warn', rule: 'pixel_source', label: 'Automatic pixel',
         hint: 'the only pixel on the ad account will be used (' + (sum.pixel_id || '—') + ').', detail: '', campaign: c.name });
     }
     if (trackingText) out.push({ level: 'warn', rule: 'tracking_link', label: trackingText, hint: '', detail: '', campaign: c.name });
@@ -23057,16 +23591,55 @@ function _doCbPublish(form) {
       + bad.map(function (a) {
           return '<div>' + esc(a.account) + ' — ' + esc((a.reasons || []).map(function (r) {
             return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
-          }).join('; ')) + '</div>';
+          }).join('; ')) + ' ' + dropButton('data-rv-drop-acct="' + esc(a.account) + '"', a.account) + '</div>';
         }).join('')
       + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway" data-rv-anyway="1"'
       + (model.anyway ? ' checked' : '') + '> Run anyway</label></div>';
+  }
+  /* «Publish N ready»: крестик выводит кампанию только из ЭТОЙ публикации и снимает с неё галочку;
+     черновик остаётся (стирает черновики только Remove человека в билдере). */
+  function dropButton(attr, what) {
+    return '<button type="button" class="rv-x" ' + attr + ' title="Take out of this publish — the draft stays in the builder" '
+      + 'aria-label="Take ' + esc(what) + ' out of this publish">×</button>';
+  }
+  function dropCamps(pairs) {
+    if (!model || !pairs.length) return;
+    var drop = [];
+    pairs.forEach(function (x) {
+      /* карточки одного имени — одна кампания: уходят вместе */
+      x.e.camps.forEach(function (c) { if ((c === x.c || c.name === x.c.name) && drop.indexOf(c) < 0) drop.push(c); });
+    });
+    var slots = drop.map(function (c) { return c.slot; });
+    model.removed = model.removed.concat(slots);
+    model.entries.forEach(function (e) {
+      var skip = {}, any = false;
+      e.camps.forEach(function (c, i) { if (slots.indexOf(c.slot) >= 0) { skip[i] = true; any = true; } });
+      if (!any) return;
+      e.fd = cbFormDataSkipping(e.form, skip, e.fd).body;
+      e.camps = e.camps.filter(function (c) { return slots.indexOf(c.slot) < 0; });
+      e.slots = e.slots.filter(function (s) { return slots.indexOf(s) < 0; });
+      var seen = {};
+      e.camps.forEach(function (c) { c.rep = !seen[c.name]; seen[c.name] = true; });
+      e.reps = e.camps.filter(function (c) { return c.rep; });
+    });
+    model.entries = model.entries.filter(function (e) { return e.slots.length; });
+    try { window.cbTree.untick(slots); } catch (err) { /* без отметок — просто вне этой публикации */ }
+    paint();
+  }
+  function dropAccount(account) {
+    var key = String(account).toLowerCase(), pairs = [];
+    model.entries.forEach(function (e) {
+      if (String(e.account).toLowerCase() === key) e.camps.forEach(function (c) { pairs.push({ e: e, c: c }); });
+    });
+    model.badList = model.badList.filter(function (a) { return String(a.account).toLowerCase() !== key; });
+    dropCamps(pairs);
+    paint();
   }
   function blockedHtml(ev) {
     if (!ev.blocked.length) return '';
     return '<div class="pc-note pc-block rv-blocked"><strong>✕ Will not be created (' + ev.blocked.length + ')</strong><ul>'
       + ev.blocked.map(function (x) {
-          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + '</li>';
+          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + ' ' + dropButton('data-rv-drop="' + esc(slotId(x.c.slot)) + '"', x.c.name) + '</li>';
         }).join('') + '</ul></div>';
   }
   function warningsHtml(ev) {
@@ -23154,6 +23727,9 @@ function _doCbPublish(form) {
       + (!model.checking && !ev.create.length ? '<div class="rv-nothing">' + esc(NOTHING) + '</div>' : '');
     var ok = box.querySelector('#sfc-ok');
     if (ok) {
+      if (model.okLabel == null) model.okLabel = ok.textContent;
+      var notReady = ev.blocked.length + (model.badList || []).length + model.removed.length;
+      ok.textContent = notReady ? 'Publish ' + ev.create.length + ' ready' : model.okLabel;
       ok.disabled = !!(model.checking || !ev.create.length);
       ok.title = model.checking ? 'Checking with Meta…' : (!ev.create.length ? NOTHING : '');
     }
@@ -23276,7 +23852,14 @@ function _doCbPublish(form) {
       preparing = false;
       if (window.cbPublishPending) window.cbPublishPending.end();
       open({ entries: entries, running: running, pf: r[1], opts: opts, reselect: reselect, openedAt: Date.now() });
-    }, function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); });
+    }, function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); cbReviewFailed(); })
+      .catch(function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); cbReviewFailed(); });
+  }
+
+  /* ACL-2847: Publish never ends silently: if the review could not be prepared or opened, the buyer is told. */
+  function cbReviewFailed() {
+    aclInlineError(document.querySelector('.cbd-publish-all') || document.querySelector('.cb-publish-btn'),
+      'The review could not be opened. Press Publish again; if it repeats, reload the page (F5).');
   }
 
   function open(m) {
@@ -23286,6 +23869,7 @@ function _doCbPublish(form) {
     });
     m.badList = badList;
     m.entries.forEach(function (e) { e.notReady = !!bad[e.account.toLowerCase()]; });
+    m.removed = []; m.okLabel = null;
     m.anyway = false; m.checking = false; m.stale = null; m.checkedAt = 0; m.closeReason = '';
     model = m;
     var opts = m.opts;
@@ -23302,6 +23886,12 @@ function _doCbPublish(form) {
         m.closeReason = 'edit';
         overlay.remove();
         try { window.cbTree.open(edit.getAttribute('data-rv-edit')); } catch (err) { /* карточка могла уйти */ }
+      } else if (t.closest('[data-rv-drop]')) {
+        var id = t.closest('[data-rv-drop]').getAttribute('data-rv-drop'), hit = null;
+        (m.ev ? m.ev.blocked : []).forEach(function (x) { if (!hit && slotId(x.c.slot) === id) hit = x; });
+        if (hit) dropCamps([hit]);
+      } else if (t.closest('[data-rv-drop-acct]')) {
+        dropAccount(t.closest('[data-rv-drop-acct]').getAttribute('data-rv-drop-acct'));
       } else if (t.closest('[data-rv-recheck]')) {
         runChecks();
       } else if (t.closest('[data-rv-again]')) {
@@ -23329,7 +23919,9 @@ function _doCbPublish(form) {
 
   /* ── Confirm ────────────────────────────────────────────────────────── */
   function staleNames() {
-    var fresh = model.reselect(), names = [];
+    var fresh = model.reselect().map(function (it) {
+      return { form: it.form, slots: it.slots.filter(function (s) { return model.removed.indexOf(s) < 0; }) };
+    }).filter(function (it) { return it.slots.length; }), names = [];
     var byKey = {};
     fresh.forEach(function (it) { byKey[cbFormKey(it.form)] = it; });
     model.entries.forEach(function (e) {
@@ -23370,7 +23962,12 @@ function _doCbPublish(form) {
       return;
     }
     var run = cbPublishRun(model.opts.onProgress || (window.cbTree ? window.cbTree.showQueue : null));
-    if (!run) return;
+    if (!run) {
+      // ACL-2847: the tab lost the status of its previous run: say so instead of doing nothing.
+      aclAlert('The dashboard may have restarted. Reload the page (F5) and press Publish again.',
+        { title: 'The status of the previous run in this tab is unknown' });
+      return;
+    }
     var m = model;
     m.closeReason = 'confirm';
     if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], null);
@@ -24912,7 +25509,7 @@ function aclPickerSearch(inst, text) {
   }
   async function post(body, ask) {
     if (pending) return;
-    if (ask && !window.confirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use. Save anyway?')) return;
+    if (ask && !await window.aclConfirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use.', { title: 'Save anyway?', okLabel: 'Save' })) return;
     pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
     try {
       var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -26713,6 +27310,8 @@ window.cwWorkbench = (function () {
 </script>
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
 <script src="/static/account_pages.js"></script>
+<script src="/static/account_pixels.js"></script>
+<script src="/static/account_landings.js"></script>
 <script src="/static/warm_sessions.js"></script>
 <script src="/static/warm_auto.js"></script>
 <script src="/static/recent_runs.js"></script>

@@ -178,13 +178,13 @@ let half = boot({ store, slots: [{ asset: 'уже тут', name: 'X' }] });
 half.api.restore();
 assert.equal(half.form.querySelectorAll('.cb-slot').length, 2, 'карточки задвоились');
 
-// ── срок годности ─────────────────────────────────────────────────────
+// ── срока годности нет (ACL-2669) ─────────────────────────────────────
 store = memoryStore();
 t = boot({ store, now: 1000 * DAY, slots: [{ asset: 'старое', name: 'Old' }] });
 t.api.save();
 let later = boot({ store, now: 1015 * DAY, slots: [] });
-assert.equal(later.api.restore(), 0, 'двухнедельный черновик вернулся');
-assert.equal(later.api.staleMs, 14 * DAY);
+assert.equal(later.form.querySelectorAll('.cb-slot').length, 1, 'двухнедельный черновик пропал');
+assert.equal(later.api.staleMs, undefined, 'срок годности вернулся');
 
 let soon = boot({ store: memoryStore(), now: 1000 * DAY, slots: [{ asset: 'свежее', name: 'New' }] });
 soon.api.save();

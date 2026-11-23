@@ -514,7 +514,6 @@ GONE_WARNING = ("A creative remembered from an earlier run no longer exists in M
 GONE_WARNING_REUSED = ("A creative remembered from an earlier run no longer exists in Meta; "
                        "a matching creative was used instead.")
 ORDER_WARNING = "The creative carries the same files in another order; accepted."
-RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
@@ -602,8 +601,10 @@ class CreationStopped(RuntimeError):
     """Создание кампании остановлено; что уже создано — в `created`."""
 
     def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped",
-                 failure: Any = None, not_found: bool = False):
+                 failure: Any = None, not_found: bool = False, run_continues: bool = False):
         super().__init__(message)
+        #: Unknown result that stays unknown after the re-send: only this campaign stops, the run goes on.
+        self.run_continues = run_continues
         self.created = dict(created or {})
         self.kind = kind
         #: ACL-1856: an unknown write that the readback looked for and did not find (not "could not look").
@@ -1251,6 +1252,8 @@ class AccountFacts:
     #: Минимальный дневной бюджет кабинета в мелких единицах (`min_daily_budget` Meta); None - не прочитан (ACL-1443).
     min_daily_budget: int | None = None
     page_names: dict[str, str] = field(default_factory=dict)
+    #: ACL-2814: имена пикселей кабинета (уже прочитаны в preflight, без нового запроса) - для текста отказа Meta.
+    pixel_names: dict[str, str] = field(default_factory=dict)
     # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
     page_sources: dict[str, str] = field(default_factory=dict)
     profile_loader: Callable[["AccountFacts"], None] | None = field(default=None, repr=False, compare=False)
@@ -1298,6 +1301,8 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
         offset = None
     facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                          pixels=[str(p.get("id")) for p in pixels if p.get("id")],
+                         pixel_names={str(p.get("id")): str(p.get("name") or "").strip() for p in pixels
+                                      if p.get("id") and str(p.get("name") or "").strip()},
                          pages=[], page_names={}, page_sources={},
                          utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip(),
                          min_daily_budget=_minor_or_none(acc.get("min_daily_budget")))
@@ -1387,15 +1392,19 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
-                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.", key="pixel_unavailable")
+                            f"({len(facts.pixels)} found). Choose another pixel in the Pixel field "
+                            "instead of letting another one be picked.", key="pixel_unavailable")
     elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
         return
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
     else:
-        raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
-                        "the API backend needs exactly one", key="pixel_unavailable")
+        if facts.pixels:
+            raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets. "
+                            "Choose one in the Pixel field of the campaign, then Check again.", key="pixel_unavailable")
+        raise PlanError("The ad account has no pixel/dataset. Website ad sets need one: create a pixel "
+                        "in Events Manager, then Refresh pixels in the Pixel field.", key="pixel_unavailable")
 
 
 def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
@@ -1787,6 +1796,23 @@ def video_title(tag: str, data: bytes) -> str:
     return f"acl-{tag}-{_md5(data)[:12]}"
 
 
+def video_title_matches(title: str, content: str) -> bool:
+    """Our video title (`acl-<tag>-<md5[:12]>`) of any campaign with this content hash."""
+    return bool(content) and title.startswith("acl-") and title.endswith(f"-{content}")
+
+
+def throughput_mb_s(size: int, seconds: float) -> float | None:
+    return round(size / 1048576 / seconds, 2) if seconds > 0 and size > 0 else None
+
+
+def _speed_text(size: int, seconds: float) -> str:
+    """'180 MB, 2m 05s, 1.4 MB/s' - the size and speed of one upload, so a slow proxy is visible."""
+    secs = int(round(seconds))
+    span = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+    rate = throughput_mb_s(size, seconds)
+    return f"{_mb(size)}, {span}" + (f", {rate:.1f} MB/s" if rate is not None else "")
+
+
 @dataclass
 class Outcome:
     campaign_name: str
@@ -1803,6 +1829,8 @@ class Outcome:
     readback: dict = field(default_factory=dict)
     error: str = ""
     stop_kind: str = ""
+    #: The stop is an unknown write result that stays unresolved after the re-send: the next campaigns still publish.
+    run_continues: bool = False
     #: Объявление → что мы ему дали: creative_id, image_hash / video_id (для сверки, B2).
     ad_media: dict = field(default_factory=dict)
     #: Пробный запуск: что было бы создано (ни одной записи).
@@ -1944,12 +1972,6 @@ def family_rows(base: str, rows: list[dict]) -> dict[int, list[dict]]:
     return fam
 
 
-#: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
-#: page aborts its own request at a deadline, so `network_timeout` means the first request is finished): after two empty
-#: readbacks it is sent once more (a file upload never is). `cdp_timeout` (a tab frozen for the whole CDP wait: a queued
-#: POST may still start later), `context_stale` and `page_closed` only name the cause and stop.
-RESEND_REASONS = frozenset({"network", "network_timeout"})
-
 #: ACL-1856: тексты остановок по журналу операции (English, для человека).
 MSG_JOURNAL = ("Progress could not be saved on this computer, so nothing was written to Meta. "
                "Free some disk space or check the folder permissions, then publish again.")
@@ -1961,7 +1983,7 @@ MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campa
                      "Delete or move it, then publish again.")
 MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected by Meta. "
                        "Publish again once it is ready, or replace the video.")
-MSG_BUSY = ("Another run is creating {what} right now. Wait for it to finish, then publish again. "
+MSG_BUSY = ("Another run is creating {what} right now. Publish again when it is done. "
             "Nothing was created twice.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
                   "is no longer in Ads Manager; this is a new publish.")
@@ -2120,6 +2142,8 @@ class CampaignCreator:
                                     "metric": "video_upload", "mode": mode, "bytes": len(data),
                                     "md5": _md5(data)[:12],
                                     "upload_s": round(float(self.clock() - began), 1)}
+            if mode != "found":
+                diag["mb_s"] = throughput_mb_s(len(data), float(self.clock() - began))
             if error is not None:
                 details = getattr(error, "details", None) or {}
                 diag.update(error=type(error).__name__, kind=getattr(error, "kind", ""),
@@ -2565,9 +2589,10 @@ class CampaignCreator:
                    upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
-        ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
-        объект, запись без файла отправляется ОДИН раз повторно. Записи с файлом и ответы Meta
-        вроде 5xx/кода 1-2 по-прежнему только сверяются и стоп.
+        Owner rule 12.11 («публикация важнее блокировки»; ACL-2301/2338/2748): если результат неизвестен (нет ответа
+        любой причины, ответ без причины - 5xx, код 1-2, не JSON, без id) и сверка дважды не нашла объект, запись,
+        в том числе с файлом, отправляется ОДИН раз повторно (дубль допустим). Если и повтор неизвестен - стоп только
+        этой кампании (`run_continues`). Детерминированный отказ Meta (`_REJECTION_SUBCODES`) не повторяется.
 
         `upload` = (номер объявления, «video»/«image») - запись с файлом: без срока,
         с показом процента и Stop; неизвестный результат сверяется несколько раз.
@@ -2636,7 +2661,7 @@ class CampaignCreator:
                                           "in the ad account yet. Meta may still be processing the "
                                           "upload; publish again to check it first.",
                                           created=out.created, kind="cancelled") from exc
-                if exc.reason in RESEND_REASONS and not files and not upload and not _resent:
+                if not _resent and exc.subcode not in _REJECTION_SUBCODES:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
                     self._beat()
                     if self.reconcile_wait_s > 0:
@@ -2665,7 +2690,11 @@ class CampaignCreator:
                                                id_of=id_of, on_ad=on_ad, children_active=children_active,
                                                form_page=form_page, upload=upload, _resent=True)
                 else:
+                    resent_again = _resent and exc.subcode not in _REJECTION_SUBCODES
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
+                    if resent_again:
+                        # The re-send got no answer either: this campaign stops, the next ones of the run still publish.
+                        self.client.reconciled(path)
                     # ACL-2392: a known Meta rejection (subcode 1870226) is CLASSIFIED as a rejection for the text
                     # only; the stop stays "unknown" so the gating (blocked job, unreconciled path) is unchanged.
                     rejection = (_plain.classify(exc, kind="unknown", ctx={"stage": _plain.stage_of(what)})
@@ -2674,7 +2703,7 @@ class CampaignCreator:
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
                         created=out.created, kind="unknown", failure=rejection,
-                        not_found=not (files or upload)) from exc
+                        not_found=not (files or upload), run_continues=resent_again) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
@@ -2684,9 +2713,18 @@ class CampaignCreator:
             self.client.unreconciled = path
             found = find()
             if not found:
+                # Owner rule 12.11: no answer to rely on and nothing found: send once more (a duplicate is acceptable).
+                self.client.reconciled(path)
+                if not _resent:
+                    if what == "campaign" and self._op is not None:
+                        raise _CampaignRewrite(int(self._op.data.get("copy_number") or 0))
+                    self._step(out, f"{what}: answered without an id and not found by readback - sending once more")
+                    return self._write_raw(out, what, path, params, find, files=files, filename=filename,
+                                           id_of=id_of, on_ad=on_ad, children_active=children_active,
+                                           form_page=form_page, upload=upload, _resent=True)
                 raise CreationStopped(f"{what}: Graph answered without an id and nothing was found "
                                       "by readback.", created=out.created, kind="unknown",
-                                      not_found=not (files or upload))
+                                      not_found=not (files or upload), run_continues=True)
             self.client.reconciled(path)
             return str(found)
         return str(got)
@@ -3100,11 +3138,9 @@ class CampaignCreator:
                     creative_id = candidates()
                     if creative_id:
                         receipt.save(creative_id)
-                    elif receipt.data and receipt.age_s() < RECEIPT_UNKNOWN_S:
-                        raise CreationStopped("An earlier creative write has an unknown result. "
-                                              "No new creative was sent. Reconcile the existing object first.",
-                                              kind="creative_unknown")
                     else:
+                        # Owner decision 17.11 ("убирай 15 минут"): an earlier unknown write of this creative is
+                        # reconciled by the readback above; not found -> written again (a duplicate is acceptable).
                         self._check_cancel(out)
                         receipt.save()
                         creative_id = self._write(out, f"ad {ad.index}: creative",
@@ -3311,6 +3347,7 @@ class CampaignCreator:
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
                path: str = "", role: str = "") -> tuple[str, str]:
         title = video_title(plan.video_tag, data)
+        content = _md5(data)[:12]
         path = path or ad.path
         who = f"ad {ad.index}{role}"
 
@@ -3318,6 +3355,9 @@ class CampaignCreator:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
                                        max_pages=pages)
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
+            if hit is None:
+                # The same content under another campaign's tag is the same video of this ad account.
+                hit = next((r for r in rows if video_title_matches(str(r.get("title") or ""), content)), None)
             return str(hit["id"]) if hit else None
 
         began = self.clock()
@@ -3326,9 +3366,9 @@ class CampaignCreator:
         seen = getattr(self, "_videos_this_run", None)
         if seen is None:
             seen = self._videos_this_run = {}
-        vid = seen.get(title) or find()
+        vid = seen.get(content) or find()
         if vid:
-            self._step(out, f"{who}: video already in the ad account")
+            self._step(out, f"{who}: video already in the ad account ({_mb(len(data))}, same content, not uploaded again)")
             self._video_row(plan, who, data, "found", began)
         else:
             mode = "chunked" if isinstance(data, LargeFile) else "whole"
@@ -3351,8 +3391,9 @@ class CampaignCreator:
             finally:
                 self._waiting("")
             out.created.setdefault("videos", []).append(vid)
-            seen[title] = vid
-            self._step(out, f"{who}: video uploaded")
+            seen[content] = vid
+            took = max(0.0, float(self.clock() - began))
+            self._step(out, f"{who}: video uploaded ({_speed_text(len(data), took)})")
             self._video_row(plan, who, data, mode, began)
         return vid, self._wait_video(out, ad, vid, who=who)
 
@@ -4299,6 +4340,24 @@ class CampaignCreator:
         except _tt.ShiftError as exc:
             raise PlanError(f"Ad set {ad_set.name!r}: {exc}.") from exc
 
+    def schedule_zone_note(self, ad_set: AdSetPlan) -> str:
+        """ACL-2666: Check plan называет пояс кабинета и разницу, по которой переведены часы расписания.
+
+        Разница берётся на момент старта (так её применяет `schedule_windows`). Нет расписания или
+        старта, пояс кабинета неизвестен или разница не целая - пусто (отказ покажет сама запись окон).
+        """
+        account = self.facts.timezone_name
+        if not (ad_set.schedule and ad_set.time_zone and ad_set.start_time) or _tt.load_zone(account) is None:
+            return ""
+        try:
+            start = self._start_dt(ad_set)
+            shift = _tt.whole_hour_shift(ad_set.time_zone, account, start)
+        except (PlanError, _tt.ShiftError):
+            return ""
+        off = start.astimezone(_tt.load_zone(account)).utcoffset().total_seconds() / 3600
+        return (f"Hours ticked in Israel time are converted to the ad account time zone {account} "
+                f"(UTC{off:+g}, {shift:+d} h from Israel on {start.date().isoformat()}).")
+
     def schedule_shift_warnings(self, plan: CampaignPlan) -> list[str]:
         """ACL-1448: предупреждения (не ошибки), если разница Израиль-кабинет меняется между стартом и концом."""
         account = self.facts.timezone_name
@@ -4496,14 +4555,18 @@ class CampaignCreator:
         первый текст каждого вида - ещё и вертикальная; ссылка несёт обе метки. Площадки правил - как у Website с
         двумя файлами (`rule_positions`). Набор не Dynamic Creative.
         """
-        spec: dict[str, Any] = {}
+        # Live 20.11 (KLD_BFL_I03): without `optimization_type: PLACEMENT` Meta takes Arabic texts for a language
+        # asset feed and refuses with 2490266 "Missing Default Rule"; Ads Manager (HAR) and the Instant Form send it.
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
         media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
         main_l, vert_l = _wpol.instant_labels("link_urls")
         spec["link_urls"] = [{"website_url": plan.link, "adlabels": [{"name": main_l}, {"name": vert_l}]}]
         spec["call_to_action_types"] = [ad.cta]
         spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
         present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
-        main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
+        # Live 19.11: Meta refuses non-Latin (Arabic) texts here with 2490266 "Missing Default Rule in Language Asset
+        # Feed" unless the main rule is the empty catch-all, as Ads Manager sends it (HAR) and the Instant Form already does.
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
         spec["asset_customization_rules"] = [
             {"customization_spec": positions,
              **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
@@ -4775,6 +4838,7 @@ class CampaignCreator:
             self._finish_operation(out, _oj.OP_COMPLETE if not out.error else _oj.OP_STOPPED)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            out.run_continues = exc.run_continues
             out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
@@ -4819,11 +4883,12 @@ class CampaignCreator:
         if problem:
             raise CreationStopped(problem, kind="review_stale")
 
-    @staticmethod
-    def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
+    def _failure(self, plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
         """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
         stage = getattr(exc, "stage", "") or CampaignCreator._stage_from_outcome(out)
-        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage})
+        pid = str(plan.pixel_id or next((s_.pixel_id for s_ in plan.ad_sets if s_.pixel_id), "") or "")
+        names = getattr(getattr(self, "facts", None), "pixel_names", None) or {}
+        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage, "pixel": names.get(pid) or pid})
         if failure.key == "targeting_merged":
             planned = [str(n) for s_ in plan.ad_sets for g in s_.interest_groups for n in g]
             hits, note = _plain.offending_note(planned, str((failure.details or {}).get("error_user_msg") or ""))
@@ -5044,6 +5109,10 @@ class CampaignCreator:
         self._writes_base = getattr(self.client, "writes", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
+        for ad_set in plan.ad_sets:  # ACL-2666: Check plan называет пояс кабинета и разницу часов
+            note = self.schedule_zone_note(ad_set)
+            if note and note not in out.warnings:
+                out.warnings.append(note)
         self.check_profile_page(plan)
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
@@ -5735,6 +5804,9 @@ class CampaignCreator:
         if ad_set.time_zone:
             # ACL-1448: время введено по поясу команды; расписание выше уже в часах кабинета.
             row["time_zone"] = ad_set.time_zone
+            note = self.schedule_zone_note(ad_set)
+            if note:
+                row["schedule_zone_note"] = note
 
     @staticmethod
     def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:
@@ -5929,7 +6001,8 @@ class CampaignCreator:
                     if rewrites > MAX_CAMPAIGN_REWRITES:
                         self._snapshot_operation(out)
                         raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name),
-                                              created=out.created, kind="unknown") from None
+                                              created=out.created, kind="unknown",
+                                              run_continues=True) from None
                     old_name = plan.name
                     n = max(choice.copy_number, rw.copy_number,
                             name_copy_number(old_name, base_plan.name)) + 1
@@ -6075,11 +6148,13 @@ class CampaignCreator:
         expected_title = video_title(tag, data) if data else ""
         actual_title = (self.client.get(f"/{actual_id}", {"fields": "title"}).get("title")
                         if data and actual_id else "")
-        verified = bool(expected_title and actual_title == expected_title)
+        # ACL-2744: a video reused from another campaign of this ad account carries that campaign's tag, same content hash.
+        reused = bool(data and actual_title and video_title_matches(str(actual_title), _md5(data)[:12]))
+        verified = bool(expected_title and (actual_title == expected_title or reused))
         if uploaded_id and (str(uploaded_id) == actual_id or not verified):
             check(aobj, id_field, str(uploaded_id), actual_id)
         if data:
-            check(aobj, content_field, expected_title, actual_title)
+            check(aobj, content_field, actual_title if reused else expected_title, actual_title)
         if identities is not None:
             identities.append({"object": aobj, "field": id_field,
                                "uploaded_id": str(uploaded_id or ""),
@@ -6163,8 +6238,7 @@ class CampaignCreator:
 
         if labelled:
             # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
-            if instant:
-                check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
             for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
                 if not nonblank(list(base)):
                     continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
@@ -6174,8 +6248,7 @@ class CampaignCreator:
                       sorted(str(x.get("text")) for x in got if main in names_of(x)))
                 check(aobj, kind + "_vertical_label", [base[0]],
                       [str(x.get("text")) for x in got if vertical in names_of(x)])
-            main_pos, vert_pos = (self.instant_rule_positions(ad.placements) if instant
-                                  else self.rule_positions(ad.placements))
+            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
             media_key = "videos" if ad.kind == "video" else "images"
             # The empty title is sent with its label in both rules, so the rules always name it.
             present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),

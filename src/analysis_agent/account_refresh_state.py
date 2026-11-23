@@ -108,40 +108,10 @@ def lease(path: Path) -> FileLease:
         return _LEASES.setdefault(key, FileLease(path))
 
 
-def read_lease() -> FileLease:
-    """Одна настоящая сессия чтения на машину, независимо от порта/ACL_CONFIG_DIR.
-
-    Брать ПОСЛЕ физического замка профиля и ДО его открытия. Публикатор,
-    уже владеющий своим профилем, тогда может обновить список без deadlock.
-    """
-    return machine_lease("account-structure-read.lock")
-
-
-@contextmanager
-def read_session(*, priority: bool = False, timeout: float = 120):
-    """Действие, ожидающее конца чтения, идёт раньше следующего обхода.
-
-    OS-аренда намерения отпускается при смерти процесса, не оставляя вечной
-    отметки в JSON. Обычное чтение держит её лишь до входа, действие — весь
-    свой заход. Физическая аренда профиля всегда уже взята вызывающим.
-    """
-    read = read_lease()
-    if read.owned():
-        with read.holding(timeout=timeout):
-            yield
-        return
-    intent = machine_lease("account-read-priority.lock")
-    if priority:
-        with intent.holding(timeout=timeout), read.holding(timeout=timeout):
-            yield
-    else:
-        with intent.holding(timeout=timeout):
-            held = read.holding(timeout=timeout)
-            held.__enter__()
-        try:
-            yield
-        finally:
-            held.__exit__(None, None, None)
+# ACL-2668 (решение владельца 16.11): общего машинного замка «одно чтение на весь
+# компьютер» больше нет. Чтения разных аккаунтов идут параллельно; ограничения —
+# только места профилей (Profiles at once) и порог памяти. Одно чтение на аккаунт
+# держат аренда профиля, `target_activity` и `MachineStore.run` (по binding).
 
 
 def empty_state() -> dict:

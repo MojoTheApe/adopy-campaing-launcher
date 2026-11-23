@@ -755,7 +755,7 @@ def _meta_reorders(feed):
 
 def test_a_creative_whose_labels_came_back_in_the_other_order_is_still_reused(tmp_path):
     meta = FormMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, texts=2))
     assert first.stop_kind == "unknown"
     old = _of(meta, "creative")
@@ -771,7 +771,7 @@ def test_a_creative_whose_labels_came_back_in_the_other_order_is_still_reused(tm
 
 def test_a_reused_creative_with_one_text_changed_still_stops(tmp_path):
     meta = FormMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     _run(meta, _draft(tmp_path, texts=2))
     feed = _meta_reorders(_of(meta, "creative")["asset_feed_spec"])
     feed["bodies"][0]["text"] = "something else"
@@ -781,7 +781,7 @@ def test_a_reused_creative_with_one_text_changed_still_stops(tmp_path):
 
 def test_a_reused_creative_with_a_wrong_label_name_still_stops(tmp_path):
     meta = FormMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     _run(meta, _draft(tmp_path, texts=2))
     feed = _meta_reorders(_of(meta, "creative")["asset_feed_spec"])
     feed["bodies"][0]["adlabels"][0] = {"name": "acl_body_other"}
