@@ -2501,6 +2501,12 @@ def _compact_account_key(name) -> str:
     return re.sub(r"[^0-9a-z]", "", key)
 
 
+def _is_facebook_label(name) -> bool:
+    """Имя Facebook-аккаунта: `Facebook…` в книге или `KLD_…` из Multilogin."""
+    n = str(name or "").strip().casefold()
+    return n.startswith("facebook") or n.startswith("kld_")
+
+
 def _alias_by_tail(label: str, known: dict) -> str:
     """Имя из книги для подключённого аккаунта — или пусто.
 
@@ -2516,15 +2522,23 @@ def _alias_by_tail(label: str, known: dict) -> str:
         return exact
     if has_own_name(label, known):
         return ""  # своё имя в книге есть — альтернатива не нужна
-    tail = _account_tail(label)
-    if not tail:
+    # ACL-2863: хвост — только от собственного имени (первое слово, без
+    # пометки « - Имя Фамилия»), и в нём обязана быть цифра: хвост из одних
+    # букв — это чьё-то имя или бренд, а не номер аккаунта.
+    from src.analysis_agent.analyze_fb_stats import normalize_account_alias
+
+    tail = _account_tail(normalize_account_alias(label))
+    if not tail or not any(ch.isdigit() for ch in tail):
         return ""
+    label_is_fb = _is_facebook_label(label)
     # Само имя из кандидатов исключается: свой хвост у него, разумеется,
     # единственный, и аккаунт «совпадал» сам с собой — на экране появлялась
     # подпись «= KLD_BFL_X01», объясняющая ровно ничего.
     hits = [
         a for a in known
         if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
+        # ACL-2863: Facebook-аккаунт не берёт числа чужой платформы (Taboola_…).
+        and (not label_is_fb or _is_facebook_label(a))
     ]
     if hits:
         return hits[0] if len(hits) == 1 else ""
