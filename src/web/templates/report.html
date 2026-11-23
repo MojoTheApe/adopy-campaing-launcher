@@ -4722,6 +4722,9 @@ function dashRefreshUpdateCheck() {
         btn.hidden = false;
         btn.dataset.target = name;
         btn.dataset.fixed = fixed.join('\n');
+        // ACL-2668 №11: обновление ждёт конца публикации — состояние на сервере,
+        // поэтому и после перезагрузки страницы кнопка говорит, что оно ждёт.
+        if (s.queued && s.queued.state === 'waiting') aclUpdateQueued(s.queued.message);
       })
       .catch(function () { /* offline, or not a git install — no button, no noise */ });
   }
@@ -4757,6 +4760,7 @@ function dashRefreshUpdateCheck() {
           aclInlineError(btn, 'Update not started: ' + ((data && data.error) || 'unknown error'));
           return;
         }
+        if (data.queued) { aclUpdateQueued(data.message); return; }
         aclWaitForRestart();
       })
       .catch(function () {
@@ -4764,6 +4768,30 @@ function dashRefreshUpdateCheck() {
         // success, not failure, so wait rather than reporting an error.
         aclWaitForRestart();
       });
+  }
+
+  // Идёт публикация: сервер сам начнёт обновление, когда она закончится.
+  // Страница только показывает это и ждёт, пока начнётся рестарт.
+  function aclUpdateQueued(message) {
+    btn.disabled = true;
+    btn.textContent = message || 'Update starts after publishing finishes';
+    (function poll() {
+      fetch('/acl/update/check?fetch=0', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          var q = (s && s.queued) || {};
+          if (q.state === 'waiting') { setTimeout(poll, 5000); return; }
+          if (q.state === 'failed') {
+            btn.disabled = false;
+            btn.textContent = 'Update ACM';
+            aclInlineError(btn, 'Update not started: ' + (q.error || 'unknown error'));
+            return;
+          }
+          aclWaitForRestart();
+        })
+        // Сервер уже ушёл на рестарт.
+        .catch(function () { aclWaitForRestart(); });
+    })();
   }
 
   // Итог последней установки пишет помощник обновления (ACL-1240). Показываем
