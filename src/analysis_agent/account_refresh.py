@@ -45,7 +45,7 @@ def auto_refresh_enabled(port: int) -> bool:
     return bool(getattr(sys, "frozen", False)) or port == 9090
 
 def _publishing_busy() -> bool:
-    """A publish job is live or a profile window holds a slot (ACL-2260). No import side effects."""
+    """A publish job is live or queued (ACL-2260; a kept window does not count, ACL-2668). No import side effects."""
     module = sys.modules.get("src.web.publish_jobs")
     try:
         return bool(module is not None and module.publishing_busy())
@@ -141,22 +141,6 @@ def _held_blocks(account: str, trigger: str, force: bool = False) -> bool:
     if kind == "open" and force:
         return False        # ACL-2653: a person's Open profile reads the status right away, through any hold
     return _profile_held(account)
-
-
-def recently_failed(account: str, *, now: float | None = None) -> bool:
-    """Последняя попытка чтения не удалась и моложе `FRESH_S`: автоматические заявки её не повторяют.
-
-    Только явные Retry/действие (force) читают такой аккаунт раньше срока.
-    """
-    if _profile_held(account):
-        return True     # ACL-2091: a held profile waits for a person; no automatic read is queued for it
-    attempt = campaign_inventory.get_attempt(account)
-    if not attempt or attempt.get("state") != "failed":
-        return False
-    at = _parse_utc(attempt.get("at_utc") or "")
-    if at is None:
-        return False
-    return 0 <= (time.time() if now is None else now) - at < FRESH_S
 
 
 def _cooldown_s(kind: str, text: str) -> float:
@@ -393,8 +377,9 @@ class RefreshQueue:
         if window is None:
             return {"sweep": "no_window", "window": None, "queued": 0}
         if _publishing_busy():
-            # ACL-2260: reads open profiles; not while a publish runs or a window is
-            # kept open. The window is not marked done, so the next page open retries.
+            # ACL-2260: reads open profiles; not while a publish runs. ACL-2668: a window
+            # kept open after a publish or Check plan does not defer the sweep.
+            # The window is not marked done, so the next page open retries.
             return {"sweep": "deferred_publish", "window": window, "queued": 0}
         if self._store is None or self._accounts is None:
             raise RuntimeError("Scheduled account reads require persisted dashboard settings.")
@@ -441,7 +426,9 @@ class RefreshQueue:
                     self._rows[account] = {"list_at": snap.finished_at, "state": snap.state, "error": ""}
                     self._sweep_complete(account)
                     skipped.append((account, label))
-                elif recently_failed(account, now=self._clock()):
+                elif _profile_held(account):
+                    # ACL-2091: удержанный профиль ждёт человека. Обычная неудача окно не пропускает
+                    # (ACL-2668 #26): следующее окно 08/13/18 читает аккаунт снова.
                     self._sweep_complete(account)
                 else:
                     self._push(account, "schedule", label, False)
@@ -583,14 +570,15 @@ class RefreshQueue:
         Явный `retry`/`action` (force) пересчитывает свежесть, но паузу всей очереди не снимает:
         без таймера он читает только свой аккаунт мимо паузы, и пауза уходит, лишь если чтение
         удалось; с таймером ждёт его конца. Остальные заявки на паузе встают в очередь.
-        Автоматические заявки (`attention`, `schedule`) не читают аккаунт, чьё последнее чтение
-        упало меньше часа назад. `window` помечает обход по расписанию в телеметрии.
+        Упавшее чтение без удержания профиля не ждёт часа (ACL-2668 #26): раскрытие аккаунта
+        (`attention`) читает его сразу, обход по расписанию — в следующем окне. Удержанный
+        профиль (ACL-2091) автоматические заявки не трогают. `window` помечает обход по
+        расписанию в телеметрии.
         """
         if trigger not in PRIORITY:
             raise ValueError(f"unknown trigger {trigger!r}")
         label = f"schedule:{window}" if trigger == "schedule" and window else trigger
         skipped = False
-        failed_recently = False
         halted = False
         with self._state_guard():
             self._maybe_lift()
@@ -609,8 +597,6 @@ class RefreshQueue:
                                        "state": snap.state if snap else "", "error": ""}
                 self._sweep_complete(account, label)
                 skipped = True
-            elif not force and recently_failed(account, now=self._clock()):
-                failed_recently = True
             else:
                 # A request joins a currently running read; inline action refreshes
                 # use their already-open session and settle separately.
@@ -623,8 +609,6 @@ class RefreshQueue:
         if skipped:
             self._telemetry_skipped(account, label)
             return {"queued": False, "reason": "fresh"}
-        if failed_recently:
-            return {"queued": False, "reason": "recent_failure"}
         return {"queued": True, "reason": "halted" if halted else "queued"}
 
     def _push(self, account: str, trigger: str, label: str, force: bool) -> None:
@@ -732,9 +716,6 @@ class RefreshQueue:
             if not entry[3]:
                 if is_fresh(account, now=self._clock()):
                     self._pending_skips.append((account, entry[2]))
-                    self._sweep_complete(account, entry[2])
-                    continue
-                if recently_failed(account, now=self._clock()):
                     self._sweep_complete(account, entry[2])
                     continue
             return account, entry[2], False
@@ -874,8 +855,7 @@ class RefreshQueue:
                 self._import_result(account)
                 skip = (_held_blocks(account, trigger, force)      # ACL-2548: nothing is read, no attempt row
                         or (force and not self._machine.pending(key, self._owner))
-                        or (not force and (is_fresh(account, now=self._clock())
-                                           or recently_failed(account, now=self._clock()))))
+                        or (not force and is_fresh(account, now=self._clock())))
             finally:
                 dispatch.__exit__(None, None, None)
             if skip:

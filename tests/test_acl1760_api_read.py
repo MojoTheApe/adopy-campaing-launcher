@@ -747,7 +747,7 @@ def test_profile_is_not_held_when_the_split_was_read_in_the_same_session(world):
 def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
     """Живая очередь с потолком 2 и `kept_idle_close_s` по умолчанию (600 с): третье чтение не ждёт.
 
-    ACL-2790: окна первых двух чтений остаются «уступающими»; третье закрывает одно из них сразу.
+    ACL-2686: окна чтений остаются открытыми и места не занимают — третье чтение их не закрывает.
     """
     import dataclasses
     import threading
@@ -799,8 +799,9 @@ def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
     t.join(20)
     assert not t.is_alive(), "the third read must not wait forever for a kept window"
     assert done == ["Acc1:ok", "Acc2:ok", "Acc3:ok"]
-    assert evicted == ["Acc1"], "the least recently used kept window made room at once"
-    assert len(open_profiles) == 2
+    # ACL-2686: kept windows take no slot, so no ceiling eviction; only a memory shortage closes them
+    assert evicted == [], "kept windows are not closed at the slot ceiling"
+    assert len(open_profiles) == 3
     assert all(r["kept"] for r in queue.snapshot()["running"])
 
 
