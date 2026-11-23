@@ -200,9 +200,11 @@ def search(query: str, *, page: int = 1, snapshot_id: str | None = None, mode: s
         found = call({"query": q, "kind": "url"}, "url", grouped=False)
         if found.get("state") != "ready" or not found.get("ok"):
             return found
-        if not found["items"]:
+        first_id = (found["items"][0] or {}).get("id") if found["items"] else None
+        if not str(first_id or "").isdigit():
+            # Адрес не нашёлся или пришёл без id - вариантов шаблона искать не по чему.
             return {**found, "items": [], "total": 0, "matching_landings": 0, "page": page}
-        return call({"source_landing_id": int(found["items"][0]["id"])}, "url")
+        return call({"source_landing_id": int(first_id)}, "url")
     if kind == "path":
         return call({"query": q, "kind": "path"}, "path")
     return call({"query": q, "kind": "variant"}, "variant")

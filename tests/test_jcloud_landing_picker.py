@@ -93,6 +93,13 @@ def test_url_that_is_not_in_the_catalog_finds_nothing_without_a_second_call(monk
     assert out["total"] == 0 and out["items"] == [] and len(seen) == 1
 
 
+def test_url_hit_without_an_id_finds_nothing_instead_of_failing(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jc, "_call", lambda tool, args: seen.append(args) or _ready([{"url": "https://a.example.com/x"}]))
+    out = jc.search("https://a.example.com/x")
+    assert out["total"] == 0 and out["items"] == [] and len(seen) == 1
+
+
 def test_url_resolving_that_is_pending_is_returned_as_pending(monkeypatch):
     monkeypatch.setattr(jc, "_call", lambda t, a: {"ok": True, "state": "pending", "retry_after_seconds": 3})
     assert jc.search("https://a.example.com/x")["state"] == "pending"
