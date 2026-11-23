@@ -249,7 +249,7 @@ def running_job_count() -> int:
 
 def _manual_job_running() -> bool:
     with _JOBS_LOCK:
-        return bool(_ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running")
+        return any(j.get("state") == "running" and j.get("kind") == "open" for j in _JOBS.values())
 
 
 def _auto_worker(label: str) -> None:
@@ -448,15 +448,19 @@ def start_open(labels: Any, confirm_reopen: bool = False) -> tuple[dict, int]:
     if len(labels) > MAX_ACCOUNTS:
         return {"error": f"Open at most {MAX_ACCOUNTS} accounts at a time."}, 400
     with _JOBS_LOCK:
-        if _ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running":
-            return {"error": "Profiles are already being opened; wait for it to finish.",
-                    "job_id": _ACTIVE_JOB}, 409
+        # ACL-2870: задания разных аккаунтов идут параллельно; отказ — только если аккаунт уже открывается.
+        for jid, other in _JOBS.items():
+            if other.get("state") == "running" and set(labels) & set(other.get("results") or {}):
+                return {"error": "Profiles are already being opened; wait for it to finish.",
+                        "job_id": jid}, 409
         job_id = uuid.uuid4().hex[:10]
         job = {"job_id": job_id, "state": "running", "kind": "open", "started": time.time(),
                "total": len(labels), "results": {l: {"state": "waiting"} for l in labels}}
         _JOBS[job_id] = job
         _ACTIVE_JOB = job_id
-        for old in sorted(_JOBS, key=lambda j: _JOBS[j]["started"])[:-10]:
+        # ACL-2870: чистим только завершённые задания — бегущее нельзя терять, его опрашивает строка
+        done = [j for j in sorted(_JOBS, key=lambda j: _JOBS[j]["started"]) if _JOBS[j].get("state") != "running"]
+        for old in done[:max(0, len(_JOBS) - 10)]:
             _JOBS.pop(old, None)
     threading.Thread(target=_run_open, args=(job_id, labels, confirm_reopen), daemon=True, name="acl-warm-open").start()
     return _job_view(job), 202
