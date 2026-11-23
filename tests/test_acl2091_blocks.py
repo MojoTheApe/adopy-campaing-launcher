@@ -332,13 +332,13 @@ def test_a_hold_reads_as_an_endless_cooldown_and_the_refresh_queue_skips_automat
     from src.analysis_agent import account_refresh, account_spend
 
     monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
-    base = account_refresh.recently_failed("B97")
+    base = account_refresh._profile_held("B97")
     api._start_cooldown(KEY, Checkpoint("c"), "B97")
     left, kind = api._cooldown_state(KEY)
     assert left == float("inf") and kind == "checkpoint" and api._cooldown_left(KEY) == float("inf")
-    assert account_refresh.recently_failed("B97") is True                  # automatic requests are not queued
+    assert account_refresh._profile_held("B97") is True                  # automatic requests are not queued
     blocks.clear(KEY, "test")
-    assert api._cooldown_state(KEY) == (0.0, "") and account_refresh.recently_failed("B97") is base
+    assert api._cooldown_state(KEY) == (0.0, "") and account_refresh._profile_held("B97") is base
 
 
 # ───────────────────────── lazy frozen_error (finding 3) ─────────────────────────

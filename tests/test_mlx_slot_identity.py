@@ -194,7 +194,7 @@ def test_logout_endpoint_disconnects_one_slot(machine, monkeypatch):
 
 def test_repair_waits_while_work_is_running(machine, monkeypatch):
     _both(monkeypatch, "ws-kld", "ws-kld", name="KLD")
-    monkeypatch.setattr("src.web.publish_jobs.publishing_busy", lambda: True)
+    monkeypatch.setattr("src.web.publish_jobs.profile_slots_held", lambda: True)
     code, body = _call("POST", "/multilogin-slots-repair")
     assert code == 200 and body["ok"] and body["repaired"] is False and body["deferred"] is True
     assert "fixed when the running jobs finish" in body["message"]
@@ -203,7 +203,7 @@ def test_repair_waits_while_work_is_running(machine, monkeypatch):
 
 def test_repair_with_busy_work_but_no_conflict_is_a_plain_no_op(machine, monkeypatch):
     _both(monkeypatch, "ws-inhouse", "ws-kld")
-    monkeypatch.setattr("src.web.publish_jobs.publishing_busy", lambda: True)
+    monkeypatch.setattr("src.web.publish_jobs.profile_slots_held", lambda: True)
     _, body = _call("POST", "/multilogin-slots-repair")
     assert body["repaired"] is False and not body.get("deferred")
 
@@ -211,7 +211,7 @@ def test_repair_with_busy_work_but_no_conflict_is_a_plain_no_op(machine, monkeyp
 def test_logout_is_refused_while_a_profile_slot_is_busy(machine, monkeypatch):
     _both(monkeypatch, "ws-inhouse", "ws-kld")
     monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 0)
-    monkeypatch.setattr("src.web.publish_jobs.publishing_busy", lambda: True)
+    monkeypatch.setattr("src.web.publish_jobs.profile_slots_held", lambda: True)
     code, body = _call("POST", "/multilogin-logout", {"instance": "A"})
     assert code == 409 and not body["ok"]
     assert mlx_slots.has_token("A")
@@ -298,7 +298,7 @@ def test_no_token_value_appears_in_any_response(machine, monkeypatch):
     seen.append(json.dumps(_call("POST", "/multilogin-logout", {"instance": "B"})[1]))
     monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_A", ta)
     monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_B", tb)
-    monkeypatch.setattr("src.web.publish_jobs.publishing_busy", lambda: True)
+    monkeypatch.setattr("src.web.publish_jobs.profile_slots_held", lambda: True)
     seen.append(json.dumps(_call("POST", "/multilogin-slots-repair", {})[1]))
     seen.append(json.dumps(_call("POST", "/multilogin-logout", {"instance": "A"})[1]))
     for token in (ta, tb, pasted):
@@ -309,7 +309,7 @@ def test_no_token_value_appears_in_any_response(machine, monkeypatch):
 def test_repair_and_logout_wait_for_warm_ups_too(machine, monkeypatch):
     _both(monkeypatch, "ws-kld", "ws-kld", name="KLD")
     monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 0)
-    monkeypatch.setattr("src.web.publish_jobs.publishing_busy", lambda: False)
+    monkeypatch.setattr("src.web.publish_jobs.profile_slots_held", lambda: False)
     monkeypatch.setattr("src.web.warm_api.running_job_count", lambda: 1)
     _, body = _call("POST", "/multilogin-slots-repair")
     assert body["deferred"] is True and machine == []
