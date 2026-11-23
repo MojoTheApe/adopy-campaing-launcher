@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2863 — Home map no longer takes another account's stats by a name-ending guess — 2026-11-23
+
+The tail guess uses only the account's own name (without the " - Person" annotation), needs a digit in the tail, and never matches a non-Facebook alias.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1863).
+
 ## ACL-2859 — Landing picker: template fallback after a pending search, lazy load, hidden Asset chip — 2026-11-22
 
 A Variant whose first path search answered "preparing the catalog" is now also searched as a template when the repeat finds nothing. Chosen landings are loaded when an account block is first shown, not for every collapsed block at page load. The empty "×" chip under the Asset field no longer shows when no asset is chosen.
