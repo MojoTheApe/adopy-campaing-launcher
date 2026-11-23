@@ -91,7 +91,7 @@
       preview.hidden = true;
       preview.replaceChildren();
     }
-    function showPreview(item) {
+    function showPreview(item, anchor) {
       if (!/^https?:\/\//i.test(item.url || '')) return;
       var frame = document.createElement('iframe');
       // Скрипты страницы разрешены (лендинг рендерится на JS), но без доступа к ACL: другой origin.
@@ -101,6 +101,22 @@
       frame.src = item.url;
       preview.replaceChildren(frame);
       preview.hidden = false;
+      placePreview(anchor);
+    }
+    // ACL-2876: окно привязано к окну браузера, а не к блоку: справа от списка, если влезает,
+    // иначе слева, иначе у правого края; по вертикали всегда внутри окна.
+    function placePreview(anchor) {
+      var box = preview.getBoundingClientRect();
+      var list = (anchor || results).closest('[data-landings-results]') || results;
+      var lr = list.getBoundingClientRect();
+      var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight, gap = 8;
+      var left = lr.right + gap;
+      if (left + box.width > vw - gap) left = lr.left - box.width - gap;
+      if (left < gap) left = Math.max(gap, vw - box.width - gap);
+      var ar = (anchor || list).getBoundingClientRect();
+      var top = Math.min(Math.max(gap, ar.top), Math.max(gap, vh - box.height - gap));
+      preview.style.left = Math.round(left) + 'px';
+      preview.style.top = Math.round(top) + 'px';
     }
 
     function addRows(items) {
@@ -125,7 +141,7 @@
         row.appendChild(pick);
         row.addEventListener('mouseenter', function () {
           clearTimeout(previewTimer);
-          previewTimer = setTimeout(function () { showPreview(item); }, PREVIEW_DELAY_MS);
+          previewTimer = setTimeout(function () { showPreview(item, row); }, PREVIEW_DELAY_MS);
         });
         row.addEventListener('mouseleave', hidePreview);
         results.appendChild(row);
