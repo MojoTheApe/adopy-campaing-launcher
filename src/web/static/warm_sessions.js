@@ -344,6 +344,7 @@
      перерисовка строки после открытия. Ничего не открывается само и таймеров на живые аккаунты нет:
      пока идёт задание, опрашивается только локальное состояние (задание и очередь чтения). */
   var homeAvail = null;
+  var homeOpening = {};   // аккаунты, у которых сейчас идёт своё задание Open
 
   function homeButtons() { return Array.prototype.slice.call(document.querySelectorAll('[data-aov-open]')); }
 
@@ -394,17 +395,17 @@
 
   function homeFinish(btn, text, bad) {
     btn.removeAttribute('data-aov-busy');
+    delete homeOpening[btn.getAttribute('data-aov-open')];
     btn.textContent = 'Open profile';
-    busy = false;
-    setBusy(false);
+    homePaint();   // ACL-2870: только своя кнопка; общий busy и warm-bar одиночный Open не трогает
     return homeSay(btn, text, bad);
   }
 
   function homeOpen(btn, account, confirmed) {
-    if (busy) return;   // второй щелчок, пока идёт открытие, ничего не делает
-    busy = true;
+    // ACL-2870: «занято» — у самой кнопки аккаунта; остальные Open и warm-bar остаются живыми
+    if (btn.getAttribute('data-aov-busy') === '1' || homeOpening[account]) return;   // второй щелчок по тому же аккаунту ничего не делает
+    homeOpening[account] = true;
     btn.setAttribute('data-aov-busy', '1');
-    setBusy(true);
     btn.disabled = true;
     btn.textContent = 'Opening…';
     homeSay(btn, '', false);

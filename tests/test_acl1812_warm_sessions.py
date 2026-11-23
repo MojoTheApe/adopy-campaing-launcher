@@ -752,6 +752,21 @@ def test_open_endpoint_needs_loopback(monkeypatch):
     assert code == 403 and data["code"] == "not_loopback"
 
 
+def test_open_jobs_of_different_accounts_run_in_parallel(monkeypatch):
+    """ACL-2870: второй Open другого аккаунта не ждёт первый; тот же аккаунт — отказ."""
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_guard", lambda: None)
+    monkeypatch.setattr(warm_api, "_run_open", lambda *a, **k: None)   # задания остаются «running»
+    monkeypatch.setattr(warm_api, "_JOBS", {})
+    first, code1 = warm_api.start_open(["A"])
+    second, code2 = warm_api.start_open(["B"])
+    again, code3 = warm_api.start_open(["A"])
+    assert (code1, code2) == (202, 202) and first["job_id"] != second["job_id"]
+    assert code3 == 409 and again["job_id"] == first["job_id"]
+    assert warm_api._manual_job_running()
+
+
 # ───────────────────────── через настоящие PageTab / InPageGraph ─────────────────────────
 
 class RealishCdp:
