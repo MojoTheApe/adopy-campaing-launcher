@@ -767,6 +767,21 @@ def test_open_jobs_of_different_accounts_run_in_parallel(monkeypatch):
     assert warm_api._manual_job_running()
 
 
+def test_many_parallel_opens_never_prune_a_running_job(monkeypatch):
+    """ACL-2870: 12 параллельных Open — самое старое, ещё бегущее задание остаётся доступным для опроса."""
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_guard", lambda: None)
+    monkeypatch.setattr(warm_api, "_run_open", lambda *a, **k: None)
+    monkeypatch.setattr(warm_api, "_JOBS", {})
+    ids = [warm_api.start_open([f"Acc{i}"])[0]["job_id"] for i in range(12)]
+    assert all(i in warm_api._JOBS for i in ids)
+    warm_api._JOBS[ids[0]]["state"] = "done"
+    last = warm_api.start_open(["Acc99"])[0]["job_id"]
+    assert ids[0] not in warm_api._JOBS and last in warm_api._JOBS
+    assert all(i in warm_api._JOBS for i in ids[1:])
+
+
 # ───────────────────────── через настоящие PageTab / InPageGraph ─────────────────────────
 
 class RealishCdp:

@@ -458,7 +458,9 @@ def start_open(labels: Any, confirm_reopen: bool = False) -> tuple[dict, int]:
                "total": len(labels), "results": {l: {"state": "waiting"} for l in labels}}
         _JOBS[job_id] = job
         _ACTIVE_JOB = job_id
-        for old in sorted(_JOBS, key=lambda j: _JOBS[j]["started"])[:-10]:
+        # ACL-2870: чистим только завершённые задания — бегущее нельзя терять, его опрашивает строка
+        done = [j for j in sorted(_JOBS, key=lambda j: _JOBS[j]["started"]) if _JOBS[j].get("state") != "running"]
+        for old in done[:max(0, len(_JOBS) - 10)]:
             _JOBS.pop(old, None)
     threading.Thread(target=_run_open, args=(job_id, labels, confirm_reopen), daemon=True, name="acl-warm-open").start()
     return _job_view(job), 202
