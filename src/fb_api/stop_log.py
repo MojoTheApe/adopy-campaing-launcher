@@ -25,7 +25,9 @@ from typing import Callable
 log = logging.getLogger(__name__)
 
 RESTART_COOLDOWN_ENV = "ACL_PROFILE_RESTART_COOLDOWN_S"
-DEFAULT_RESTART_COOLDOWN_S = 180.0
+#: ACL-2818: решение владельца 23.10 — пауза после остановки по умолчанию 0 (без ожидания и
+#: текста «can be started again»). Переменная окружения по-прежнему переопределяет её.
+DEFAULT_RESTART_COOLDOWN_S = 0.0
 
 #: ACL-2117: сколько секунд действие готово ЖДАТЬ конца паузы после остановки, а не
 #: отказывать. По умолчанию — вся пауза; `0` — прежнее поведение (сразу отказ).

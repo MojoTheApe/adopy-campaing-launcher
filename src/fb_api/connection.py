@@ -11,7 +11,7 @@ from pathlib import Path
 from config.paths import get_local_config_dir, machine_file_lock, _atomic_write
 
 _CONFIRMED = ContextVar("acl_confirmed_profile_reopen", default=False)
-DEFAULTS = {"managed_sessions": True, "auto_reopen_manual": False, "auto_warm": False}
+DEFAULTS = {"managed_sessions": True, "auto_reopen_manual": False, "auto_warm": True}
 
 
 def settings():

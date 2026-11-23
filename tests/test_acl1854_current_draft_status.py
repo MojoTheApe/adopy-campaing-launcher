@@ -483,3 +483,9 @@ def test_separate_processes_lock_the_entire_read_modify_write(run):
     assert output.get(timeout=2) is None and output.get(timeout=2) is None
     current = web._load_draft_status()
     assert set(current) == {"Untouched", "First", "Second"}
+
+
+@pytest.fixture(autouse=True)
+def _rpa_backend_explicit(monkeypatch):
+    """ACL-2785: по умолчанию теперь api; эти тесты проверяют ветку RPA, поэтому выбирают её явно."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
