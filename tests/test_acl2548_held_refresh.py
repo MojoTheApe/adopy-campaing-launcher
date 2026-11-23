@@ -49,16 +49,14 @@ def test_a_hold_that_appears_while_a_request_waits_drops_it_without_a_read(env, 
     assert HELD not in env.attempts
 
 
-def test_skipping_a_held_profile_leaves_a_persisted_global_halt_in_place(env, held):
+def test_skipping_a_held_profile_leaves_the_stored_stop_in_place(env, held):
     env.stops = {HELD: ("checkpoint", _iso(NOW - 60))}
     q = _queue(env)
-    halt = q._persisted_halt()
-    assert halt and halt["kind"] == "checkpoint"
+    assert q._persisted_halt() is None      # ACL-2653: a checkpoint is the profile's hold, not a machine halt
     q.request(HELD, "attention")
     q.request(HELD, "action", force=True)
     q._drain_once()
     assert env.read == [] and env.stops == {HELD: ("checkpoint", _iso(NOW - 60))}
-    assert q._persisted_halt() == halt
 
 
 def test_a_sweep_skips_a_held_profile_and_still_completes(env, held):

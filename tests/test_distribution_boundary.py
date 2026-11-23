@@ -37,6 +37,7 @@ SHIPPING_TREES = [
     "src/campaign_bridge",
     "src/creative_agent",
     "src/fb_ads_rpa",
+    "src/jcloud",
     "src/knowledge_agent",
     "src/meta_campaign_agent",
     "src/upload_agent",

@@ -4,6 +4,7 @@
   python scripts/acl_log_pull.py --db X     # use another database file
 
 Needs ACL_EVENT_LOG_URL (or the built-in address) and ACL_EVENT_LOG_READ_KEY.
+With ACL_HUB_URL and ACL_HUB_OWNER_KEY set, it reads the telemetry hub (/api/events) instead.
 Safe to repeat: a batch already downloaded is skipped, and an interrupted run
 continues where it stopped. Never prints token values - only the ids of events
 that look like they contain one.
@@ -36,7 +37,7 @@ except Exception:
     get_local_config_dir = None  # type: ignore[assignment]
 
 from src.acl_event_log import shipper  # noqa: E402
-from src.acl_event_log.store import open_db, pull_new  # noqa: E402
+from src.acl_event_log.store import open_db, pull_hub, pull_new  # noqa: E402
 
 
 def default_db_path() -> Path:
@@ -51,10 +52,45 @@ def _get(url: str, key: str) -> bytes:
         return resp.read()
 
 
+def _get_page(url: str, key: str) -> tuple[bytes, int]:
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}",
+                                               "User-Agent": shipper.USER_AGENT})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return resp.read(), int(resp.headers.get("X-Next-After") or 0)
+
+
+def _report(db_path: Path, total: dict) -> None:
+    print(f"Database: {db_path}")
+    print(f"Batches: {total['segments']}   new events: {total['new']}   duplicates: {total['duplicates']}"
+          f"   conflicts: {total['conflicts']}   unreadable: {total['errors']}")
+    if total["secrets"]:
+        print("WARNING: these events look like they contain a token (ids only):")
+        for event_id in total["secrets"]:
+            print("  " + event_id)
+
+
+def _pull_from_hub(hub: str, key: str, db_path: Path) -> int:
+    conn = open_db(db_path)
+    try:
+        total = pull_hub(conn, lambda after: _get_page(f"{hub}/api/events?after={after}&limit=1000", key))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        print(f"Network error, the database is intact - run again to continue: {type(exc).__name__}")
+        return 2
+    finally:
+        conn.close()
+    _report(db_path, total)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--db", type=Path, default=None, help="SQLite file (default: machine config dir)")
     args = parser.parse_args(argv)
+
+    hub = (os.environ.get("ACL_HUB_URL") or "").strip().rstrip("/")
+    hub_key = (os.environ.get("ACL_HUB_OWNER_KEY") or "").strip()
+    if hub and hub_key:
+        return _pull_from_hub(hub, hub_key, args.db or default_db_path())
 
     base = shipper.ingest_url()
     key = (os.environ.get("ACL_EVENT_LOG_READ_KEY") or "").strip()
@@ -80,13 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     finally:
         conn.close()
-    print(f"Database: {db_path}")
-    print(f"Batches: {total['segments']}   new events: {total['new']}   duplicates: {total['duplicates']}"
-          f"   conflicts: {total['conflicts']}   unreadable: {total['errors']}")
-    if total["secrets"]:
-        print("WARNING: these events look like they contain a token (ids only):")
-        for event_id in total["secrets"]:
-            print("  " + event_id)
+    _report(db_path, total)
     return 0
 
 
