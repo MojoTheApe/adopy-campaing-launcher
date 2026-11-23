@@ -445,7 +445,8 @@ class FakeMeta:
             row["title"] = obj["title"]
         if "status" in asked:
             state = self.video_states[min(max(obj["_polls"], 1) - 1, len(self.video_states) - 1)]
-            row["status"] = {"video_status": state}
+            # Строка - только video_status; словарь - весь объект status, как его отдаёт Meta (ACL-2668).
+            row["status"] = dict(state) if isinstance(state, dict) else {"video_status": state}
         return row
 
     # -- транспорт
@@ -749,31 +750,114 @@ def test_readback_flags_a_campaign_somebody_activated(tmp_path):
     assert [p.rsplit("/", 1)[1] for p, _ in meta.posts] == ["campaigns"]
 
 
-def test_video_processing_wait_is_bounded(tmp_path):
-    meta = FakeMeta(video_states=("processing",))
-    out, client = _run(meta, _draft(tmp_path, video=True, ads=1), video_max_polls=4,
-                       video_poll_s=5.0)
-    assert out.stop_kind == "video_timeout"
-    vid_polls = [p for p, _ in meta.gets if p.count("/") == 1 and p[1:] in meta.objects
-                 and meta.objects[p[1:]]["_kind"] == "video"]
-    assert len(vid_polls) == 4
-    assert not [p for p, _ in meta.posts if p.endswith(("/adcreatives", "/ads"))]
+def _video_polls(meta):
+    return [p for p, _ in meta.gets if p.count("/") == 1 and p[1:] in meta.objects
+            and meta.objects[p[1:]]["_kind"] == "video"]
 
 
-def test_video_wait_respects_the_time_limit(tmp_path):
-    meta = FakeMeta(video_states=("processing",))
+def test_long_video_processing_never_stops_the_publish(tmp_path):
+    """ACL-2668, решение 16: нет потолка 300 с / 20 опросов - ждём готовности и создаём объявление."""
+    meta = FakeMeta(video_states=({"video_status": "processing", "processing_progress": 40},) * 39 + ("ready",))
     now = [0.0]
+    naps: list[float] = []
+    shown: list[str] = []
 
     def sleep(s):
+        naps.append(s)
         now[0] += s
 
     client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=200)
     facts = cr.preflight_account(client, ACT)
     creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=sleep,
-                                 clock=lambda: now[0], video_wait_s=60.0, video_poll_s=15.0,
-                                 video_max_polls=100)
+                                 clock=lambda: now[0], live_progress=shown.append)
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
-    assert out.stop_kind == "video_timeout" and now[0] <= 60.0
+    assert out.error == "" and out.readback["ok"] is True, out.error
+    assert len(_video_polls(meta)) >= 40 and now[0] > 300
+    assert max(naps) <= cr.VIDEO_CANCEL_SLICE_S          # pauses are sliced so a Stop is heard within a second
+    assert now[0] >= (cr.VIDEO_POLL_SLOW_AFTER - 1) * cr.VIDEO_POLL_S + 19 * cr.VIDEO_POLL_MAX_S
+    assert any("video processing at Meta (40%)" in t and "min" in t for t in shown)
+    assert [p.rsplit("/", 1)[1] for p, _ in meta.posts].count("ads") == 1
+
+
+def test_slow_processing_polls_extend_the_call_budget(tmp_path):
+    """Опросы сверх запаса плана не упираются в бюджет вызовов запуска."""
+    meta = FakeMeta(video_states=("processing",) * 199 + ("ready",))
+    out, client = _run(meta, _draft(tmp_path, video=True, ads=1))
+    assert out.error == "", out.error
+    assert len(_video_polls(meta)) >= 200 and client.calls > 200
+
+
+def test_a_video_processing_error_stops_the_ad_with_metas_reason(tmp_path):
+    failed = {"video_status": "error",
+              "processing_phase": {"status": "error", "errors": [{"code": 1363008,
+                                                                  "message": "The video file is corrupted"}]}}
+    meta = FakeMeta(video_states=("processing", failed))
+    out, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
+    assert out.stop_kind == "video_error"
+    assert "Meta could not process the video: The video file is corrupted" in out.error
+    assert not [p for p, _ in meta.posts if p.endswith(("/adcreatives", "/ads"))]
+
+
+def test_cancel_still_works_while_the_video_is_processing(tmp_path):
+    meta = FakeMeta(video_states=("processing",))
+    polls = [0]
+
+    def cancelled():
+        polls[0] = len(_video_polls(meta))
+        return polls[0] >= 3
+
+    out, _ = _run(meta, _draft(tmp_path, video=True, ads=1), cancelled=cancelled)
+    assert out.stop_kind == "cancelled" and len(_video_polls(meta)) == 3
+    assert not [p for p, _ in meta.posts if p.endswith(("/adcreatives", "/ads"))]
+
+
+def test_cancel_during_a_slow_poll_pause_is_heard_within_seconds(tmp_path):
+    """The longest pause (60 s) is sliced: Stop lands within a slice, far inside the 60 s cancel deadline."""
+    meta = FakeMeta(video_states=("processing",))
+    now = [0.0]
+    stop_at = [None]
+
+    def sleep(s):
+        now[0] += s
+
+    def cancelled():
+        if len(_video_polls(meta)) >= cr.VIDEO_POLL_SLOW_AFTER and stop_at[0] is None:
+            stop_at[0] = now[0] + 3.0
+        return stop_at[0] is not None and now[0] >= stop_at[0]
+
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=400)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=sleep,
+                                 clock=lambda: now[0], cancelled=cancelled)
+    out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
+    assert out.stop_kind == "cancelled"
+    assert now[0] - stop_at[0] < 2 * cr.VIDEO_CANCEL_SLICE_S
+
+
+@pytest.mark.parametrize("failed", [
+    {"video_status": "expired"},
+    {"video_status": "processing", "processing_phase": {"status": "error",
+                                                         "errors": [{"message": "Codec not supported"}]}},
+    {"video_status": "processing", "uploading_phase": {"status": "error"}},
+    {"video_status": "upload_complete", "publishing_phase": {"status": "expired"}},
+])
+def test_terminal_video_states_end_the_wait_with_metas_reason(tmp_path, failed):
+    meta = FakeMeta(video_states=("processing", failed))
+    out, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
+    assert out.stop_kind == "video_error" and "Meta could not process the video" in out.error
+    assert len(_video_polls(meta)) == 2
+    assert not [p for p, _ in meta.posts if p.endswith(("/adcreatives", "/ads"))]
+    if "errors" in str(failed):
+        assert "Codec not supported" in out.error
+
+
+def test_video_error_reason_reads_every_phase():
+    assert cr.video_error_reason({"video_status": "error"}) == ""
+    assert cr.video_error_reason({"uploading_phase": {"errors": [{"message": "Bad codec"}]},
+                                  "processing_phase": {"errors": [{"message": "Bad codec"}, "Too long"]},
+                                  "error": {"message": "Rejected"}}) == "Bad codec; Too long; Rejected"
+    assert cr.video_progress_text({"processing_progress": "130"}) == " (100%)"
+    assert cr.video_progress_text({}) == ""
 
 
 def test_existing_campaign_with_the_same_name_but_not_ours_is_not_touched(tmp_path):
