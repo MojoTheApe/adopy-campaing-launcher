@@ -529,6 +529,7 @@ def note_tab_lock(label: str, *, urls=None, action: str = "Open profile") -> boo
         if urls is None:
             urls = _local_tabs(label, pid)
         key = account_spend._profile_key(label)  # noqa: SLF001
+        account_blocks.reset_lock_seen()     # ACL-2668: this look decides afresh
         # ACL-2841: a tab is an address or an `(address, title)` pair; the title is Meta's own text for the lock.
         pairs = [(u, "") if isinstance(u, str) else (str(u[0]), str(u[1])) for u in urls]
         found = any([account_blocks.note_tab_url(key, label, u, action, t) for u, t in pairs])
@@ -566,6 +567,7 @@ def request_status_read(label: str) -> str:
             account_blocks.mark_person_open(key_)
         except Exception:  # noqa: BLE001
             log.debug("could not mark the person's open", exc_info=True)
+        # ACL-2668/2653: Open profile is the person's own press: the `open` read passes a held profile like Retry.
         got = account_refresh.queue().request(label, "open", force=True)
         reason = str(got.get("reason") or "")
         with _SKIP_LOCK:

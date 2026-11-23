@@ -57,10 +57,8 @@ def test_settings_show_the_effective_machine_value(monkeypatch):
     monkeypatch.setattr(ps, "read_memory", lambda: ps.MemoryReading(total_mb=16 * GB, available_mb=10 * GB))
     cur = rl.current()
     assert cur["ceiling"] == 4 and cur["defaults"]["ceiling"] == 4
-    # подтверждение и предупреждение — только выше того, что машина получает по памяти
-    assert cur["confirm_above"]["ceiling"] == 4
-    assert not [w for w in cur["warnings"] if "profiles at once" in w]
-    assert rl.warnings_for({"ceiling": 5, "memory_max_used_pct": 85}, 16 * GB)
+    # ACL-2694: подтверждений и предупреждений больше нет
+    assert "confirm_above" not in cur and "warnings" not in cur
 
 
 def test_machine_memory_is_read_once(monkeypatch):

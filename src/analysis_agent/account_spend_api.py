@@ -694,8 +694,7 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
                 account, WARM_MEMORY_NOTE if why in ("below_reserve", "memory_low", "memory_unknown")
                 else WARM_WAIT_NOTE))
         note_tab_recovered(key)
-        if _blocks.buyer_started():
-            _blocks.clear(key, "retry")      # ACL-2091: the page answered a person's Retry/Read: the hold is over
+        _blocks.lift_after_probe(key)      # ACL-2091/2668: the page answered a person's own action: the hold is over
     except _warm.WarmError as exc:
         raise ApiReadError(str(exc), code=exc.code) from exc
     except GraphStop as exc:
@@ -785,10 +784,11 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False, 
     # only right before it. If the action does not go through the warm path, the pause stands.
     frozen_deferred = left > 0 and why == "page_unresponsive" and frozen_tab_replaceable(key)
     # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab) is refused for everything
-    # except a read a person started on purpose (Retry / Read): that one looks at the page, and lifts the hold
-    # below once the page is healthy.
+    # except an action a person started on purpose (Retry / Read / Open / command / Check plan, ACL-2668): that one
+    # looks at the page, and lifts the hold below once the page is healthy.
     # ACL-2652: a person's own write may also pass a code-31 hold (one attempt; the hold is cleared only after Meta answers).
-    probing = left == float("inf") and (_blocks.buyer_started() or _blocks.person_auth_probe(key))
+    probing = left == float("inf") and ((_blocks.buyer_started() and not _blocks.lock_seen_now(key))
+                                        or _blocks.person_auth_probe(key))
     # ACL-2668 (decision 7): the timed pause after a Meta stop holds background reads only (schedule, page refreshes).
     # An action the person pressed (command, Read/Retry, Check plan) goes at once; the reason stays on the account row.
     person = _person_started()
@@ -897,8 +897,7 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False, 
             # Найдено на странице, ещё до клиента: охлаждение тоже (ревью S2).
             _start_cooldown(key, page_stop, account)
             raise page_stop
-        if _blocks.buyer_started():
-            _blocks.clear(key, "retry")      # ACL-2091: healthy page on a person's Retry/Read: the hold is over
+        _blocks.lift_after_probe(key)      # ACL-2091/2668: healthy page on a person's own action: the hold is over
         client = GraphClient(
             graph,
             allow_writes=bool(commands),
@@ -1472,6 +1471,7 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
     from src.fb_api.connection import user_started_action
 
     # ACL-2272: the person pressed the shut-off button, so this action may bring up a closed profile.
-    with user_started_action():
+    # ACL-2668: it is the person's own campaign change, so it probes a held profile like Retry.
+    with user_started_action(), _blocks.problem_action("command"):
         return _turn_off_locked(account, level, oid, parent_id=parent, expected_name=expected_name,
                                 requester=who, profile_busy=profile_busy)
