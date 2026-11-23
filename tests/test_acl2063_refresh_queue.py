@@ -97,7 +97,8 @@ def test_latest_failed_attempt_keeps_a_recent_success_from_hiding_retry(env, sta
                          "error": "The profile was opened by hand"}
     assert not ar.is_fresh("A", now=NOW)
     q = _queue(env)
-    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
+    # ACL-2668 #26: обычная неудача не ждёт часа — раскрытие читает сразу.
+    assert q.request("A", "attention") == {"queued": True, "reason": "queued"}
     assert env.snaps["A"] is cached and env.read == []
     assert q.request("A", "retry", force=True) == {"queued": True, "reason": "queued"}
     q._drain_once()
@@ -546,17 +547,26 @@ def test_timed_stop_in_the_store_expires_with_its_cooldown(env):
     assert q.state()["halt"] is None
 
 
-def test_recently_failed_account_is_not_reread_by_automatic_triggers(env):
-    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 600), "stop": ""}
+def test_failed_read_is_retried_by_expand_and_the_next_window_without_an_hour_wait(env):
+    # ACL-2668 #26: обычная неудача (сеть, таймаут, замена вкладки) не блокирует чтение на час.
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": ""}
     q = _queue(env)
-    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
-    assert q.request("A", "schedule", window="morning") == {"queued": False, "reason": "recent_failure"}
-    assert q.state()["queued"] == []
-    # Явный Retry читает.
+    assert q.request("A", "attention") == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert env.read == [("A", "attention")]
+    assert q.request("A", "schedule", window="morning")["queued"] is True
     assert q.request("A", "retry", force=True)["queued"] is True
-    # Старая неудача (старше часа) не мешает.
-    env.attempts["B"] = {"state": "failed", "at_utc": _iso(NOW - ar.FRESH_S - 5), "stop": ""}
-    assert q.request("B", "attention")["queued"] is True
+
+
+def test_held_profile_still_skips_automatic_reads_after_a_failure(env, monkeypatch):
+    # Удержание профиля (ACL-2091) не меняется: автоматика его не читает, Retry — читает.
+    monkeypatch.setattr(ar, "_profile_held", lambda account: account == "A")
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": "checkpoint"}
+    q = _queue(env)
+    assert q.request("A", "attention") == {"queued": False, "reason": "profile_held"}
+    assert q.request("A", "schedule", window="morning") == {"queued": False, "reason": "profile_held"}
+    assert q.state()["queued"] == []
+    assert q.request("A", "retry", force=True)["queued"] is True
 
 
 def test_freshness_is_rechecked_when_the_request_is_taken(env):
@@ -572,12 +582,13 @@ def test_freshness_is_rechecked_when_the_request_is_taken(env):
     assert env.read == [("A", "retry")]
 
 
-def test_failure_recorded_while_queued_is_rechecked_when_taken(env):
+def test_failure_recorded_while_queued_does_not_drop_the_request(env):
+    # ACL-2668 #26: неудача другого процесса, пока заявка стояла, её не снимает.
     q = _queue(env)
     q.request("A", "attention")
     env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 5), "stop": ""}
     q._drain_once()
-    assert env.read == []
+    assert env.read == [("A", "attention")]
 
 
 def test_cooldown_from_text_is_not_shorter_than_the_table():

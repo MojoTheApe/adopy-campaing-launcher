@@ -2,7 +2,7 @@
 """ACL-2790: профиль, поднятый чтением, не закрывается, пока на аккаунте стоит действие.
 
 Первая часть — решение «закрыть / оставить» на подменённой очереди. Вторая (раунд 3) — живая
-`ProfileSlots` с `kept_idle_close_s` по умолчанию (600 с) и потолком 2: окно, оставленное «для
+`ProfileSlots` с `kept_idle_close_s` по умолчанию (0 с — ACL-2686) и потолком 2: окно, оставленное «для
 удобства» после API-чтения или команды покупателя, уступает место любому заданию сразу.
 """
 from __future__ import annotations
@@ -153,7 +153,7 @@ def test_a_queue_that_cannot_keep_falls_back_to_the_close(world, monkeypatch):
 # ───────────────── раунд 3: живая очередь, `kept_idle_close_s` по умолчанию ─────────────────
 
 def _live_rig(monkeypatch, tmp_path, accounts):
-    """Стенд test_acl1760 + настоящая `ProfileSlots` (потолок 2, 600 с) и вытеснитель как в проде.
+    """Стенд test_acl1760 + настоящая `ProfileSlots` (потолок 2, 0 с) и вытеснитель как в проде.
 
     Вытеснитель, как `publish_jobs._evict_kept_window`, берёт замок профиля без ожидания:
     окно, которым ещё пользуется чтение/команда, закрыть нельзя («busy»).
@@ -173,8 +173,8 @@ def _live_rig(monkeypatch, tmp_path, accounts):
 
     monkeypatch.setenv(backend.BACKEND_ENV, "api")   # ACL-2785: the default backend (the stand sets rpa)
     settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=2)
-    assert settings.kept_idle_close_s == ps.DEFAULT_KEPT_IDLE_CLOSE_S == 600.0
-    rig = SimpleNamespace(open=set(), starts=[], evicted=[], busy=[], settings=settings, api=api, low=False)
+    assert settings.kept_idle_close_s == ps.DEFAULT_KEPT_IDLE_CLOSE_S == 0.0   # ACL-2686: a kept window yields at once
+    rig = SimpleNamespace(open=set(), starts=[], evicted=[], busy=[], settings=settings, api=api, low=False, tight=False)
     usage = ps.ProfileUsage(lambda profiles: {p: 3000 for p in profiles if p in rig.open},
                             clock=lambda: 1000.0, background=False)
 
@@ -191,7 +191,7 @@ def _live_rig(monkeypatch, tmp_path, accounts):
             lease.release()
 
     def memory():
-        return ps.MemoryReading(total_mb=64000, available_mb=500 if rig.low and rig.open else 60000)
+        return ps.MemoryReading(total_mb=64000, available_mb=500 if (rig.low and rig.open) or (rig.tight and len(rig.open) >= 2) else 60000)
 
     ticks = iter(range(10 ** 9))
     rig.queue = ps.ProfileSlots(memory=memory, settings=lambda: settings,
@@ -264,6 +264,7 @@ def test_live_two_commands_then_read_all_never_blocks(monkeypatch, tmp_path):
     assert len(_kept(rig)) == 2 and rig.evicted == [], "both command windows kept for convenience"
 
     results: dict[str, str] = {}
+    rig.tight = True   # ACL-2686: kept windows take no slot; only a memory shortage closes them
 
     def read_all():
         threads = [threading.Thread(target=lambda n=n: results.__setitem__(n, _read(rig, n)), daemon=True)
@@ -320,6 +321,7 @@ def test_live_round2_repro_action_sessions_then_plain_read(monkeypatch, tmp_path
     for name in ("Acc1", "Acc2"):
         _in_thread(lambda name=name: action_session(name))
     assert len(_kept(rig)) == 2
+    rig.tight = True   # ACL-2686: kept windows take no slot; only a memory shortage closes them
     assert _in_thread(lambda: _read(rig, "Acc3"), timeout=10) == "ok"
     assert rig.evicted == ["Acc1"], "the least recently used kept window made room"
 
@@ -346,6 +348,7 @@ def test_live_window_still_under_its_lock_is_retried_not_parked(monkeypatch, tmp
         threading.Event().wait(0.01)
     # `threading.Timer` стенд World подменяет — освобождаем замки обычным потоком.
     threading.Thread(target=lambda: (threading.Event().wait(0.5), free.set()), daemon=True).start()
+    rig.tight = True   # ACL-2686: kept windows take no slot; only a memory shortage closes them
     assert _in_thread(lambda: _read(rig, "Acc3"), timeout=8) == "ok"
     assert rig.busy and rig.evicted, "tried while busy, closed as soon as the lock was free"
 
