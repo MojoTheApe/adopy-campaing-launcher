@@ -1435,7 +1435,7 @@ class WarmRegistry:
         finally:
             sess.lock.release()
         log.info("warm: profile of %s closed on request", label)
-        return _result(True, "Closed. It can be started again in about 3 minutes.", "closed")
+        return _result(True, "Closed.", "closed")
 
     # -- аренда вкладки
     def checkout(self, profile_id: str, *, account: str, act: str, mode: str,

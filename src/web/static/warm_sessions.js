@@ -299,18 +299,14 @@
   function openProfiles(grid) {
     var p = picked(grid);
     var rows = p.ticked.length ? p.ticked : p.rows;
-    var accounts = rows.map(function (r) { return r.account; });
-    if (rows.length <= 3) { runOpen(grid, accounts); return; }
-    window.aclConfirm('They open one after another and stay open.',
-      { title: 'Start ' + rows.length + ' Multilogin profiles?', okLabel: 'Start' })
-      .then(function (yes) { if (yes) runOpen(grid, accounts); });
+    // ACL-2668 #32: без подтверждения при любом числе аккаунтов — кнопка сама и есть намерение
+    runOpen(grid, rows.map(function (r) { return r.account; }));
   }
 
   function runClose(grid, labels) {
     if (!labels.length) { say(grid, 'Tick the accounts whose profiles to close.', true); return; }
     window.aclConfirm('Only profiles that this dashboard opened are closed, '
-      + 'gently, through Multilogin. Anything opened another way stays open. A closed profile can be '
-      + 'started again after about 3 minutes.',
+      + 'gently, through Multilogin. Anything opened another way stays open.',
       { title: 'Close ' + labels.length + ' profile(s)?', okLabel: 'Close profiles' })
       .then(function (ok) { if (ok) closeNow(grid, labels); });
   }
