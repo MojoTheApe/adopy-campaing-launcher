@@ -37,8 +37,11 @@ def test_no_spend_is_unknown():
 def test_stale_by_age_and_flag():
     old = A.account_state(row({"status": "restricted", "at": "2026-10-31T10:00:00"}), TODAY)
     assert old["stale"] and old["age_days"] == 4 and old["read_short"] == "31.10"
-    fresh = A.account_state(row({"status": "restricted", "at": "2026-11-03T10:00:00"}), TODAY)
+    fresh = A.account_state(row({"status": "restricted", "at": "2026-11-04T08:00:00"}), TODAY)
     assert not fresh["stale"]
+    # ACL-2668: одно правило свежести — 24 ч, а не трое суток.
+    day_old = A.account_state(row({"status": "restricted", "at": "2026-11-03T10:00:00"}), TODAY)
+    assert day_old["stale"]
     flagged = A.account_state(row({"status": "restricted", "at": "2026-11-04T10:00:00", "stale": "1"}), TODAY)
     assert flagged["stale"]
 
@@ -98,10 +101,47 @@ def test_spend_never_read_is_active_by_spend():
 
 
 def test_last_clear_then_failed_read_is_active_not_refreshed():
-    st = _fail(status="clear", at="2026-11-03 10:00:00", source="api")
+    st = _fail(status="clear", at="2026-11-04 08:00:00", source="api")
     s = A.account_state(row(st, 0, False, act_id="act_1"), TODAY)
     assert s["key"] == "active"
-    assert s["status_line"] == "status not refreshed · last read 03.11 10:00"
+    assert s["status_line"] == "status not refreshed · last read 04.11 08:00"
+    assert s["read_ago"] == ""
+
+
+# --- ACL-2668 (decision 25): one 24 h freshness rule, read age next to Active -------
+def test_clear_older_than_24h_without_spend_is_not_active():
+    # Раньше `clear` держался зелёным трое суток (B93, #1661); теперь — не дольше 24 ч.
+    st = _fail(status="clear", at="2026-11-03 10:00:00", source="api")
+    s = A.account_state(row(st, 0, False, act_id="act_1"), TODAY)
+    assert s["key"] == "unknown" and s["read_ago"] == ""
+    no_fail = A.account_state(row({"status": "clear", "at": "2026-11-03 10:00:00", "source": "api"},
+                                  0, False, act_id="act_1"), TODAY)
+    assert no_fail["key"] == "unknown"
+
+
+def test_single_freshness_constant():
+    from src.analysis_agent import status_resolve as R
+    assert A.STATUS_FRESH_HOURS is R.STATUS_FRESH_HOURS == 24
+    assert not hasattr(A, "STATE_STALE_DAYS")
+
+
+def test_fresh_active_shows_read_age():
+    s = A.account_state(row({"status": "clear", "at": "2026-11-04 08:00:00", "source": "api"}, 5, True), TODAY)
+    assert s["key"] == "active" and s["read_ago"] == "4h ago"
+    assert "04.11 08:00" in s["status_tip"]
+
+
+def test_active_by_spend_has_no_read_age():
+    s = A.account_state(row({}, 5, True, act_id="act_1"), TODAY)
+    assert s["key"] == "active" and s["by_spend"] and s["read_ago"] == ""
+
+
+def test_read_ago_words():
+    assert A.read_ago(None) == ""
+    assert A.read_ago(0.001) == "just now"
+    assert A.read_ago(0.5) == "30m ago"
+    assert A.read_ago(3.9) == "3h ago"
+    assert A.read_ago(23.99) == "23h ago"
 
 
 def test_heavy_status_still_beats_spend_even_when_read_failed():

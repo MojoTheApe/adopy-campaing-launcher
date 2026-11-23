@@ -1,0 +1,9 @@
+{
+  "name": "acl-hub",
+  "private": true,
+  "type": "module",
+  "description": "ACL telemetry hub: machine batches -> D1, derived runs/jobs/machines. No dependencies.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  }
+}

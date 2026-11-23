@@ -141,6 +141,8 @@ class Dashboard:
 @pytest.fixture
 def dashboard(tmp_path, monkeypatch):
     from src.web import app as web
+    from src.fb_api import account_blocks
+    monkeypatch.setattr(account_blocks, '_PATH_OVERRIDE', tmp_path / 'account_holds.json')    # never the machine's real holds
     site = Dashboard(web, monkeypatch, tmp_path)
     with sync_playwright() as pw:
         browser = launch_chromium(pw)
@@ -156,7 +158,16 @@ def dashboard(tmp_path, monkeypatch):
 
 
 def wait_ready(page):
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc && document.querySelector('.amap-campaigns')._hc.state.rows.Acc")
+    # ACL-2742: сразу после смены адреса predicate попадает в новый документ до
+    # разбора <body>, где `.amap-campaigns` ещё нет, — отсюда «reading '_hc'» у null.
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.rows?.Acc")
+
+
+def apply_period(page, day, span=''):
+    # amapApply переходит по адресу (location.href): ждём именно этот переход,
+    # иначе wait_ready проходит на СТАРОМ документе и тест гонится с загрузкой нового.
+    with page.expect_navigation():
+        page.evaluate("([f, s])=>amapApply(f, f, s)", [day, span])
 
 
 def test_ten_date_changes_rejoin_workbook_keep_structure_and_open_zero_profiles(dashboard):
@@ -164,12 +175,13 @@ def test_ten_date_changes_rejoin_workbook_keep_structure_and_open_zero_profiles(
     goto(page, 'http://acl.test/?view_only=1')
     wait_ready(page)
     for day in range(1, 10):
-        page.evaluate('(d)=>amapApply(d,d,\'\')', f'2026-10-{day:02d}')
+        apply_period(page, f'2026-10-{day:02d}')
         wait_ready(page)
         open_acc(page, 'Acc')
         row = page.locator('tr[data-key="campaign:2"]')
         assert row.count() == 1 and f'${day:.2f}' in row.inner_text()
-    page.evaluate("amapApply('','','all')")
+    with page.expect_navigation():
+        page.evaluate("amapApply('','','all')")
     wait_ready(page)
     open_acc(page, 'Acc')
     assert '$999.00' in page.locator('tr[data-key="campaign:2"]').inner_text()
@@ -225,25 +237,22 @@ def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashbo
     assert not retry.is_visible() and site.errors == []
 
 
-def test_global_checkpoint_has_one_banner_and_only_explicit_same_account_retry_resumes(dashboard):
+def test_checkpoint_shows_on_its_account_only_and_other_reads_continue(dashboard):
+    # ACL-2661: a checkpoint holds only its own account. No page banner, no machine-wide halt.
     site, page = dashboard
     site.checkpoint.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
     goto(page, 'http://acl.test/'); wait_ready(page)
-    banner = page.locator('#account-refresh-status[role=alert]')
-    banner.wait_for(state='visible')
-    assert 'checkpoint' in banner.inner_text().lower()
-    assert page.locator('#account-refresh-status').count() == 1
-    assert [a for a, _ in site.reads] == ['Acc']
-    assert site.q.state()['queued'] == [{'account': 'Fresh', 'trigger': 'schedule:2026-10-24/08:00'}]
-    assert site.q.state()['sweep']['done'] == 1
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
+    assert sorted(a for a, _ in site.reads) == ['Acc', 'Fresh']
+    assert site.q.state()['halt'] is None
+    assert page.locator('#account-refresh-status[role=alert]').count() == 0
+    assert page.locator('#account-lock-status').count() == 0
     site.checkpoint.clear()
     page.locator('tr:has(td[data-account="Acc"]) button.hc-rc').click()
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
-    assert [a for a, _ in site.reads] == ['Acc', 'Acc', 'Fresh']
-    assert site.reads[1] == ('Acc', 'retry')
-    assert site.q.state()['halt'] is None and site.q.state()['sweep']['done'] == 2
-    assert banner.is_hidden() and site.errors == []
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    assert [r for r in site.reads if r[0] == 'Acc'][-1] == ('Acc', 'retry')
+    assert [a for a, _ in site.reads].count('Fresh') == 1 and site.errors == []
 
 
 @pytest.mark.parametrize('width', [1280, 390])

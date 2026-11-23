@@ -1,0 +1,301 @@
+[
+ {
+  "event_id": "stream-yotam:1",
+  "stream_id": "stream-yotam",
+  "seq": 1,
+  "schema_version": 1,
+  "type": "job.created",
+  "ts": "2026-11-16T15:36:08.194+00:00",
+  "tz_machine": 120,
+  "machine_id": "m-yotam",
+  "machine": "Yotam Balteriski",
+  "manager": "Yotam Balteriski",
+  "flow_version": "v96@e986bd146a69",
+  "channel": "prod",
+  "job_id": "job-yotam-h23",
+  "account": "KLD_BFL_H23",
+  "campaign": null,
+  "payload": {
+   "campaign_names": [
+    "CL_ML_All_Video_CL_HV_TRD_35_16.11",
+    "CL_ML_All_Video_CL_HV_TRD_40_16.11",
+    "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+    "CL_ML_All_Video_CL_HV_TRD_50_16.11"
+   ],
+   "country": "CL",
+   "dry_run": false,
+   "fb_backend": "api",
+   "reviewed": true
+  }
+ },
+ {
+  "event_id": "stream-yotam:2",
+  "stream_id": "stream-yotam",
+  "seq": 2,
+  "schema_version": 1,
+  "type": "job.started",
+  "ts": "2026-11-16T15:36:08.508+00:00",
+  "tz_machine": 120,
+  "machine_id": "m-yotam",
+  "machine": "Yotam Balteriski",
+  "manager": "Yotam Balteriski",
+  "flow_version": "v96@e986bd146a69",
+  "channel": "prod",
+  "job_id": "job-yotam-h23",
+  "account": "KLD_BFL_H23",
+  "campaign": null,
+  "payload": {
+   "slot_wait_s": 0.0,
+   "started_ahead": false
+  }
+ },
+ {
+  "event_id": "stream-yotam:3",
+  "stream_id": "stream-yotam",
+  "seq": 3,
+  "schema_version": 1,
+  "type": "publish.spec",
+  "ts": "2026-11-16T15:55:00.836+00:00",
+  "tz_machine": 120,
+  "machine_id": "m-yotam",
+  "machine": "Yotam Balteriski",
+  "manager": "Yotam Balteriski",
+  "flow_version": "v96@e986bd146a69",
+  "channel": "prod",
+  "job_id": "job-yotam-h23",
+  "account": "KLD_BFL_H23",
+  "campaign": "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+  "payload": {
+   "campaign_name": "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+   "country": "CL",
+   "daily_budget": 0.0,
+   "adsets": [
+    {
+     "index": 1,
+     "name": "CL_ML_All_Video_CL_HV_TRD_45_16.11"
+    }
+   ],
+   "ads": [
+    {
+     "index": 1,
+     "name": "2543 1 - P2 ML",
+     "kind": "video"
+    },
+    {
+     "index": 2,
+     "name": "2543 1 - Pro Mercado Libre",
+     "kind": "video"
+    },
+    {
+     "index": 3,
+     "name": "2543 1 - P2 ML 2",
+     "kind": "video"
+    },
+    {
+     "index": 4,
+     "name": "2543 1 - Story14",
+     "kind": "video"
+    },
+    {
+     "index": 5,
+     "name": "2543 1 - ES Story3",
+     "kind": "video"
+    },
+    {
+     "index": 6,
+     "name": "2543 1 - ES Story1",
+     "kind": "video"
+    }
+   ],
+   "spec_hash": "208debcd84367b3db1efe7527dd982b28769a5beb0889b4e44e929f3a820d782"
+  }
+ },
+ {
+  "event_id": "stream-yotam:4",
+  "stream_id": "stream-yotam",
+  "seq": 4,
+  "schema_version": 1,
+  "type": "publish.stats",
+  "ts": "2026-11-16T16:00:45.396+00:00",
+  "tz_machine": 120,
+  "machine_id": "m-yotam",
+  "machine": "Yotam Balteriski",
+  "manager": "Yotam Balteriski",
+  "flow_version": "v96@e986bd146a69",
+  "channel": "prod",
+  "job_id": "job-yotam-h23",
+  "account": "KLD_BFL_H23",
+  "campaign": "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+  "payload": {
+   "ad_media": {},
+   "calls": 85,
+   "campaign_name": "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+   "duration_s": 344.6,
+   "mismatches": [],
+   "published_as": "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+   "raised": null,
+   "spec_hash": "208debcd84367b3db1efe7527dd982b28769a5beb0889b4e44e929f3a820d782",
+   "stop_kind": "checkpoint",
+   "tag": "c26ff2eb0e84",
+   "writes": 257
+  }
+ },
+ {
+  "event_id": "stream-yotam:5",
+  "stream_id": "stream-yotam",
+  "seq": 5,
+  "schema_version": 1,
+  "type": "publish.result",
+  "ts": "2026-11-16T16:00:45.419+00:00",
+  "tz_machine": 120,
+  "machine_id": "m-yotam",
+  "machine": "Yotam Balteriski",
+  "manager": "Yotam Balteriski",
+  "flow_version": "v96@e986bd146a69",
+  "channel": "prod",
+  "job_id": "job-yotam-h23",
+  "account": "KLD_BFL_H23",
+  "campaign": "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+  "payload": {
+   "ad_ids": [],
+   "adset_id": "1000000000000001",
+   "adset_ids": [
+    "1000000000000001"
+   ],
+   "blocking_failures": [
+    "not finished: Graph API stopped: The account needs to fix an issue on facebook.com (checkpoint). Open the account in its browser profile, resolve the prompt on facebook.com, then retry. What was already created stays in Meta (campaign PAUSED); \"Publish again\" reuses it and does not create duplicates. Not created: ad 1, ad 2, ad 3, ad 4, ad 5, ad 6."
+   ],
+   "campaign_id": "1000000000000001",
+   "campaign_name": "CL_ML_All_Video_CL_HV_TRD_45_16.11",
+   "created": {
+    "adsets": 1,
+    "campaign": 1,
+    "videos": 1
+   },
+   "creative_ids": [],
+   "error": "Graph API stopped: The account needs to fix an issue on facebook.com (checkpoint). Open the account in its browser profile, resolve the prompt on facebook.com, then retry. What was already created stays in Meta (campaign PAUSED); \"Publish again\" reuses it and does not create duplicates. Not created: ad 1, ad 2, ad 3, ad 4, ad 5, ad 6.",
+   "manual_required": [],
+   "problems": [
+    {
+     "action": "Open the account in its browser profile, resolve the prompt on facebook.com, then retry.",
+     "impact": "",
+     "raw": "code 190/459: the session is on a Facebook checkpoint (190/459)",
+     "severity": "blocking",
+     "step": "graph_error",
+     "title": "The account needs to fix an issue on facebook.com (checkpoint)."
+    }
+   ],
+   "publishable": false,
+   "published_as": "",
+   "readback": {},
+   "reused": {},
+   "status": "PAUSED",
+   "steps_completed": [
+    "preflight: targeting resolved",
+    "preflight: Instagram account of the Page found (Page-backed)",
+    "video upload: originals go up from the helper of a separate tab without a service worker in the profile (no compression)",
+    "preflight: creatives read",
+    "preflight: Meta rules registry",
+    "campaign: created PAUSED, tag kept",
+    "ad set 'CL_ML_All_Video_CL_HV_TRD_45_16.11': created ACTIVE (campaign PAUSED), tag kept",
+    "ad 1: chunked upload started (179 MB)",
+    "ad 1: Meta upload window 1.0 MB at 0 MB",
+    "ad 1: Meta upload window 5.0 MB at 1 MB",
+    "ad 1: uploaded 16/179 MB",
+    "ad 1: uploaded 31/179 MB",
+    "ad 1: uploaded 46/179 MB",
+    "ad 1: uploaded 61/179 MB",
+    "ad 1: uploaded 81/179 MB",
+    "ad 1: uploaded 101/179 MB",
+    "ad 1: uploaded 116/179 MB",
+    "ad 1: uploaded 131/179 MB",
+    "ad 1: uploaded 146/179 MB",
+    "ad 1: uploaded 161/179 MB",
+    "ad 1: Meta upload window 3.6 MB at 176 MB",
+    "ad 1: uploaded 176/179 MB",
+    "ad 1: video uploaded",
+    "ad 1: video processed",
+    "ad 1 Stories / Reels file: chunked upload started (177 MB)",
+    "ad 1 Stories / Reels file: Meta upload window 1.0 MB at 0 MB",
+    "ad 1 Stories / Reels file: Meta upload window 5.0 MB at 1 MB",
+    "ad 1 Stories / Reels file: uploaded 16/177 MB",
+    "ad 1 Stories / Reels file: uploaded 31/177 MB",
+    "ad 1 Stories / Reels file: uploaded 51/177 MB",
+    "ad 1 Stories / Reels file: uploaded 66/177 MB",
+    "ad 1 Stories / Reels file: uploaded 81/177 MB",
+    "ad 1 Stories / Reels file: uploaded 96/177 MB",
+    "ad 1 Stories / Reels file: uploaded 116/177 MB",
+    "ad 1 Stories / Reels file: uploaded 131/177 MB",
+    "ad 1 Stories / Reels file: uploaded 146/177 MB"
+   ],
+   "success": false,
+   "warnings": [
+    "Ad 3 named '2543 1 - P2 ML 2' because Ad 1 has the same creative and text",
+    "Automatic Facebook Page: the first available page of this ad account is used"
+   ]
+  }
+ },
+ {
+  "event_id": "stream-yotam:6",
+  "stream_id": "stream-yotam",
+  "seq": 6,
+  "schema_version": 1,
+  "type": "publish.result",
+  "ts": "2026-11-16T16:00:45.432+00:00",
+  "tz_machine": 120,
+  "machine_id": "m-yotam",
+  "machine": "Yotam Balteriski",
+  "manager": "Yotam Balteriski",
+  "flow_version": "v96@e986bd146a69",
+  "channel": "prod",
+  "job_id": "job-yotam-h23",
+  "account": "KLD_BFL_H23",
+  "campaign": "CL_ML_All_Video_CL_HV_TRD_50_16.11",
+  "payload": {
+   "ad_ids": [],
+   "adset_id": null,
+   "adset_ids": [],
+   "blocking_failures": [],
+   "campaign_id": null,
+   "campaign_name": "CL_ML_All_Video_CL_HV_TRD_50_16.11",
+   "created": {},
+   "creative_ids": [],
+   "error": "Not started: Graph API stopped earlier (checkpoint). Nothing was created for it.",
+   "manual_required": [],
+   "problems": [],
+   "publishable": false,
+   "published_as": "",
+   "readback": {},
+   "reused": {},
+   "status": "",
+   "steps_completed": [],
+   "success": false,
+   "warnings": []
+  }
+ },
+ {
+  "event_id": "stream-yotam:7",
+  "stream_id": "stream-yotam",
+  "seq": 7,
+  "schema_version": 1,
+  "type": "job.finished",
+  "ts": "2026-11-16T16:00:45.462+00:00",
+  "tz_machine": 120,
+  "machine_id": "m-yotam",
+  "machine": "Yotam Balteriski",
+  "manager": "Yotam Balteriski",
+  "flow_version": "v96@e986bd146a69",
+  "channel": "prod",
+  "job_id": "job-yotam-h23",
+  "account": "KLD_BFL_H23",
+  "campaign": null,
+  "payload": {
+   "cancelled": false,
+   "created_at": "2026-11-16T15:36:08.183129+00:00",
+   "duration_s": 1476.9,
+   "finished_at": "2026-11-16T16:00:45.444773+00:00",
+   "started_at": "2026-11-16T15:36:08.498508+00:00",
+   "status": "done"
+  }
+ }
+]

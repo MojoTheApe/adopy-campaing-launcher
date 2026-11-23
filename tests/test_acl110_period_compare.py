@@ -286,7 +286,7 @@ def test_build_compare_uses_the_report_and_map_of_the_earlier_period(monkeypatch
         seen["period"] = (a, b)
         return _prev_report()
 
-    def fake_map(report, df, a, b, span):
+    def fake_map(report, df, a, b, span, **_kw):
         seen["map"] = (a, b, span)
         return _prev_amap()
 

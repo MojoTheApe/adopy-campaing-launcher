@@ -40,15 +40,19 @@ fail rather than returning partial or empty state.
 
 ## Size, cache and writes
 
-The encoder normally rotates above750KiB and requires a live representation at
-most1MiB. Active data that cannot fit causes a measured refusal without discarding
+The encoder reuses the immutable archive while the live representation fits
+within1MiB. Rotation targets750KiB; active records may legitimately keep the result
+above that target, so it is not the next rotation trigger. Ordinary writes upload
+only the live envelope, retaining the same archive pointer. Active data that cannot
+fit causes a measured refusal without discarding
 records. Each immutable archive is bounded at48MiB. A verified private cache at
 `$XDG_CACHE_HOME/task-tracker/state-archive` (or the user's `.cache` directory)
 avoids repeated archive downloads. Cache absence or corruption cannot establish
 authority; cold reads still fetch and restore the full history.
 
 Ordinary writes retain the existing file-SHA compare-and-swap check. Rotation
-commits archive and live state together against a fresh branch tree, then advances
+checks the expected state SHA before uploading either blob, commits archive and
+live state together against a fresh branch tree, then advances
 the branch without force. A neighboring activity-file update is preserved. A real
 state change aborts; a lost write response is reconciled by supported readback,
 never a blind replay. Each native store retains codec context for the actual

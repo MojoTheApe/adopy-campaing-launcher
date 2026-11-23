@@ -4,6 +4,7 @@ Three machine settings live in the machine `.env` and are applied to the running
 process at once (`update_machine_env` also sets `os.environ`):
 
 * `ACL_MAX_PROFILES`        - how many Multilogin profiles run at once (the ceiling);
+                              unset - by machine memory (ACL-2668, `profile_slots.ceiling_for_memory`);
 * `ACL_WARM_MAX_HEAVY`      - how many heavy account actions run at once;
 * `ACL_MEMORY_MAX_USED_PCT` - the share of memory in use above which no new profile starts.
 
@@ -42,7 +43,7 @@ class RunLimitError(ValueError):
 
 def defaults() -> dict[str, float | int]:
     from src.web import profile_slots as ps
-    return {"ceiling": ps.DEFAULT_CEILING, "warm_heavy": 1,
+    return {"ceiling": ps.default_ceiling(), "warm_heavy": 1,
             "memory_max_used_pct": ps.DEFAULT_MAX_USED_PCT}
 
 
