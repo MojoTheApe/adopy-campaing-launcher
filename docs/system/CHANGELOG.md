@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2695 — Retry a failed account read on expand and in the next window — 2026-11-23
+
+An ordinary failed read (network, timeout, replaced tab) no longer blocks the account for an hour: expanding it reads it again at once, and the next 08/13/18 window reads it as well. A held profile (ACL-2091) is still skipped by every automatic read; only a person's Retry reaches it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1695).
+
+## ACL-2686 — A kept profile window takes no slot and defers nothing — 2026-11-23
+
+A kept convenience profile window (after a clean publish, Check plan, read or command) no longer counts against "Profiles at once" and no longer defers the scheduled sweep or the report rebuild; only running or waiting jobs do. It closes at once when a job is short of memory; `ACL_KEPT_IDLE_CLOSE_MIN` stays an override. Review windows keep their slot. Multilogin log out/repair still sees kept windows.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1686).
+
+## ACL-2683 — Lead forms: create right away after a lost Meta answer — 2026-11-23
+
+If Meta never answered a lead form write and the form list does not show it, the next Publish no longer waits: it creates the form at once under the name "<template> copy N". A duplicate is acceptable; the copy is matched as our own form on later runs.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1683).
+
 ## ACL-2693 — One 24 h freshness rule for account status, show read age — 2026-11-23
 
 Home now uses the same 24 h freshness rule as Manage: a clear read older than 24 h is not shown as fresh Active. A fresh Active status shows its read age next to the word, e.g. "Active · 3h ago".

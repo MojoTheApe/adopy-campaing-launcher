@@ -77,30 +77,64 @@ class FormStep:
                 "form_id": self.existing_id or self.form_id}
 
 
-def match_existing(read: _forms.FormsRead, tpl: dict[str, Any]) -> tuple[str, str]:
-    """Своя форма по ТОЧНОМУ имени -> (id ACTIVE-формы, причина отказа).
+#: Слово дубля формы, как у кампаний (`creator.COPY_WORD`; оттуда не импортировать - цикл).
+COPY_WORD = " copy "
 
-    Форма с таким именем, но не ACTIVE (архив), не переиспользуется и не
-    дублируется: человек сам решает (вернуть форму или поменять шаблон).
+
+def copy_form_name(tpl: dict[str, Any], n: int) -> str:
+    """Имя дубля формы: «<шаблон> copy N · ACL <хэш>» - метка робота остаётся в конце (политика записи)."""
+    if n <= 0:
+        return ft.form_name(tpl)
+    return f"{tpl['name']}{COPY_WORD}{n} · ACL {ft.content_hash(tpl)}"
+
+
+def copy_number(name: str, tpl: dict[str, Any]) -> int:
+    """Номер копии в имени формы шаблона: 0 - само имя шаблона, -1 - чужое имя."""
+    if name == ft.form_name(tpl):
+        return 0
+    prefix, suffix = f"{tpl['name']}{COPY_WORD}", f" · ACL {ft.content_hash(tpl)}"
+    if not (name.startswith(prefix) and name.endswith(suffix)):
+        return -1
+    mid = name[len(prefix):len(name) - len(suffix)]
+    return int(mid) if mid.isdigit() and int(mid) > 0 else -1
+
+
+def _family(read: _forms.FormsRead, tpl: dict[str, Any]) -> list[tuple[int, Any]]:
+    """Формы шаблона на Странице: точное имя и его дубли «copy N» (ACL-2668), с номером копии."""
+    return [(n, f) for f in read.forms for n in (copy_number(f.name, tpl),) if n >= 0]
+
+
+def match_existing(read: _forms.FormsRead, tpl: dict[str, Any]) -> tuple[str, str]:
+    """Своя форма по имени шаблона или его дублю «copy N» -> (id ACTIVE-формы, причина отказа).
+
+    Сначала точное имя, затем дубль с меньшим номером (ACL-2668: дубль после потерянного
+    ответа Meta - тоже своя форма). Формы семьи есть, но ни одной ACTIVE (архив): не
+    переиспользуется и не дублируется - человек сам решает (вернуть форму или поменять шаблон).
     """
     name = ft.form_name(tpl)
-    same = [f for f in read.forms if f.name == name]
-    active = sorted((f for f in same if f.usable), key=lambda f: f.id)
+    same = _family(read, tpl)
+    active = sorted(((n, f) for n, f in same if f.usable), key=lambda nf: (nf[0], nf[1].id))
     if active:
-        return active[0].id, ""
+        return active[0][1].id, ""
     if same:
-        return "", (f"A form named {name!r} already exists on the Page but is "
-                    f"{same[0].status.lower() or 'not active'}. Restore it in Meta or change the template "
+        first = min(same, key=lambda nf: nf[0])[1]
+        return "", (f"A form named {first.name!r} already exists on the Page but is "
+                    f"{first.status.lower() or 'not active'}. Restore it in Meta or change the template "
                     "(a changed template gets a new form name)")
     return "", ""
 
 
-def compare_form(tpl: dict[str, Any], page_id: str, row: dict[str, Any]) -> list[str]:
-    """Прочитанная форма против шаблона: пустой список - всё совпало."""
+def next_copy_name(read: _forms.FormsRead, tpl: dict[str, Any]) -> str:
+    """Имя нового дубля формы (ACL-2668): «<шаблон> copy N · ACL <хэш>», N - следующий после уже видимых."""
+    return copy_form_name(tpl, max([n for n, _f in _family(read, tpl)], default=0) + 1)
+
+
+def compare_form(tpl: dict[str, Any], page_id: str, row: dict[str, Any], name: str = "") -> list[str]:
+    """Прочитанная форма против шаблона: пустой список - всё совпало. `name` - имя дубля «copy N», если он."""
     bad: list[str] = []
     if not isinstance(row, dict) or not row.get("id"):
         return ["the form could not be read back"]
-    if str(row.get("name") or "") != ft.form_name(tpl):
+    if str(row.get("name") or "") != (name or ft.form_name(tpl)):
         bad.append("name")
     if str(row.get("status") or "").upper() != _forms.USABLE_STATUS:
         bad.append(f"status is {row.get('status')!r}, expected ACTIVE")
@@ -247,15 +281,14 @@ def refused_message(exc: Exception, tpl: dict[str, Any] | None = None) -> str:
     return MSG_REFUSED.format(why=text[:300])
 
 
-# ───────────────── «форма ещё появляется»: метка после неизвестного результата ─────────────────
+# ───────────────── «ответ Meta потерян»: метка после неизвестного результата ─────────────────
 #
-# Запись формы оборвалась (`WriteUnknown`), список форм её ещё не показывает. Повторный
-# запуск за это время создал бы вторую форму: помним (кабинет, Страница, имя, время) локально.
+# Запись формы оборвалась (`WriteUnknown`), список форм её ещё не показывает. Повторный запуск
+# НЕ ждёт (ACL-2668, решение владельца 16.11: публикация важнее блокировки): создаёт форму
+# сразу, под именем «<шаблон> copy N · ACL <хэш>», чтобы дубль был виден. Метка (кабинет, Страница, имя, время)
+# нужна только для этого имени; не записалась - публикуем всё равно.
 
-PENDING_WINDOW_S = 15 * 60
-MSG_NO_STATE = ("Couldn't record the form state locally - not creating a form. "
-                "Check that the ACL data folder is writable, then run again")
-MSG_PENDING = ("A form with this name may still be appearing at Meta - Publish again")
+PENDING_WINDOW_S = 24 * 60 * 60     # старше суток метка уже ничего не говорит: форма бы появилась
 
 
 def pending_path() -> Path:
@@ -295,7 +328,7 @@ def _pending_save(data: dict[str, float]) -> None:
 
 
 def record_pending(act: str, page_id: str, form_name: str) -> None:
-    """Записать метку ДО отправки формы. `OSError` - метку сохранить не удалось: формы не создаём."""
+    """Записать метку ДО отправки формы. `OSError` наружу; вызывающий его глотает (только имя дубля)."""
     now = time.time()
     data = {k: v for k, v in _pending_load().items() if now - v < PENDING_WINDOW_S}
     data[_pending_key(act, page_id, form_name)] = now

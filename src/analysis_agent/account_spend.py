@@ -1344,8 +1344,8 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         return
     if keep_for_next and convenience and opened.slot_id:
         # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
-        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
-        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        # окном: Publish берёт его место (`_reuse_kept`), а вытеснение решает очередь
+        # (LRU; ACL-2668 — место не занимает и уступает сразу при нехватке памяти). Своего таймера нет.
         try:
             _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
         except Exception:
