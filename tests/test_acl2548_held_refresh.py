@@ -94,3 +94,16 @@ def test_a_refused_read_does_not_raise_a_global_halt(env, held):
     q._drain_once()
     assert q.state().get("halt") in (None, {}) or not q._halt
     assert q._halt is None
+
+
+def test_a_held_profile_with_a_recent_failure_is_still_skipped_everywhere(env, held):
+    # ACL-2695: dropping the "recently failed" wait must not drop the hold (ACL-2091) at any queue site.
+    env.attempts[HELD] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": "checkpoint"}
+    q = _queue(env)
+    q.begin_sweep("08:00", 2, accounts=[HELD, "OTHER"])
+    assert q.request(HELD, "schedule", window="08:00") == {"queued": False, "reason": "profile_held"}
+    assert q.request(HELD, "attention") == {"queued": False, "reason": "profile_held"}
+    q.request("OTHER", "schedule", window="08:00")
+    q._drain_once()
+    assert [a for a, _ in env.read] == ["OTHER"]
+    assert held == []
