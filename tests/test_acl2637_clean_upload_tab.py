@@ -138,17 +138,64 @@ def test_a_clean_tab_that_cannot_be_opened_is_a_reason_not_a_stop(clean):
     assert ok is False and "clean upload tab: could not be opened (CdpError" in why
 
 
-def test_a_lost_clean_tab_is_no_file_and_is_closed(clean):
+def _lose_and_write(t):
+    data = os.urandom(1000)
+    return t.write(PATH, {**TRANSFER}, files={"video_file_chunk": wp.ServedChunk(_Mem(data), 0, len(data))},
+                   filename="chunk")
+
+
+def test_a_lost_clean_tab_is_reopened_and_the_upload_retried_there(clean, monkeypatch):
     t = _graph(ServingTab(probe_reply=CONTROLLED))
     t.upload_tab_factory = clean["factory"]
     assert t.probe_worker()[0] is True
     up = clean["made"][0]
     up.light.intact = "light_doc_replaced"                                # the document is not ours any more
-    data = os.urandom(1000)
-    got = t.write(PATH, {**TRANSFER}, files={"video_file_chunk": wp.ServedChunk(_Mem(data), 0, len(data))},
-                  filename="chunk")
-    assert got["error"] == "no_file" and "clean upload tab lost" in got["why"]
-    assert up.closed and not [s for s in up.specs if "files" in s]
+    rows = []
+    monkeypatch.setattr(lt, "_record", rows.append)
+    got = _lose_and_write(t)
+    assert got.get("error") != "no_file"
+    assert up.closed and len(clean["made"]) == 2 and not clean["made"][1].closed
+    assert [s for s in clean["made"][1].specs if "files" in s] and not [s for s in up.specs if "files" in s]
+    assert t.upload_context == "clean_tab"
+    assert any(r.get("phase") == "light_lost" and r["lost_reason"].startswith("clean_tab_lost:") for r in rows)
+
+
+def test_no_clean_tab_can_be_reopened_the_upload_continues_in_this_tab(clean, monkeypatch):
+    main = ServingTab(probe_reply=CONTROLLED)
+    t = _graph(main)
+    t.upload_tab_factory = clean["factory"]
+    assert t.probe_worker()[0] is True
+    up = clean["made"][0]
+    up.light.intact = "light_doc_replaced"
+    clean["doc"] = (None, "could not load")                               # no new clean tab is possible
+    rows = []
+    monkeypatch.setattr(lt, "_record", rows.append)
+    got = _lose_and_write(t)
+    assert up.closed and t._upload_graph is None and t.upload_context == ""
+    assert [s for s in main.specs if "files" in s]                        # this tab's own path took the file
+    assert any(r.get("lost_reason", "").startswith("clean_tab_reopen_failed:") for r in rows)
+
+
+def test_a_reopened_clean_tab_that_is_lost_too_falls_back_to_this_tab(clean, monkeypatch):
+    main = ServingTab(probe_reply=CONTROLLED)
+    t = _graph(main)
+    t.upload_tab_factory = clean["factory"]
+    assert t.probe_worker()[0] is True
+    clean["made"][0].light.intact = "light_doc_replaced"
+    orig = clean["factory"]
+
+    def factory():
+        tab = orig()
+        tab.light.intact = "light_doc_replaced"                           # the new tab is lost at once
+        return tab
+
+    t.upload_tab_factory = factory
+    rows = []
+    monkeypatch.setattr(lt, "_record", rows.append)
+    _lose_and_write(t)
+    assert t._upload_graph is None and all(x.closed for x in clean["made"])
+    assert [s for s in main.specs if "files" in s]
+    assert any(r.get("lost_reason", "").startswith("clean_tab_reopen_failed:") for r in rows)
 
 
 def test_a_new_probe_closes_the_previous_clean_tab(clean):

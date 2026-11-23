@@ -1,0 +1,191 @@
+# -*- coding: utf-8 -*-
+"""ACL-2669: `cbKeep.merge` (JS) и `merge_keep` (Python) обязаны давать одно и то же.
+
+JS берётся живьём из report.html и исполняется в Chromium через Playwright
+(`page.evaluate`), как в соседних браузерных тестах. Таблица случаев гоняется
+через обе реализации; сравнивается каноническая JSON-запись результата.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from src.web import builder_drafts as bd  # noqa: E402
+
+pytest.importorskip("playwright.sync_api")
+
+# фикстуры браузера и страницы — из соседнего файла
+from test_acl2669_drafts_never_shrink_browser import _local_dir, browser, make  # noqa: E402,F401
+
+
+def camp(cid=None, **kw):
+    c = {"fields": {"name": cid or "legacy"}, "shown": {}, "ads": 1, **kw}
+    if cid:
+        c["id"] = cid
+    return c
+
+
+def named(name, cid=None, **kw):
+    c = {"fields": {"name": name}, "shown": {}, "ads": 1, **kw}
+    if cid:
+        c["id"] = cid
+    return c
+
+
+def form(touched, *campaigns, tracking="t"):
+    return {"touched": touched, "tracking": tracking, "campaigns": list(campaigns)}
+
+
+def doc(forms, removed=None, v=4):
+    d = {"v": v, "forms": forms}
+    if removed is not None:
+        d["removed"] = removed
+    return d
+
+
+CASES = {
+    "no form key in incoming": (
+        doc({"A": form(2, camp("a1")), "B": form(3, camp("b1"))}), doc({"A": form(2, camp("a1"))})),
+    "incoming misses a campaign": (
+        doc({"A": form(5, camp("a1"), camp("a2"))}), doc({"A": form(9, camp("a1"))})),
+    "newer touched wins per key": (
+        doc({"A": form(10, camp("a1", ads=1), tracking="old"), "B": form(50, camp("b1", ads=1))}),
+        doc({"A": form(20, camp("a1", ads=2), tracking="new"), "B": form(5, camp("b1", ads=9))})),
+    "touched tie goes to incoming": (
+        doc({"A": form(10, camp("a1", ads=1))}), doc({"A": form(10, camp("a1", ads=2))})),
+    "older incoming adds a unique campaign": (
+        doc({"A": form(20, camp("a1"))}), doc({"A": form(10, camp("a1"), camp("a2"))})),
+    "tombstone blocks the older copy": (
+        doc({"A": form(20, camp("a1"))}, removed={"A#a2": 15}), doc({"A": form(10, camp("a1"), camp("a2"))})),
+    "later edit beats the tombstone": (
+        doc({"A": form(30, camp("a1"), camp("a2"))}, removed={"A#a2": 25}), doc({})),
+    "tombstone newer than the newest copy drops the campaign": (
+        doc({"A": form(20, camp("a1"), camp("a2"))}, removed={"A#a2": 25}), doc({})),
+    "form tombstone drops the key": (
+        doc({"A": form(20, camp("a1"))}, removed={"A": 25}), doc({})),
+    "form tombstone older than the edit keeps it": (
+        doc({"A": form(20, camp("a1"))}, removed={"A": 10}), doc({"A": form(25, camp("a1"))})),
+    "empty result drops the key": (
+        doc({"A": form(20, camp("a1"))}, removed={"A#a1": 30}), doc({"A": form(10, camp("a1"))})),
+    "idless stored and idless incoming": (
+        doc({"A": form(20, camp(), camp())}), doc({"A": form(30, camp())})),
+    "idless older copy gets legacy ids": (
+        doc({"A": form(20, camp(), camp())}), doc({"A": form(10, camp(), camp(), camp())})),
+    "idless stored and legacy ids incoming": (
+        doc({"A": form(10, camp(), camp())}), doc({"A": form(20, camp("legacy-A-0"), camp("legacy-A-1"))})),
+    "legacy ids stored and idless incoming": (
+        doc({"A": form(20, camp("legacy-A-0"), camp("legacy-A-1"))}), doc({"A": form(30, camp(), camp())})),
+    "idless winner plus id in older": (
+        doc({"A": form(10, camp("a1"))}), doc({"A": form(30, camp())})),
+    "removed is a union with max, v is max": (
+        doc({}, removed={"A": 1, "B": 9}, v=3), doc({}, removed={"A": 5, "C": 2}, v=4)),
+    "campaign tombstone equals older.touched blocks it": (
+        doc({"A": form(20, camp("a1"))}, removed={"A#a2": 10}), doc({"A": form(10, camp("a1"), camp("a2"))})),
+    "campaign tombstone equals newer.touched keeps it": (
+        doc({"A": form(20, camp("a1"), camp("a2"))}, removed={"A#a2": 20}), doc({})),
+    "form tombstone equals result touched drops the form": (
+        doc({"A": form(20, camp("a1"))}, removed={"A": 20}), doc({})),
+    "non-dict and non-string-id campaigns in older": (
+        doc({"A": form(20, camp("a1"))}),
+        doc({"A": form(10, camp("a1"), "junk", {"id": 5, "fields": {}}, None, camp("a2"))})),
+    "real-id tombstone is absolute against a later edit": (
+        doc({}, removed={"A#cx": 10}), doc({"A": form(20, camp("cx"), camp("cy"))})),
+    "R15 legacy-id tombstone older than the edit still removes it": (
+        doc({"A": form(5, camp("legacy-A-0"))}, removed={"A#legacy-A-1": 10}),
+        doc({"A": form(20, camp("legacy-A-0"), camp("legacy-A-1"))})),
+    "form tombstone from an old document is still honoured": (
+        doc({"A": form(5, camp("cy"))}, removed={"A": 10}), doc({})),
+    "same position in two forms stays separate": (
+        doc({"A": form(5, camp(), camp()), "B": form(5, camp())}), doc({"B": form(9, camp(), camp())})),
+    "idless incoming pairs by content then index": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}), doc({"F": form(20, named("A"), named("B2"))})),
+    "idless incoming with fewer campaigns keeps both": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}), doc({"F": form(20, named("A"))})),
+    "idless stored pairs with incoming ids": (
+        doc({"F": form(20, named("A"), named("B2"))}), doc({"F": form(10, named("A", "c1"), named("B", "c2"))})),
+    "content pairing first, each id once": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}),
+        doc({"F": form(20, named("B"), named("B"), named("Z"))})),
+    "R14 legacy id of the stored copy is not adopted": (
+        doc({"F": form(20, named("A", "legacy-F-1"))}, removed={"F#legacy-F-0": 10}),
+        doc({"F": form(30, named("A"), named("B"))})),
+    "R14 follow-up save from a new page keeps B": (
+        doc({"F": form(30, named("A", "legacy-F-0"), named("B", "legacy-F-2"))}, removed={"F#legacy-F-0": 10}),
+        doc({"F": form(40, named("A", "legacy-F-1"))})),
+    "R14 tombstoned real id is not adopted": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}, removed={"F#c2": 15}),
+        doc({"F": form(20, named("Q"), named("Z"))})),
+    "R15 repro 1": (
+        doc({"F": form(20, named("A", "legacy-F-0"), named("B", "legacy-F-1"))}, removed={"F#legacy-F-0": 10}),
+        doc({"F": form(30, named("A"), named("B"))})),
+    "R15 repro 2": (
+        doc({"F": form(20, named("B", "legacy-F-1"))}, removed={"F#legacy-F-1": 5}), doc({"F": form(20, named("B"))})),
+    "R15 repro 3": (
+        doc({"F": form(20, named("A", "legacy-F-1"))}, removed={"F#legacy-F-1": 10}),
+        doc({"F": form(30, named("A"), named("B"))})),
+    "R15 fallback skips tombstoned numbers": (
+        doc({"F": form(10, named("F", "legacy-F-2"))}, removed={"F#legacy-F-0": 15}), doc({"F": form(10, named("E"))})),
+    "R15 bare legacy next to id-less": (
+        doc({}), doc({"F": form(5, named("X"), named("Y", "legacy-0"))})),
+    "R16 S1 stored id-less, first campaign removed": (
+        doc({"F": form(10, named("X"), named("Y"), named("Z"))}),
+        doc({"F": form(20, named("Y", "legacy-F-1"), named("Z", "legacy-F-2"))}, removed={"F#legacy-F-0": 15})),
+    "R16 S2 stored id-less, second campaign removed": (
+        doc({"F": form(10, named("X"), named("Y"), named("Z"))}),
+        doc({"F": form(20, named("X", "legacy-F-0"), named("Z", "legacy-F-2"))}, removed={"F#legacy-F-1": 15})),
+    "R16 S3 stored id-less, third campaign removed": (
+        doc({"F": form(10, named("X"), named("Y"), named("Z"))}),
+        doc({"F": form(20, named("X", "legacy-F-0"), named("Y", "legacy-F-1"))}, removed={"F#legacy-F-2": 15})),
+    "R16 stored id-less vs id-less incoming": (
+        doc({"F": form(10, named("E"), named("B"))}), doc({"F": form(20, named("A"), named("B"))})),
+    "R15 bare legacy tombstone applies to the normalised id": (
+        doc({"F": form(10, named("C", "legacy-1"))}, removed={"F#legacy-1": 5}), doc({"F": form(20, named("C"))})),
+    "bare legacy number is rewritten": (
+        doc({}), doc({"F": form(5, camp("legacy-0"), camp("legacy-1"))})),
+    "non-dict entry with a form tombstone": (
+        doc({"A": "junk"}, removed={"A": 5}), doc({"B": "junk"})),
+    "B1 stale tab keeps the newer campaign (review repro)": (
+        doc({"K": form(200, named("X-new", "X", ads=3, touched=200))}),
+        doc({"K": form(300, named("X-old", "X", ads=1, touched=100), named("Y", "Y", touched=300))})),
+    "B1 same repro, the newer campaign on the incoming side": (
+        doc({"K": form(300, named("X-old", "X", ads=1, touched=100), named("Y", "Y", touched=300))}),
+        doc({"K": form(200, named("X-new", "X", ads=3, touched=200))})),
+    "B1 campaign touched tie goes to the newer form": (
+        doc({"K": form(200, named("s", "X", touched=150))}), doc({"K": form(300, named("i", "X", touched=150))})),
+    "B1 missing campaign touched falls back to the form touched": (
+        doc({"K": form(200, named("new", "X"))}), doc({"K": form(300, named("old", "X"))})),
+    "B1 order is the newer form's then the rest": (
+        doc({"K": form(200, named("A", "a", touched=200), named("B", "b", touched=200))}),
+        doc({"K": form(300, named("C", "c", touched=300), named("A-old", "a", touched=100))})),
+    "M3 id-less stored pairs by content with legacy ids (review repro)": (
+        doc({"K": form(10, named("Q"), named("R"))}),
+        doc({"K": form(20, named("P", "legacy-K-0"), named("Q", "legacy-K-1"), named("R", "legacy-K-2"))})),
+    "M3 unpaired id-less stored campaign takes the next free index": (
+        doc({"K": form(10, named("Q"), named("Z"))}),
+        doc({"K": form(20, named("A", "legacy-K-0"), named("Q", "legacy-K-1"))})),
+    "R21 tombstone older than 31 days is kept and a stale copy cannot resurrect": (
+        doc({"K": form(40 * 86400000, named("Y", "y", touched=40 * 86400000))}, removed={"K#x": 5 * 86400000}),
+        doc({"K": form(4 * 86400000, named("X", "x", touched=4 * 86400000), named("Y", "y", touched=4 * 86400000))})),
+    "R21 removed is the plain union": (
+        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))}, removed={"K#old": 86400000}),
+        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))}, removed={"K#new": 39 * 86400000})),
+    "one side has no forms": (
+        {"v": 4}, doc({"A": form(1, camp("a1"))})),
+}
+
+
+@pytest.mark.parametrize("name", list(CASES))
+def test_js_and_python_merge_give_identical_results(make, name):
+    p = make().open()
+    cur, inc = CASES[name]
+    js = p.evaluate("([c, i]) => cbKeep.merge(c, i)", [cur, inc])
+    py = bd.merge_keep(json.loads(json.dumps(cur)), json.loads(json.dumps(inc)))
+    canon = lambda d: json.dumps(d, sort_keys=True, ensure_ascii=False)
+    assert canon(js) == canon(py), name
