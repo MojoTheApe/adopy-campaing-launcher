@@ -264,6 +264,11 @@ def _slot_queue_never_reads_the_host_memory(monkeypatch):
     # Свежая очередь на каждый тест: окна, оставленные прошлым тестом
     # (`keep`), не должны занимать места следующему.
     monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(memory=plenty))
+    # ACL-2668: отчёт откладывает сборку, пока память занята (порог 92 %) — на
+    # занятой машине разработчика тесты отчёта иначе видели бы «отложено».
+    from src.web import cache as _report_cache
+
+    monkeypatch.setattr(_report_cache, "_read_memory", plenty)
     yield
 
 
