@@ -641,7 +641,7 @@ def test_a_repeat_of_a_moved_start_reuses_the_campaign_without_copy_1(tmp_path):
 
 def test_a_partial_first_run_resumes_the_moved_set_without_a_new_campaign(tmp_path):
     meta = ZoneMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first = _creator(meta, now=_at(9, 30)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
     assert first.error
     n = _n_campaigns(meta)

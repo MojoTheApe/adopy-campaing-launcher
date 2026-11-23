@@ -539,7 +539,7 @@ def test_summary_carries_freshness():
 # ───────────────────────── бэкенд и задание ─────────────────────────
 
 def test_rpa_backend_refuses_and_starts_nothing(monkeypatch):
-    monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+    monkeypatch.setenv(api.BACKEND_ENV, "rpa")
     started = []
     with pytest.raises(ci.NeedsApiBackend) as e:
         ci.start_read("Acc", D, D, reader=lambda *a: started.append(a))
@@ -609,7 +609,7 @@ def _body(resp):
 def test_read_route_refuses_on_rpa_with_409_and_the_exact_message(monkeypatch):
     from src.web import app as web
 
-    monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+    monkeypatch.setenv(api.BACKEND_ENV, "rpa")
     resp = asyncio.run(web.campaign_inventory_read(_FormReq({"account": "Acc", "date_from": D, "date_to": D})))
     assert resp.status_code == 409
     body = _body(resp)
@@ -643,7 +643,7 @@ def test_read_route_starts_a_job_on_api(monkeypatch):
 def test_status_route_is_local_and_flags_rpa(monkeypatch):
     from src.web import app as web
 
-    monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+    monkeypatch.setenv(api.BACKEND_ENV, "rpa")
     body = _body(asyncio.run(web.campaign_inventory_status(_get_req("account=Acc"))))
     assert body["needs_api"] is True and body["message"] == "Campaign inventory needs the API backend"
     monkeypatch.setenv(api.BACKEND_ENV, "api")

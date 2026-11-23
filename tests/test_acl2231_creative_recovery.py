@@ -41,7 +41,7 @@ def test_missing_tag_finishes_with_positive_content_and_retry_never_creates_agai
 def test_unlabelled_orphan_is_reused_after_restart_from_verified_receipt(tmp_path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     second, _ = _run(meta, draft)
@@ -52,7 +52,7 @@ def test_unlabelled_orphan_is_reused_after_restart_from_verified_receipt(tmp_pat
 def test_legacy_orphan_with_old_tag_is_matched_by_ad_identity_and_full_content(tmp_path, monkeypatch):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     creative = creatives(meta)[0]
@@ -74,16 +74,16 @@ def test_created_id_with_wrong_content_never_reaches_an_ad(tmp_path, field, valu
     assert out.creative_ids == [creatives(meta)[0]["id"]]
 
 
-def test_unknown_creative_send_is_not_repeated_after_restart(tmp_path):
+def test_unknown_creative_send_is_read_back_then_written_after_restart(tmp_path):
     meta = UntaggedMeta()
-    meta.fail_next["adcreatives"] = "unsent"
+    meta.fail_next["adcreatives"] = "unsent_stuck"
     draft = _draft(tmp_path, ads=1)
     one, _ = _run(meta, draft, reconcile_wait_s=0)
     assert one.error
     before = len([p for p, _ in meta.posts if p.endswith("/adcreatives")])
     two, _ = _run(meta, draft, reconcile_wait_s=0)
-    assert two.error and not two.ad_ids
-    assert len([p for p, _ in meta.posts if p.endswith("/adcreatives")]) == before
+    assert not two.error and len(two.ad_ids) == 1      # owner decision 17.11: nothing found -> written again
+    assert len([p for p, _ in meta.posts if p.endswith("/adcreatives")]) == before + 1
 
 
 def test_receipt_failure_before_dispatch_prevents_creative_post(tmp_path, monkeypatch):
@@ -98,7 +98,7 @@ def test_receipt_failure_before_dispatch_prevents_creative_post(tmp_path, monkey
 def test_corrupt_receipt_stops_instead_of_becoming_absent(tmp_path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     _run(meta, draft, reconcile_wait_s=0)
     for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
         path.write_text("{broken", encoding="utf-8")
@@ -141,7 +141,7 @@ def test_unreadable_lookup_cannot_authorize_a_creative_post(tmp_path, body):
 def test_retained_tag_never_overrides_receipt_content_verification(tmp_path, field, value):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     obj = creatives(meta)[0]
@@ -192,7 +192,7 @@ def test_same_ad_with_unreadable_content_is_skipped_and_the_repeat_goes_on(tmp_p
 def test_partly_listed_creative_that_really_matches_is_reused_not_duplicated(tmp_path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     made = creatives(meta)[0]
@@ -241,7 +241,7 @@ def test_explicit_other_campaign_tag_is_not_recovered_as_our_orphan(tmp_path):
 def test_known_receipt_does_not_override_explicit_other_campaign_ownership(tmp_path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     creatives(meta)[0]["adlabels"] = [{"name": "acl-aaaaaaaaaaaa"}]
@@ -308,7 +308,7 @@ def test_accepted_identical_creative_is_reported_as_reused_not_created(tmp_path)
 def test_resume_after_accepting_identical_creative_and_ad_failure_continues(tmp_path):
     meta = ExistingIdenticalMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     assert any("existing identical creative" in w for w in first.warnings)
@@ -321,7 +321,7 @@ def test_resume_after_accepting_identical_creative_and_ad_failure_continues(tmp_
 def test_resume_of_accepted_identical_creative_stops_when_content_changed_since(tmp_path):
     meta = ExistingIdenticalMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error
     creatives(meta)[0]["object_story_spec"]["link_data"]["message"] = "changed"
@@ -406,7 +406,7 @@ def test_unreadable_video_is_accepted_but_other_changes_are_not():
 def test_several_identical_creatives_use_the_oldest(tmp_path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     old = creatives(meta)[0]
@@ -420,21 +420,15 @@ def test_several_identical_creatives_use_the_oldest(tmp_path):
     assert second.creative_ids == [old["id"]] and len(creatives(meta)) == 2
 
 
-def test_old_unknown_send_receipt_stops_blocking_after_15_minutes(tmp_path):
-    import os
-    import time
+def test_unknown_send_receipt_never_blocks_a_rerun_by_age(tmp_path):
+    """Owner decision 17.11 ("убирай 15 минут"): a fresh receipt does not refuse; the rerun reads back, then writes."""
     meta = UntaggedMeta()
-    meta.fail_next["adcreatives"] = "unsent"
+    meta.fail_next["adcreatives"] = "unsent_stuck"
     draft = _draft(tmp_path, ads=1)
     one, _ = _run(meta, draft, reconcile_wait_s=0)
     assert one.error
     two, _ = _run(meta, draft, reconcile_wait_s=0)
-    assert two.error and not two.ad_ids          # fresh receipt still blocks
-    old = time.time() - cr.RECEIPT_UNKNOWN_S - 60
-    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
-        os.utime(path, (old, old))
-    three, _ = _run(meta, draft, reconcile_wait_s=0)
-    assert not three.error and len(three.ad_ids) == 1
+    assert not two.error and len(two.ad_ids) == 1          # right away, no waiting
 
 
 def test_video_reads_only_use_fields_that_exist_on_the_video_node():
@@ -473,7 +467,7 @@ def _earlier_upload(monkeypatch, tmp_path, lengths):
     meta = UntaggedMeta()
     _feed_creatives(monkeypatch, meta, lengths)
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"      # the creative is confirmed (receipt saved), the ad is not
+    meta.fail_next["ads"] = "unsent_stuck"      # the creative is confirmed (receipt saved), the ad is not
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     creatives(meta)[0]["asset_feed_spec"]["videos"][0]["video_id"] = "20"   # an earlier upload of the same file
@@ -509,7 +503,7 @@ def test_confirmed_receipt_creative_with_other_video_length_is_not_reused_a_new_
 def test_unconfirmed_creative_stop_names_the_first_differing_field(tmp_path, field, value, path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     creatives(meta)[0]["adlabels"] = [{"name": cr.plan_from_draft(draft).label}]

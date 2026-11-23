@@ -2,7 +2,7 @@
 
 Только при `ACL_FB_BACKEND=api`; при `rpa` — чёткий отказ, а состояние отвечает
 `available: false`. Логика — в `src/fb_api/warm.py`; здесь проводка, коды ответов
-и фоновое задание запуска (запуски идут по одному, с паузой 5–10 с).
+и фоновое задание запуска (запуски идут по одному, без паузы между ними — ACL-2668 #14).
 
 Состояние строк (`state`) берётся только из реестра и процессов на машине — ни
 одного вызова к Meta, MLX или CDP, поэтому его безопасно просить при открытии
@@ -140,6 +140,7 @@ REFUSAL_TEXT = {
 _AUTO: dict[str, dict] = {}          # label -> {status: queued|opening|done|refused, code, retried}
 _AUTO_QUEUE: list[str] = []
 _AUTO_LOCK = threading.Lock()
+_AUTO_RUNNING = [0]  # automatic warm-ups being opened right now (0 or 1)
 _AUTO_WORKER: threading.Thread | None = None
 
 
@@ -226,6 +227,18 @@ def _start_worker_locked() -> None:
         _AUTO_WORKER.start()
 
 
+def running_job_count() -> int:
+    """Warm-session launch work that is not finished: manual jobs plus automatic warm-ups.
+
+    Automatic warm-ups count while queued and while one is being opened.
+    """
+    with _JOBS_LOCK:
+        n = sum(1 for j in _JOBS.values() if j.get("state") in ("running", "waiting"))
+    with _AUTO_LOCK:
+        n += len(_AUTO_QUEUE) + _AUTO_RUNNING[0]
+    return n
+
+
 def _manual_job_running() -> bool:
     with _JOBS_LOCK:
         return bool(_ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running")
@@ -241,6 +254,7 @@ def _auto_worker() -> None:
                     _AUTO_WORKER = None
                 return
             label = _AUTO_QUEUE.pop(0)
+            _AUTO_RUNNING[0] += 1
         try:
             waited = 0
             while _manual_job_running() and waited < 600:
@@ -250,6 +264,9 @@ def _auto_worker() -> None:
         except Exception as exc:  # noqa: BLE001 - the queue must not die on one account
             log.exception("Automatic warm-up of %s failed", label)
             _finish(label, "start_failed", started=False, error=type(exc).__name__)
+        finally:
+            with _AUTO_LOCK:
+                _AUTO_RUNNING[0] = max(0, _AUTO_RUNNING[0] - 1)
 
 
 def _requeue_later(label: str) -> None:
@@ -350,8 +367,6 @@ def _auto_one(label: str) -> None:
         return
     numbers["duration_s"] = round(time.monotonic() - began, 1)
     _finish(label, code, started=started, **numbers)
-    if started:
-        _sleep(reg._stagger())  # noqa: SLF001 - the same 5-10 s gap as «Open profiles for today»
 
 
 _WARM_CODES = {"memory_low": "memory", "profile_closing": "closing", "busy": "busy", "profile_lease": "busy",
@@ -457,6 +472,57 @@ def _run_open(job_id: str, labels: list[str], confirm_reopen: bool = False) -> N
                 _ACTIVE_JOB = ""
 
 
+def _local_tabs(label: str, pid: str):
+    """ACL-2847: `(address, title)` of the open tabs of an already running profile, from its local debugging port only.
+
+    The registered session's port, else one local process look (no network). A profile that is not running: nothing."""
+    from src.fb_api import warm
+
+    reg = _registry()
+    sess = reg.session(pid) if pid else None
+    port = getattr(sess, "port", 0) if sess is not None else 0
+    if not port and pid:
+        try:
+            kind, found = reg._scan([pid]).get(pid, ("unknown", None))  # noqa: SLF001
+            port = int(found or 0) if kind == "port" else 0
+        except Exception:  # noqa: BLE001 - no look is "not detected"
+            port = 0
+    return warm.local_page_targets(port) if port else []
+
+
+def note_tab_lock(label: str, *, urls=None, action: str = "Open profile") -> bool:
+    """ACL-2653/2847: a running profile whose tab is on facebook.com/checkpoint/... or the login page is held.
+
+    Reads only the tab addresses and titles from the profile's local debugging port; no Graph call, no navigation.
+    Writes a hold (person-level, no Graph code) and returns True. This also covers a profile the owner opened by hand
+    or that fell to the login page while it stayed open. When the tabs are readable and none is a lock any more, a
+    login-page hold ends (the person logged in): the next Publish goes on without a separate Retry."""
+    try:
+        from src.analysis_agent import account_spend
+        from src.fb_api import account_blocks
+
+        pid = _profile_id(label)
+        if urls is None:
+            urls = _local_tabs(label, pid)
+        key = account_spend._profile_key(label)  # noqa: SLF001
+        # ACL-2841: a tab is an address or an `(address, title)` pair; the title is Meta's own text for the lock.
+        pairs = [(u, "") if isinstance(u, str) else (str(u[0]), str(u[1])) for u in urls]
+        found = any([account_blocks.note_tab_url(key, label, u, action, t) for u, t in pairs])
+        if not found and pairs:
+            held = account_blocks.hold_of(key)
+            if held and held.get("kind") == "checkpoint" and held.get("page") == "login":
+                account_blocks.clear(key, "relogin", kind="checkpoint")
+        return found
+    except Exception:  # noqa: BLE001 - the open already worked; a failed look is only "not detected"
+        log.debug("The profile tab was not checked for a Facebook lock", exc_info=True)
+        return False
+
+
+#: label -> why the Open's status read was not queued (empty: it was). Read once by `_on_open_result`.
+_SKIP_REASON: dict[str, str] = {}
+_SKIP_LOCK = threading.Lock()
+
+
 def request_status_read(label: str) -> str:
     """ACL-2419: после удачного Open — одна заявка в существующую очередь обновления.
 
@@ -466,8 +532,22 @@ def request_status_read(label: str) -> str:
     try:
         from src.analysis_agent import account_refresh
 
+        try:
+            from src.analysis_agent import account_spend
+            from src.fb_api import account_blocks
+
+            key_ = account_spend._profile_key(label)  # noqa: SLF001 - ACL-2652
+            # A reopened profile has a fresh tab: a "tab stopped answering" hold (never another kind) ends here.
+            account_blocks.lift_frozen_hold(key_, "open")
+            account_blocks.mark_person_open(key_)
+        except Exception:  # noqa: BLE001
+            log.debug("could not mark the person's open", exc_info=True)
         got = account_refresh.queue().request(label, "open", force=True)
-        return "queued" if got.get("queued") else "skipped"
+        reason = str(got.get("reason") or "")
+        with _SKIP_LOCK:
+            _SKIP_REASON[label] = "" if got.get("queued") else reason
+        # A read that is already running for this account answers the Open as well.
+        return "queued" if got.get("queued") or reason == "running" else "skipped"
     except Exception:  # noqa: BLE001 — открытие профиля уже удалось, статус вторичен
         log.exception("Could not queue the status read after opening %s", label)
         return "skipped"
@@ -477,7 +557,12 @@ def _on_open_result(job_id: str, label: str, result: dict) -> None:
     result = dict(result)
     # Только удачное «окно поднято»: открытие руками, закрытие и отказ ничего не ставят в очередь.
     if result.get("ok"):
+        # ACL-2653: a person pressed Open: the account's status is read now, whatever the queue, a halt or a hold.
+        # A tab on a Facebook lock is recorded from its address first; the read then shows Meta's refusal and its time.
+        result["locked"] = bool(note_tab_lock(label))
         result["status_read"] = request_status_read(label)
+        with _SKIP_LOCK:
+            result["status_reason"] = _SKIP_REASON.pop(label, "")
     else:
         result["status_read"] = "n/a"
     _set_result(job_id, label, result)
@@ -529,6 +614,21 @@ def close_profiles(labels: Any, confirm: bool) -> tuple[dict, int]:
     return {"results": results}, 200
 
 
+def login_refusal(label: str) -> str:
+    """ACL-2847: the refusal text when the profile of this account is held as logged out of Facebook, else an empty string."""
+    try:
+        from src.analysis_agent import account_spend
+        from src.fb_api import account_blocks
+
+        key = account_spend._profile_key(label)  # noqa: SLF001
+        if not account_blocks.is_login_hold(account_blocks.hold_of(key)):
+            return ""
+        got = account_blocks.refusal(key, label, "publish")
+        return got[0] if got else ""
+    except Exception:  # noqa: BLE001 - an unreadable hold file never stops an action
+        return ""
+
+
 def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,int]:
     """Prepare only the physical profile; the original read/write action has not started."""
     refused = _guard()
@@ -556,6 +656,11 @@ def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,i
                 return {"account":label,**result},200 if result.get("ok") else 409
             with opening_closed_profile():     # ACL-2262: /connection/prepare comes before Publish only
                 prepare_existing(reg,entry,label)
+            # ACL-2847: a profile that is open but sits on the Facebook login page stops the action here, at once.
+            note_tab_lock(label, action="Publish")
+            stop = login_refusal(label)
+            if stop:
+                return {"ok":False,"account":label,"code":"account_blocked","error":stop},409
         return {"ok":True,"account":label},200
     except Exception as exc:
         from src.fb_ads_rpa.profile_lease import ProfileLeaseError

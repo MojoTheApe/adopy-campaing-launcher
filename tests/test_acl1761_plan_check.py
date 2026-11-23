@@ -261,7 +261,7 @@ def test_the_plan_button_is_rendered_only_for_the_api_backend():
     text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     i = text.index("data-act=\"check-plan\"")
     assert "window.ACL_FB_BACKEND === 'api'" in text[i - 400:i]
-    assert "window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}" in text
+    assert "window.ACL_FB_BACKEND = {{ (fb_backend or 'api') | tojson }}" in text
     j = text.index("act === 'check-plan'")
     assert "window.cbCheckPlan(selectedForPublish()" in text[j:j + 200]
     # «Publish» не тронут: та же кнопка и тот же обработчик.
@@ -516,7 +516,7 @@ def test_publish_labels_follow_the_backend():
     label = text[i:text.index("\n  }", i)]
     assert "window.ACL_FB_BACKEND === 'api' ? 'PAUSED campaigns' : 'drafts'" in label
     assert "'Publish selected → ' + what" in label and "'Publish all → ' + what" in label
-    assert "confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget()" in text
+    assert "confirmLabel: (onlyWord ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget()" in text
     assert "(cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft')" in text
     # Дважды в прежних окнах подтверждения и дважды в блоке ревью ACL-2353 (те же вопросы под Graph API).
     assert text.count("'Create the selected campaigns as PAUSED campaigns?'") == 4
