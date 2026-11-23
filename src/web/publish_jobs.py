@@ -1340,7 +1340,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
-                  else "waiting_account" if hold in ("account_busy", "heavy_limit")
+                  else "waiting_account" if hold == "account_busy"
                   else "waiting_load" if hold == "machine_busy"
                   else "waiting_memory" if (hold in ("memory_low", "below_reserve", "auto_resume")
                                             or verdict.get("behind_memory"))
@@ -1364,8 +1364,6 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "used_pct": verdict.get("used_pct"),
         "max_used_pct": verdict.get("max_used_pct"),
         "running": verdict.get("running"),
-        # ACL-2293: the warm heavy-action limit, when it is what holds the action.
-        "heavy_limit": verdict.get("heavy_limit"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),

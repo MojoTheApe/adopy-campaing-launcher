@@ -3414,8 +3414,7 @@ async def api_save_run_limits(request: Request) -> JSONResponse:
     try:
         from starlette.concurrency import run_in_threadpool
         result = await run_in_threadpool(
-            lambda: run_limits.save(data.get("ceiling"), data.get("warm_heavy"),
-                                    data.get("memory_max_used_pct"), reset=bool(data.get("reset")),
+            lambda: run_limits.save(data.get("ceiling"), data.get("memory_max_used_pct"), reset=bool(data.get("reset")),
                                     confirm=data.get("confirm") is True))
     except run_limits.NeedsConfirm as exc:
         return JSONResponse({"ok": False, "needs_confirm": True, "error": str(exc)}, status_code=409)
