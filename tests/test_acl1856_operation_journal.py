@@ -276,7 +276,7 @@ def test_a_crash_at_any_write_resumes_without_duplicates(tmp_path, journal, cloc
     assert first.stop_kind == "unexpected" and first.error == cr.MSG_UNEXPECTED
     assert first.operation["state"] == oj.OP_FAILED
     meta.crash_at = None
-    clock.t += oj.UNKNOWN_HOLD_S + 1                 # удержание неизвестной записи прошло
+    clock.t += oj.UNKNOWN_RECENT_WORDING_S + 1       # запись уже не «недавняя» для текста подсказки
     second, _ = _go(meta, _draft(tmp_path, ads=2), journal)
     assert second.error == "", second.error
     assert {k: _count(meta, k) for k in want} == want
@@ -792,7 +792,7 @@ def test_next_action_never_tells_to_wait_for_a_sent_stage(journal, clock):
     op = journal.open(ACT, "tag", "fp-hold", "C")
     op.begin("campaign", "campaign", name="C")
     assert op.next_action().startswith("Publish again") and "minutes" not in op.next_action()
-    clock.t += oj.UNKNOWN_HOLD_S + 1
+    clock.t += oj.UNKNOWN_RECENT_WORDING_S + 1
     assert op.next_action().startswith("Publish again")
 
 
@@ -944,7 +944,7 @@ def test_a_step_sent_long_ago_by_a_dead_run_can_be_taken_over(journal, clock):
     a = journal.open(ACT, "t", "f", "C")
     b = journal.open(ACT, "t", "f", "C")
     a.begin("ad 1", "ad")
-    clock.t += oj.UNKNOWN_HOLD_S + 1
+    clock.t += oj.UNKNOWN_RECENT_WORDING_S + 1
     b.begin("ad 1", "ad")
     assert journal.read(a.id)["stages"]["ad 1"]["owner"] == b.owner
 

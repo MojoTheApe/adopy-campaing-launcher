@@ -17,7 +17,10 @@ Elf403 открыт руками. Здесь — быстрый разбор д�
 * **Один разбор на нажатие**, только по аккаунтам, которые ставятся в очередь.
   Таймеров и опроса нет.
 * Блокирует только то, что запуститься не может вовсе: нет в карте / нет
-  профиля, мёртвый токен Multilogin, кабинет disabled/restricted. Сигналы
+  профиля, мёртвый токен Multilogin, кабинет disabled (закрыт Meta).
+  Кабинет restricted (неоплата, льготный период, требуется аутентификация) —
+  заметка, аккаунт идёт в очередь: если Meta и вправду не даст публиковать,
+  она откажет сама (решение владельца 16.11, ACL-2668 №19). Сигналы
   прошлых прогонов (вход, сеть, перезапуск, чекпоинт) — заметки «will try»
   (решение владельца 06.10): робот пробует, а разлогиненное окно откроется
   впереди (`browser.front_for_login`).
@@ -80,8 +83,9 @@ MESSAGES: dict[str, tuple[str, str]] = {
                  "will try; the window will open in front if the check is still there"),
     RESTART_FAILED: ("the profile could not be restarted last time", "will try"),
     HAND_WINDOW_STUCK: ("the window opened by hand could not be reopened last time", "will try"),
-    DISABLED: ("the ad account is disabled by Meta", "resolve it in Meta, or skip this account"),
-    RESTRICTED: ("the ad account is restricted by Meta", "resolve it in Meta, or skip this account"),
+    DISABLED: ("the ad account is disabled by Meta", "skipped; resolve it in Meta"),
+    # С 16.11 (ACL-2668 №19) — заметка: аккаунт ставится в очередь, Meta откажет сама.
+    RESTRICTED: ("the ad account is restricted by Meta", "will try; Meta refuses by itself if it cannot publish"),
     OPEN_NOW: ("the profile is open now", "the robot will reuse it or gently reopen it"),
     REVIEW: ("the ad account is under review by Meta", "drafts can still be built"),
 }
@@ -308,8 +312,16 @@ def classify(account: str, *, entry: Any = None, token: str | None = None,
             r.hint = "will try; check it in Meta if it fails"
             r.seen_label = ""
             v.notes.append(r)
+        elif kind == "restricted":
+            # Ограничение (неоплата, льготный период, аутентификация) — заметка:
+            # публикуем, Meta сама откажет, если не может (ACL-2668 №19).
+            v.notes.append(_reason(code, "status", status_at))
         else:
-            v.blocking.append(_reason(code, "status", status_at))
+            # Закрытый кабинет — пропуск; на строке видно, что именно сказала Meta.
+            r = _reason(code, "status", status_at)
+            if text and not _CHECKPOINT_RE.search(text):
+                r.message += f": {text}"
+            v.blocking.append(r)
     elif kind == "review":
         v.notes.append(_reason(REVIEW, "status", status_at))
     if kind not in ("clear", "") and _CHECKPOINT_RE.search(text) and not any(r.code == CHECKPOINT for r in v.notes):
