@@ -246,3 +246,9 @@ def test_the_route_exists_and_takes_a_profile_not_an_account():
     block = block[: block.index("@app.post(\"/account-probe")]
     assert "profile_id" in block and "account_spend.open_profile_for_automation" in block
     assert re.search(r'form\.get\("instance"\)', block), "инстанс Multilogin не передаётся"
+
+
+@pytest.fixture(autouse=True)
+def _rpa_backend_explicit(monkeypatch):
+    """ACL-2785: по умолчанию теперь api; эти тесты проверяют ветку RPA, поэтому выбирают её явно."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")

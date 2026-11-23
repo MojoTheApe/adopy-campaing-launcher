@@ -5,7 +5,7 @@
   "expect": {
     "key": "policy_block",
     "short": "Meta temporarily blocked this action",
-    "next": "wait before trying again, do not retry now",
+    "next": "check this account in Ads Manager, then Publish again",
     "severity": "blocking",
     "retry": "never"
   },

@@ -71,6 +71,9 @@ class FormsMeta(FormMeta):
             mode = self.fail_next.pop("leadgen_forms", None)
             if mode == "unsent":
                 return {"error": "call_unknown"}
+            if mode == "unsent_stuck":            # no answer, not created - and the re-send gets none either
+                self.fail_next["leadgen_forms"] = "unsent"
+                return {"error": "call_unknown"}
             if self.refuse:
                 return {"status": 400, "body": {"error": self.refuse}}
             fid = str(7100000 + len(self.form_posts))
@@ -674,18 +677,17 @@ def test_a_timeout_is_reconciled_by_reading_the_forms_list_without_a_retry(tmp_p
     assert client.unreconciled is None
 
 
-def test_a_timeout_with_nothing_found_stops_and_blocks_any_blind_retry(tmp_path):
+def test_a_timeout_with_nothing_found_is_resent_once_then_stops_only_this_campaign(tmp_path):
     tid = _saved()["id"]
     meta = FormsMeta()
-    meta.fail_next["leadgen_forms"] = "unsent"          # формы нет, ответ потерян
+    meta.fail_next["leadgen_forms"] = "unsent_stuck"          # формы нет, ответ потерян
     creator, client = _creator(meta)
     out = creator.run(cr.plan_from_draft(_tpl_draft(tmp_path, [tid])))
     assert out.stop_kind == "unknown" and "nothing was found by readback" in out.error
-    assert len(meta.form_posts) == 1 and "adcreatives" not in _edges(meta)
-    assert client.unreconciled == f"/{PAGE}/leadgen_forms"
-    with pytest.raises(g.WritesBlocked):                # клиент не пишет, пока не сверено
-        client.post(f"/{PAGE}/leadgen_forms", BASE, form_page=PAGE)
-    assert len(meta.form_posts) == 1
+    # owner rule 12.11: one re-send after the empty readbacks, never a third POST; the run goes on to the next campaign
+    assert out.run_continues is True
+    assert len(meta.form_posts) == 2 and "adcreatives" not in _edges(meta)
+    assert client.unreconciled is None
 
 
 def test_a_rerun_after_an_unknown_write_creates_a_copy_right_away(tmp_path):
@@ -693,9 +695,9 @@ def test_a_rerun_after_an_unknown_write_creates_a_copy_right_away(tmp_path):
     tid = _saved()["id"]
     clean = ft.validate(TEMPLATE)[0]
     meta = FormsMeta()
-    meta.fail_next["leadgen_forms"] = "unsent"
+    meta.fail_next["leadgen_forms"] = "unsent_stuck"
     first, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
-    assert first.stop_kind == "unknown" and len(meta.form_posts) == 1
+    assert first.stop_kind == "unknown" and len(meta.form_posts) == 2     # the write and its one re-send
     name = ft.form_name(clean)
     assert fc.is_pending(ACT, PAGE, name)
     copy_name = f"Demo form copy 1 · ACL {ft.content_hash(clean)}"
@@ -703,15 +705,15 @@ def test_a_rerun_after_an_unknown_write_creates_a_copy_right_away(tmp_path):
     creator, _c = _creator(meta, writes=False)
     plan_out = creator.plan_only(cr.plan_from_draft(_tpl_draft(tmp_path, [tid])))
     assert "may still be appearing" not in plan_out.error and "wait a few minutes" not in plan_out.error
-    assert len(meta.form_posts) == 1
+    assert len(meta.form_posts) == 2
     again, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
     assert again.error == "", again.error
-    assert len(meta.form_posts) == 2 and meta.form_posts[1][1]["name"] == copy_name
+    assert len(meta.form_posts) == 3 and meta.form_posts[2][1]["name"] == copy_name
     assert any(f"form {copy_name!r}: created" in s for s in again.steps)
     assert not fc.is_pending(ACT, PAGE, name)
     # Следующий запуск находит дубль и переиспользует его: третьей формы нет.
     third, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
-    assert third.error == "" and len(meta.form_posts) == 2
+    assert third.error == "" and len(meta.form_posts) == 3
 
 
 def test_copy_names_keep_the_robot_label_and_are_matched_as_own_forms():
@@ -743,7 +745,7 @@ def test_copy_names_keep_the_robot_label_and_are_matched_as_own_forms():
 def test_the_pending_marker_is_dropped_when_the_form_shows_up(tmp_path):
     tid = _saved()["id"]
     meta = FormsMeta()
-    meta.fail_next["leadgen_forms"] = "unsent"
+    meta.fail_next["leadgen_forms"] = "unsent_stuck"
     _run(meta, _tpl_draft(tmp_path, [tid]))
     name = ft.form_name(ft.validate(TEMPLATE)[0])
     assert fc.is_pending(ACT, PAGE, name)

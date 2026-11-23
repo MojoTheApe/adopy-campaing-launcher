@@ -70,7 +70,7 @@ def test_readback_still_fails_for_a_genuinely_different_image_name(tmp_path):
 
 def _stop_at_first_image(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["adimages"] = "unsent"
+    meta.fail_next["adimages"] = "unsent_stuck"
     first = _publisher(meta).publish_draft(_draft(tmp_path / "a", ads=2))
     assert first["error"] and first["campaign_id"]
     return meta, first
