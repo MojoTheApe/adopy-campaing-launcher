@@ -49,7 +49,11 @@ _ACTION: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_actio
 #: thread that runs the operation: the queued dispatcher runs each read (and sets this) in that read's own thread.
 _EXPLICIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_problem_action_explicit", default=False)
 #: Actions a person starts on purpose; only these may probe a held profile (and lift the hold).
-BUYER_ACTIONS = ("retry", "read", "open")
+#: ACL-2668 (решение 15): Publish, команды по кампаниям и Check plan — тоже действие человека и работают
+#: как Retry. Автоматические чтения (`schedule`, `attention`, `action`) сюда не входят и держат паузу.
+#: ACL-2668/2847: the profile whose tab was found on a login/checkpoint page by this action's own tab look.
+_LOCK_SEEN: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_lock_seen", default="")
+BUYER_ACTIONS = ("retry", "read", "open", "publish", "command", "check_plan")
 
 ACTION_TEXT = {
     "schedule": "a scheduled read",
@@ -72,17 +76,45 @@ def problem_action(action: str, *, only_if_unset: bool = False) -> Iterator[None
     keep = (only_if_unset and _ACTION.get()) or not action
     token = _ACTION.set(_ACTION.get() if keep else str(action))
     etoken = _EXPLICIT.set(_EXPLICIT.get() or (not keep and not only_if_unset))
+    stoken = _LOCK_SEEN.set("") if not keep else None      # a new action starts without a lock seen
     try:
         yield
     finally:
+        if stoken is not None:
+            _LOCK_SEEN.reset(stoken)
         _EXPLICIT.reset(etoken)
         _ACTION.reset(token)
 
 
 def buyer_started() -> bool:
-    """Did a person start the running action (Retry, or an explicit Read)? Schedules, background reads,
-    publish and a defaulted `a read` are not."""
+    """Did a person start the running action (Retry, Read, Publish, a campaign command, Check plan)?
+    Schedules, background reads, refreshes after an action and a defaulted `a read` are not."""
     return bool(_EXPLICIT.get()) and _ACTION.get() in BUYER_ACTIONS
+
+
+def lock_seen_now(key: str) -> bool:
+    """ACL-2668: this action's own tab look just found the profile on a login/checkpoint page: that look is the
+    probe's answer, so the hold stands and its text is shown (no second probe through a session)."""
+    return bool(key) and _LOCK_SEEN.get() == key
+
+
+def reset_lock_seen() -> None:
+    """Each tab look starts clean: a checkpoint the person fixed is not refused on a later look of the same action."""
+    _LOCK_SEEN.set("")
+
+
+def lift_after_probe(key: str) -> bool:
+    """ACL-2668: the page of a held profile answered a person's own action: the hold is over.
+
+    Called right after the tab came up healthy (no checkpoint, no login page, a Graph session). Does nothing
+    outside a buyer-started action. If the problem is still there, the next stop sets the hold again and the
+    row shows its reason, as after Retry.
+    """
+    if not buyer_started():
+        return False
+    if _ACTION.get() in ("publish", "command", "check_plan") and is_auth_hold(key):
+        return False        # ACL-2652: a person's write clears the code-31 hold only after Meta answered (settle/_finish_open)
+    return clear(key, _ACTION.get() or "retry")
 
 
 def current_action() -> str:
@@ -271,6 +303,7 @@ def note_tab_url(key: str, label: str, url: str, action: str = "", title: str = 
     where = classify_stop_url(parts.path)
     if where not in ("checkpoint", "login"):
         return False
+    _LOCK_SEEN.set(key)
     note_person_lock(key, label, action, page="login" if where == "login" else "", title=title)    # keeps the `at` of an existing hold
     return True
 

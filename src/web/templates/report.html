@@ -4725,6 +4725,9 @@ function dashRefreshUpdateCheck() {
         btn.hidden = false;
         btn.dataset.target = name;
         btn.dataset.fixed = fixed.join('\n');
+        // ACL-2668 №11: обновление ждёт конца публикации — состояние на сервере,
+        // поэтому и после перезагрузки страницы кнопка говорит, что оно ждёт.
+        if (s.queued && s.queued.state === 'waiting') aclUpdateQueued(s.queued.message);
       })
       .catch(function () { /* offline, or not a git install — no button, no noise */ });
   }
@@ -4760,6 +4763,7 @@ function dashRefreshUpdateCheck() {
           aclInlineError(btn, 'Update not started: ' + ((data && data.error) || 'unknown error'));
           return;
         }
+        if (data.queued) { aclUpdateQueued(data.message); return; }
         aclWaitForRestart();
       })
       .catch(function () {
@@ -4767,6 +4771,30 @@ function dashRefreshUpdateCheck() {
         // success, not failure, so wait rather than reporting an error.
         aclWaitForRestart();
       });
+  }
+
+  // Идёт публикация: сервер сам начнёт обновление, когда она закончится.
+  // Страница только показывает это и ждёт, пока начнётся рестарт.
+  function aclUpdateQueued(message) {
+    btn.disabled = true;
+    btn.textContent = message || 'Update starts after publishing finishes';
+    (function poll() {
+      fetch('/acl/update/check?fetch=0', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          var q = (s && s.queued) || {};
+          if (q.state === 'waiting') { setTimeout(poll, 5000); return; }
+          if (q.state === 'failed') {
+            btn.disabled = false;
+            btn.textContent = 'Update ACM';
+            aclInlineError(btn, 'Update not started: ' + (q.error || 'unknown error'));
+            return;
+          }
+          aclWaitForRestart();
+        })
+        // Сервер уже ушёл на рестарт.
+        .catch(function () { aclWaitForRestart(); });
+    })();
   }
 
   // Итог последней установки пишет помощник обновления (ACL-1240). Показываем
@@ -5013,11 +5041,10 @@ function dashRefreshUpdateCheck() {
         <input id="rl-ceiling" type="number" min="1" max="8" step="1" style="width:8rem">
       </label>
       <label>
-        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Max memory in use before a new profile starts, % (50-95, default <span id="rl-def-share">92</span>)</div>
-        <input id="rl-share" type="number" min="50" max="95" step="1" style="width:8rem">
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Max memory in use before a new profile starts, % (0-95, default <span id="rl-def-share">92</span>)</div>
+        <input id="rl-share" type="number" min="0" max="95" step="1" style="width:8rem">
       </label>
       <div id="rl-now" style="font-size:var(--adopy-text-sm);color:var(--muted)"></div>
-      <div id="rl-warn" style="font-size:var(--adopy-text-sm);color:var(--danger)"></div>
       <div style="display:flex;gap:0.6rem;align-items:center">
         <button type="button" id="rl-save" class="btn">Save</button>
         <button type="button" id="rl-reset" class="btn">Reset to default</button>
@@ -25476,11 +25503,10 @@ function aclPickerSearch(inst, text) {
 
 // ── ACL-2293: лимиты запуска (потолок профилей, доля памяти; лимит тяжёлых действий убран в ACL-2668) ──
 (function () {
-  var pending = false, loaded = {}, info = {};
+  var pending = false, loaded = {};
   function el(id) { return document.getElementById(id); }
   function say(text, error) { el('rl-msg').textContent = text || ''; el('rl-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function show(d) {
-    info = d;
     loaded = {ceiling: String(d.ceiling), memory_max_used_pct: String(d.memory_max_used_pct)};
     el('rl-ceiling').value = loaded.ceiling;
     el('rl-share').value = loaded.memory_max_used_pct;
@@ -25493,7 +25519,6 @@ function aclPickerSearch(inst, text) {
     now.push(d.running + ' of ' + d.ceiling + ' profiles running' + (d.ceiling_reached ? ' - ceiling reached' : '')
       + (d.waiting ? ', ' + d.waiting + ' waiting' : ''));
     el('rl-now').textContent = now.join(' · ');
-    el('rl-warn').textContent = (d.warnings || []).join(' ');
   }
   async function load() {
     try {
@@ -25502,9 +25527,8 @@ function aclPickerSearch(inst, text) {
       if (r.ok && d.ok) show(d);
     } catch (e) { say(String(e), true); }
   }
-  async function post(body, ask) {
+  async function post(body) {
     if (pending) return;
-    if (ask && !await window.aclConfirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use.', { title: 'Save anyway?', okLabel: 'Save' })) return;
     pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
     try {
       var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -25520,17 +25544,13 @@ function aclPickerSearch(inst, text) {
     if (el('rl-ceiling').value !== loaded.ceiling) body.ceiling = el('rl-ceiling').value;
     if (el('rl-share').value !== loaded.memory_max_used_pct) body.memory_max_used_pct = el('rl-share').value;
     if (!Object.keys(body).length) { say('Nothing changed.'); return; }
-    var c = parseFloat(el('rl-ceiling').value), p = parseFloat(el('rl-share').value);
-    var cf = info.confirm_above || {};
-    var risky = ('ceiling' in body && c > (cf.ceiling || 3)) || ('memory_max_used_pct' in body && p > (cf.memory_max_used_pct || 80));
-    if (risky) body.confirm = true;   // сервер без этого флага рискованное значение не принимает
-    post(body, risky);
+    post(body);   // ACL-2668: без подтверждения — любое значение в границах сохраняется сразу
   }
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (!t || !t.getAttribute) return;
     if (t.id === 'rl-save') { save(); return; }
-    if (t.id === 'rl-reset') { post({reset: true}, false); return; }
+    if (t.id === 'rl-reset') { post({reset: true}); return; }
     if (t.getAttribute('data-view') === 'accounts') load();
   });
   document.addEventListener('acl:viewchange', function (e) {

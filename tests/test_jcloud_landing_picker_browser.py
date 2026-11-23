@@ -23,7 +23,7 @@ ROW = ROW.replace("{{ acc_label | e }}", "Demo")
 
 
 def _card(lid, title):
-    return {"id": lid, "title": title, "url": f"https://lp.example.com/{title}", "domain": "lp.example.com",
+    return {"id": lid, "title": title, "count": 2, "url": f"https://lp.example.com/{title}", "domain": "lp.example.com",
             "path": f"/{title}", "template": "react_x", "language": "en", "status": None, "page_type": "funnel"}
 
 
@@ -51,7 +51,7 @@ def page(browser, monkeypatch, tmp_path):
         elif url.endswith("/api/jcloud/landings/search"):
             searches.append(f)
             body = {"ok": True, "state": "ready", "searched_as": "path", "page": 1, "items": pages["1"],
-                    "total": 4, "has_more": False, "snapshot_id": "s", "complete": True, "unclassified_count": 0}
+                    "total": 4, "matching_landings": 9, "has_more": False, "snapshot_id": "s", "complete": True, "unclassified_count": 0}
         elif url.endswith("/api/account-landings"):
             op = f.get("op", "get")
             if op == "add":
@@ -251,3 +251,12 @@ def test_preview_frame_is_phone_sized_and_scaled_into_the_box(page):
     frame = page.locator("[data-landings-preview] iframe").bounding_box()
     assert abs(frame["width"] - 390 * 0.65) < 1 and abs(frame["height"] - 844 * 0.65) < 1
     assert frame["width"] <= box["width"] + 1 and frame["height"] <= box["height"] + 1
+
+
+def test_cards_show_instance_count_and_the_grouped_totals(page):
+    page.click("[data-landings-open]")
+    page.fill("[data-landings-query]", "x")
+    page.click("[data-landings-go]")
+    page.locator("[data-landing-id]").first.wait_for()
+    assert page.locator("[data-landings-summary]").inner_text() == "4 unique configurations · 9 landings"
+    assert "2 pages" in page.locator("[data-landing-id]").first.inner_text()
