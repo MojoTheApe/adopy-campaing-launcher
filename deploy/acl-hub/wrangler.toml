@@ -1,0 +1,22 @@
+# Хаб телеметрии ACL (часть 1): приём событий машин в D1 и выводы. Развёртывание — README.md.
+name = "acl-hub"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+LIBRARY_REPO = "MojoTheApe/acl-lib"
+HUB_URL = "https://acl-hub.acl-hub.workers.dev"
+
+# Каждые 5 мин: зависшие задания и дайджест за вчера (после 07:00 по Израилю, один раз, с повтором).
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "acl_hub"
+# Живой id базы в гит не кладётся: развёртывание идёт с локальной копией wrangler.local.toml (см. README.md).
+database_id = "REPLACE_WITH_D1_ID"
+migrations_dir = "migrations"
+
+# Секреты (только `wrangler secret put`, в файл не писать): OWNER_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
+# TG_ALLOWED_CHATS (id чатов через запятую).

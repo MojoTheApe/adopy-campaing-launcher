@@ -488,7 +488,7 @@ _HELPER_JS = r"""
     const AF = WRITE.asset_feed;
     if (!isObj(spec)) return false;
     const allowed = ['bodies', 'titles', 'descriptions', 'images', 'videos', 'link_urls',
-                     'call_to_action_types', 'ad_formats', 'asset_customization_rules'];
+                     'call_to_action_types', 'ad_formats', 'asset_customization_rules', AF.instant.optimization_key];
     if (!onAd) for (const k of Object.keys(spec)) if (allowed.indexOf(k) < 0) return false;
     const story = creative.object_story_spec;
     if (!(isObj(story) && Object.keys(story).every(k => ['page_id', IGK()].includes(k))
@@ -503,6 +503,7 @@ _HELPER_JS = r"""
     // ACL-2611: Website, тексты с метками правил + два файла (зеркало write_policy._check_website_labelled_feed).
     if (media.length > 1 && ['bodies', 'titles', 'descriptions'].some((k) => Array.isArray(spec[k])
       && spec[k].some((x) => isObj(x) && 'adlabels' in x))) return websiteLabelledOk(spec, kind);
+    if (AF.instant.optimization_key in spec) return false;  // ACL-2845: only the labelled Website feed sends it
     const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
     // ACL-2474: основной текст можно не давать (зеркало write_policy); заголовок обязателен.
     if (('bodies' in spec && !textListOk(spec.bodies, 'bodies', true, cap)) || !textListOk(spec.titles, 'titles', true, cap)) return false;
@@ -581,6 +582,7 @@ _HELPER_JS = r"""
     if (!(Array.isArray(ctas) && ctas.length === 1 && WRITE.cta_website.indexOf(ctas[0]) >= 0)) return false;
     const want = mediaKind === 'images' ? 'SINGLE_IMAGE' : 'SINGLE_VIDEO';
     if (!(Array.isArray(spec.ad_formats) && spec.ad_formats.length === 1 && spec.ad_formats[0] === want)) return false;
+    if (spec[I.optimization_key] !== I.optimization) return false;  // ACL-2845
     const rules = spec.asset_customization_rules;
     if (!(Array.isArray(rules) && rules.length === 2)) return false;
     for (let n = 0; n < 2; n++) {
@@ -594,6 +596,7 @@ _HELPER_JS = r"""
         const lab = rule[k];
         if (!(isObj(lab) && Object.keys(lab).length === 1 && lab.name === keys[k])) return false;
       }
+      if (n === 0) { if (isObj(rule.customization_spec) && Object.keys(rule.customization_spec).length === 0) continue; return false; }  // main rule: empty catch-all only
       if (!csOk(rule.customization_spec)) return false;
     }
     return true;
@@ -2171,12 +2174,9 @@ class InPageGraph:
         if reason:
             if reason == "work_tab_dead":
                 raise self._stop_connection(PageIdentityError())
-            got = self._light_recapture(max(timeout, 90.0))
+            got = self._recapture_until_settled(timeout)
             if got.get("kind") in ("login", "checkpoint"):
                 raise self._stop_connection(PageIdentityError(got["kind"]))
-            if not got.get("has_token"):
-                raise PageFailed("the lightweight page could not take the Graph session for the Page; "
-                                 "nothing more was sent")
         state = self.state()
         return {**state, "pinned": True} if state.get("has_token") else state
 
@@ -2714,6 +2714,51 @@ class InPageGraph:
         self._upload_graph = up
         return up, ""
 
+    def _ready_or_drop(self, up: "InPageGraph | None") -> "InPageGraph | None":
+        """ACL-2746: the reopened clean tab must itself answer; if not, drop it (the caller falls back to this tab).
+        A real Meta stop (checkpoint / login / wrong origin) still propagates."""
+        if up is None:
+            return None
+        try:
+            up._ready_for_call()
+            return up
+        except GraphStop as exc:
+            if type(exc) is not PageFailed:
+                raise
+            why = type(exc).__name__
+        except Exception as exc:  # noqa: BLE001
+            why = type(exc).__name__
+        self._note_loss("clean_tab_reopen_failed:" + why)
+        self.close_upload_context()
+        return None
+
+    def _reopen_clean_tab(self) -> "InPageGraph | None":
+        """ACL-2746: close the lost clean upload tab and open a new one (same checks as `probe_worker`). None when
+        none can be opened - the caller then uploads from this tab."""
+        self.close_upload_context()
+        try:
+            up, reason = self._open_upload_context()
+        except GraphStop as exc:
+            if type(exc) is not PageFailed:
+                raise
+            up, reason = None, "PageFailed"
+        if up is not None:
+            try:
+                ok, why, _ = up._probe_here()
+            except GraphStop as exc:
+                if type(exc) is not PageFailed:
+                    raise
+                ok, why = False, "PageFailed"
+            if not ok:
+                self.close_upload_context()
+                up, reason = None, why
+        if up is None:
+            self._note_loss("clean_tab_reopen_failed:" + str(reason)[:60])
+            return None
+        self.upload_context = "clean_tab"
+        self.upload_mode, self.upload_mode_note = up.upload_mode, up.upload_mode_note
+        return up
+
     def adopt_upload_context(self, old: "InPageGraph") -> None:
         """ACL-2637: take over the clean upload tab of `old` (a light lease switched to Ads Manager, ACL-2593).
         The clean tab holds its own token and the same session policy; nothing is re-opened or sent."""
@@ -2816,11 +2861,21 @@ class InPageGraph:
         if up is not None:
             try:
                 up._ready_for_call()
+            except GraphStop as exc:
+                if not type(exc) is PageFailed:         # checkpoint / login / wrong origin: a real Meta stop
+                    raise
+                self._note_loss("clean_tab_lost:PageFailed")
+                up = self._reopen_clean_tab()
+                up = self._ready_or_drop(up)
             except Exception as exc:  # noqa: BLE001 - nothing was sent; the tab is not used again
-                self.close_upload_context()
-                return {"error": "no_file", "why": f"clean upload tab lost ({type(exc).__name__})"}
-            up._add_referrer(spec)
-            return up._write_served(spec, field_name, chunk, progress, cancelled, deadline_s)
+                # ACL-2746: a lost clean tab is reopened (as `probe_worker` does) and the call retried here; if no
+                # clean tab can be opened, the upload continues in this (light) tab's own path below.
+                self._note_loss(f"clean_tab_lost:{type(exc).__name__}")
+                up = self._reopen_clean_tab()
+                up = self._ready_or_drop(up)
+            if up is not None:
+                up._add_referrer(spec)
+                return up._write_served(spec, field_name, chunk, progress, cancelled, deadline_s)
         server = None
         token = ""
         try:
@@ -3182,11 +3237,11 @@ class InPageGraph:
     #: ACL-2593: set by the lease owner; switches the lease to an Ads Manager tab and returns its graph
     #: (a form-background upload needs the page secrets, which a light tab does not have).
     leave_light: Callable[[], Any] | None = None
-    #: How many times the token may be taken again within ONE lease (each = one Ads Manager load). Enforced
-    #: in `_light_recapture`, so it holds for every path (`_light_check`, `reacquire`, `pin_page`); the warm
-    #: lease resets the counter (`light_recaptures = 0`) when it hands the graph out.
-    MAX_LIGHT_RECAPTURES = 2
+    #: ACL-2746: how many times the token was taken again within this lease - telemetry only (each = one Ads Manager
+    #: load). There is NO limit: a lost session is re-captured as often as needed (owner rule: no agent-made stops).
     light_recaptures = 0
+    #: Per-attempt wait of ONE capture (not a bound on the run: a failed attempt is followed by another).
+    LIGHT_CAPTURE_WAIT_S = 90.0
 
     @property
     def light(self) -> bool:
@@ -3218,14 +3273,12 @@ class InPageGraph:
     def _light_recapture(self, timeout: float) -> dict:
         if self.light_recapture is None:
             return {"kind": "ads_manager", "light": True, "has_token": False}
-        if self.light_recaptures >= self.MAX_LIGHT_RECAPTURES:
-            raise PageFailed("the lightweight page kept losing its Graph session; nothing more was sent")
         self.light_recaptures += 1
         got = self.light_recapture(self, timeout)
         return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
 
     def _light_check(self, state: Any, *, timeout: float) -> None:
-        """Before a call on the light tab: our document, our token - else take it again (bounded) or stop.
+        """Before a call on the light tab: our document, our token - else take it again (no limit) or stop on a real Meta stop.
 
         Only local CDP; a re-capture is one Ads Manager load in a separate tab (counted in telemetry).
         """
@@ -3235,13 +3288,57 @@ class InPageGraph:
             raise self._stop_connection(PageIdentityError())
         if not reason and isinstance(state, dict) and state.get("has_token"):
             return
+        self._note_loss("session_lost:" + (reason or "no_token"))
         self.world_name = f"acl_{secrets.token_hex(6)}"
         self._reset_world()
-        got = self._light_recapture(max(timeout, 90.0))
+        got = self._recapture_until_settled(timeout)
         if got.get("kind") == "checkpoint":
             raise self._stop_connection(PageIdentityError("checkpoint"))
         if got.get("kind") == "login":
             raise self._stop_connection(PageIdentityError("login"))
-        if not got.get("has_token"):
-            raise PageFailed("the lightweight page lost its Graph session and it could not be taken "
-                             "again; nothing more was sent")
+
+    def _recapture_until_settled(self, timeout: float) -> dict:
+        """ACL-2746: take the Graph session again until it is back - no count limit, no overall time bound. Only a
+        real Meta stop (login / checkpoint) or a light tab that is gone ends it; a plain miss is tried again."""
+        while True:
+            self._raise_if_job_stopped()
+            got = self._light_recapture(self.LIGHT_CAPTURE_WAIT_S)
+            if got.get("has_token") or got.get("kind") in ("login", "checkpoint"):
+                return got
+            if self.light_recapture is None:
+                raise PageFailed("the lightweight page lost its Graph session and there is no way to take it "
+                                 "again; nothing more was sent")
+            if got.get("lost"):             # no capture tab can be opened: the browser / profile is gone
+                self._note_loss("capture_tab_unavailable")
+                raise self._stop_connection(PageIdentityError())
+            doc = getattr(self.tab, "light", None)
+            gone = doc.document_intact(timeout=5.0) if doc is not None else "work_tab_dead"
+            if gone in ("light_doc_wrong_origin", "work_tab_dead"):
+                self._note_loss("work_tab_lost:" + gone)
+                raise self._stop_connection(PageIdentityError())
+            self._note_loss("recapture_no_token:" + str(got.get("kind") or "unknown"))
+            self._raise_if_job_stopped()
+            self._sleep(1.0)
+
+    def _raise_if_job_stopped(self) -> None:
+        """ACL-2746: the user's Stop ends the wait (the job's cancel, as every other patient wait does)."""
+        try:
+            from src.fb_api import warm
+
+            job = warm._JOB_WAIT.get()
+        except Exception:  # noqa: BLE001
+            job = None
+        if job is not None and job.cancelled():
+            self._note_loss("job_stopped")
+            raise PageFailed("stopped by the user while the lightweight page took its Graph session again; "
+                             "nothing more was sent")
+
+    def _note_loss(self, reason: str) -> None:
+        """ACL-2746: one telemetry row with the reason code of a lost session / tab (codes only, never raises)."""
+        try:
+            from src.fb_api import light_tab
+
+            light_tab._record({"event": "fb_api_tab_context", "phase": "light_lost", "mode": "light",
+                               "lost_reason": reason[:80], "recapture_count": self.light_recaptures})
+        except Exception:  # noqa: BLE001
+            pass

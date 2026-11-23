@@ -86,20 +86,38 @@ def _default_launcher(instance: str) -> Any:
     return MultiloginLauncher(get_multilogin_instance(instance))
 
 
+#: ACL-2822: какой из адресов «запущенных профилей» ответил у этого лаунчера — его и спрашиваем первым.
+_RUNNING_ENDPOINT: dict[str, str] = {}
+
+
+def _running_endpoints(launcher: Any) -> list[str]:
+    """Адреса списка запущенных профилей: запомненный рабочий первым, остальные как были."""
+    base = launcher.config.launcher_base_v2
+    found = [
+        f"{base}/profile/running",
+        f"{launcher.config.launcher_base_v1}/profile/running",
+        f"{base}/profiles/running",
+    ]
+    known = _RUNNING_ENDPOINT.get(base)
+    if known in found:
+        found.remove(known)
+        found.insert(0, known)
+    return found
+
+
 def running_state(launcher: Any, profile_id: str) -> tuple[str, str | None]:
     """('running', порт) / ('not_running', None) / ('unknown', None).
 
     Те же адреса «запущенных профилей», что у `MultiloginLauncher`; разница —
     «не ответил» отличается от «профиля нет в списке».
+
+    ACL-2822: останавливаемся на первом адресе, который ответил списком, и
+    запоминаем его; остальные не спрашиваем (раньше шли по всем трём).
     """
     import requests
 
-    answered = False
-    for endpoint in (
-        f"{launcher.config.launcher_base_v2}/profile/running",
-        f"{launcher.config.launcher_base_v1}/profile/running",
-        f"{launcher.config.launcher_base_v2}/profiles/running",
-    ):
+    base = launcher.config.launcher_base_v2
+    for endpoint in _running_endpoints(launcher):
         try:
             r = requests.get(endpoint, headers=launcher._headers(), timeout=10)
             if r.status_code != 200:
@@ -109,16 +127,17 @@ def running_state(launcher: Any, profile_id: str) -> tuple[str, str | None]:
                 items = items.get("data") or []
             if not isinstance(items, list):
                 continue
-            answered = True
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                if (item.get("profile_id") or item.get("id") or "") == profile_id:
-                    port = item.get("port") or item.get("debug_port")
-                    return "running", (str(port) if port else None)
         except Exception:
             continue
-    return ("not_running", None) if answered else ("unknown", None)
+        _RUNNING_ENDPOINT[base] = endpoint
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if (item.get("profile_id") or item.get("id") or "") == profile_id:
+                port = item.get("port") or item.get("debug_port")
+                return "running", (str(port) if port else None)
+        return "not_running", None
+    return "unknown", None
 
 
 def _mlx_home() -> Path:
@@ -314,13 +333,52 @@ def _sync_error(why: str) -> ProfileError:
     return ProfileError(why, code="cancelled" if why == _stop_log.CANCELLED_TEXT else "restart_cooldown")
 
 
+def _step(name: str):
+    from src.fb_api import open_timing
+
+    return open_timing.step(name)
+
+
 def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
                  on_wait: Callable[[str], None] | None = None,
                  launcher_factory: Callable[[str], Any] | None = None,
                  local_probe: Callable[[str], tuple[str, int | None]] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  closing_wait_s: float = CLOSING_WAIT_S) -> OpenedProfile:
-    """Профиль с портом отладки от MLX: уже работающий или поднятый нами."""
+    """Профиль с портом отладки от MLX: уже работающий или поднятый нами.
+
+    ACL-2822: путь чтения и публикации пишет одно событие `profile.open` сам; если его уже
+    завёл `warm.open_one`, шаги идут в его замер, а второго события нет.
+    """
+    from src.fb_api import mlx_session as _mlx_s
+    from src.fb_api import open_timing
+
+    if open_timing.current() is not None:
+        return _open_profile(profile_id, folder_id, instance, on_wait=on_wait, launcher_factory=launcher_factory,
+                             local_probe=local_probe, sleep=sleep, closing_wait_s=closing_wait_s)
+    slot = (instance or "A").strip().upper() or "A"
+    timer = open_timing.OpenTimer(_mlx_s.current_account() or "", slot, "profile")
+    outcome = "error"
+    try:
+        with open_timing.activate(timer):
+            opened = _open_profile(profile_id, folder_id, instance, on_wait=on_wait,
+                                   launcher_factory=launcher_factory, local_probe=local_probe,
+                                   sleep=sleep, closing_wait_s=closing_wait_s)
+        outcome = "started" if getattr(opened, "started_now", False) else "already_open"
+        return opened
+    except ProfileError as exc:
+        outcome = exc.code or "profile_error"
+        raise
+    finally:
+        timer.emit(outcome)
+
+
+def _open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
+                  on_wait: Callable[[str], None] | None = None,
+                  launcher_factory: Callable[[str], Any] | None = None,
+                  local_probe: Callable[[str], tuple[str, int | None]] | None = None,
+                  sleep: Callable[[float], None] = time.sleep,
+                  closing_wait_s: float = CLOSING_WAIT_S) -> OpenedProfile:
     profile_id = (profile_id or "").strip()
     folder_id = (folder_id or "").strip()
     instance = (instance or "A").strip().upper() or "A"
@@ -334,15 +392,17 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     from src.fb_ads_rpa import profile_proxy_gate, profile_trouble
 
     try:
-        profile_proxy_gate.ensure_profile_has_proxy(
-            SimpleNamespace(profile_id=profile_id, multilogin_instance=instance), profile_id)
+        with _step("proxy_gate"):
+            profile_proxy_gate.ensure_profile_has_proxy(
+                SimpleNamespace(profile_id=profile_id, multilogin_instance=instance), profile_id)
     except profile_trouble.ProfileStop as stop:
         raise ProfileError(profile_trouble.message(stop.code), code=stop.code) from stop
 
     # 1. Процесс Mimic этого профиля на машине (как attach_existing_only робота).
     if local_probe is None:
         local_probe = probe_local
-    kind, local_port = local_probe(profile_id)
+    with _step("local_probe"):
+        kind, local_port = local_probe(profile_id)
     # Профиль закрывается: несколько секунд ждём, что порт пропадёт вместе с
     # процессом (тогда идём в MLX) или оживёт; потом отказ, ничего не трогаем.
     waited = 0.0
@@ -369,19 +429,22 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
 
     # 2. Процесса нет — спрашиваем MLX и поднимаем.
     launcher = (launcher_factory or _default_launcher)(instance)
-    state, port = running_state(launcher, profile_id)
+    with _step("running_list"):
+        state, port = running_state(launcher, profile_id)
     if state == "running":
         from src.fb_api import stop_log as _stop_log
 
         had_pause = _stop_log.default().restart_wait_s(profile_id) > 0
-        why = _wait_for_sync(profile_id, on_wait, sleep)
+        with _step("sync_wait"):
+            why = _wait_for_sync(profile_id, on_wait, sleep)
         if why:
             # Остановили сами и недавно, а процесса на машине нет: MLX помнит
             # старый порт. К нему не цепляемся (TEST9095y, B97: CdpTimeout connect).
             raise _sync_error(why)
         if had_pause:
             # Ждали: старый ответ MLX про порт устарел — спрашиваем заново.
-            state, port = running_state(launcher, profile_id)
+            with _step("running_list"):
+                state, port = running_state(launcher, profile_id)
     if state == "running":
         if not port:
             raise ProfileError(
@@ -395,7 +458,8 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     # Закрыли и сразу подняли заново — вероятная причина двух разлогинов (ACL-1811).
     from src.fb_api import stop_log as _stop_log
 
-    why = _wait_for_sync(profile_id, on_wait, sleep)
+    with _step("sync_wait"):
+        why = _wait_for_sync(profile_id, on_wait, sleep)
     if why:
         raise _sync_error(why)
 
@@ -405,8 +469,9 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     skip = _mlx.refusal(_mlx.current_batch(), instance, _mlx.current_account())
     if skip:
         raise ProfileError(skip["message"], code=skip["code"])
-    started, adopted_port, retried = _start_with_one_retry(
-        launcher, profile_id, folder_id, instance, local_probe=local_probe, sleep=sleep)
+    with _step("start"):
+        started, adopted_port, retried = _start_with_one_retry(
+            launcher, profile_id, folder_id, instance, local_probe=local_probe, sleep=sleep)
     if adopted_port:
         # Первый старт оборвался, а профиль поднялся (B91, 12:08:40 → закрыт в 12:11:46):
         # он наш — держит место и закрывается нами, как обычный старт.
@@ -467,7 +532,7 @@ def wait_gone(profile_id: str, *, timeout_s: float | None = None,
 def _start_with_one_retry(launcher: Any, profile_id: str, folder_id: str, instance: str, *,
                           local_probe: Callable[[str], tuple[str, int | None]],
                           sleep: Callable[[float], None]) -> tuple[Any, int | None, bool]:
-    """MLX `start` в общем темпе (`launch.StartPacer`); обрыв 10053/10054 — один повтор.
+    """MLX `start` через `launch.StartPacer` (потолка по умолчанию нет); обрыв 10053/10054 — один повтор.
 
     Ответ — `(started, None, повторяли)` или `(None, порт, True)`, если после
     обрыва профиль поднялся сам (его и берём, второй старт не шлём). Вход в
@@ -494,9 +559,11 @@ def _start_with_one_retry(launcher: Any, profile_id: str, folder_id: str, instan
             if port:
                 _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt,
                                      pace=pace, adopted=True)
+                _mlx.note_started(instance)   # ACL-2668: сессия MLX слота жива
                 return None, port, True
             continue
         _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt, pace=pace)
+        _mlx.note_started(instance)   # ACL-2668: сессия MLX слота жива — защёлку пачек снять
         return started, None, attempt == 2
     raise AssertionError("unreachable")
 

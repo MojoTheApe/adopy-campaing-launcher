@@ -52,7 +52,10 @@ UNKNOWN = "Unknown"
 
 # Ревизия данных BI = момент последней загрузки. Спрашивать её у сервера на
 # каждый запрос страницы нельзя (peek идёт из цикла событий), поэтому она
-# обновляется не чаще раза в REVISION_TTL секунд и только из рабочего потока.
+# обновляется только из рабочего потока и только по событиям (ACL-2668 #21):
+# первая сборка после старта, Refresh, смена периода/сравнения на странице.
+# Периодического опроса нет. REVISION_TTL — лишь защита от повторов для
+# вызовов без force.
 REVISION_TTL = 300.0
 _REV_LOCK = threading.Lock()
 _REV: Dict[str, Any] = {"value": None, "checked": 0.0}
@@ -252,31 +255,6 @@ def refresh_revision(*, force: bool = False) -> Optional[str]:
                 _REV["value"] = "unavailable"
         _REV["checked"] = time.monotonic()
         return _REV["value"]
-
-
-_WATCHER: Dict[str, Any] = {"thread": None}
-
-
-def ensure_revision_watcher() -> None:
-    """Фоновый поток: раз в REVISION_TTL обновляет ревизию.
-
-    Страница сама в BI не ходит (иначе запрос после загрузки BI ждал бы
-    сеть и холодную сборку — ACL-1399). Поток лишь меняет ключ; peek видит
-    новый ключ, и отчёт пересобирается фоном, как при новой книге.
-    """
-    with _REV_LOCK:
-        thread = _WATCHER["thread"]
-        if thread is not None and thread.is_alive():
-            return
-
-        def run() -> None:
-            while bi_enabled():
-                time.sleep(REVISION_TTL)
-                refresh_revision(force=True)
-
-        thread = threading.Thread(target=run, name="acl-bi-revision", daemon=True)
-        _WATCHER["thread"] = thread
-        thread.start()
 
 
 def source_key(excel_key: Optional[Tuple[str, float, int]]) -> Optional[Tuple[Any, ...]]:

@@ -353,7 +353,7 @@ def test_country_has_no_manual_bulk_read_control(page, site):
 
 
 def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
-    monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+    monkeypatch.setenv(api.BACKEND_ENV, "rpa")
     with sync_playwright() as pw:
         browser = launch_chromium(pw)
         pg = browser.new_page(viewport={"width": 1280, "height": 600})
