@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2870 — Home: Open on one account no longer blocks the others — 2026-11-23
+
+Pressing Open on one account disables only that account's button; other accounts and the warm bar stay usable, and the server accepts open jobs for different accounts at once.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1870).
+
 ## ACL-2676 — Profile starts no longer wait for the CPU — 2026-11-23
 
 The next profile of a job no longer waits for the CPU to stay below 70 % for 5 s (up to 180 s). The settings

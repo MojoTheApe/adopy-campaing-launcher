@@ -752,6 +752,36 @@ def test_open_endpoint_needs_loopback(monkeypatch):
     assert code == 403 and data["code"] == "not_loopback"
 
 
+def test_open_jobs_of_different_accounts_run_in_parallel(monkeypatch):
+    """ACL-2870: второй Open другого аккаунта не ждёт первый; тот же аккаунт — отказ."""
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_guard", lambda: None)
+    monkeypatch.setattr(warm_api, "_run_open", lambda *a, **k: None)   # задания остаются «running»
+    monkeypatch.setattr(warm_api, "_JOBS", {})
+    first, code1 = warm_api.start_open(["A"])
+    second, code2 = warm_api.start_open(["B"])
+    again, code3 = warm_api.start_open(["A"])
+    assert (code1, code2) == (202, 202) and first["job_id"] != second["job_id"]
+    assert code3 == 409 and again["job_id"] == first["job_id"]
+    assert warm_api._manual_job_running()
+
+
+def test_many_parallel_opens_never_prune_a_running_job(monkeypatch):
+    """ACL-2870: 12 параллельных Open — самое старое, ещё бегущее задание остаётся доступным для опроса."""
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_guard", lambda: None)
+    monkeypatch.setattr(warm_api, "_run_open", lambda *a, **k: None)
+    monkeypatch.setattr(warm_api, "_JOBS", {})
+    ids = [warm_api.start_open([f"Acc{i}"])[0]["job_id"] for i in range(12)]
+    assert all(i in warm_api._JOBS for i in ids)
+    warm_api._JOBS[ids[0]]["state"] = "done"
+    last = warm_api.start_open(["Acc99"])[0]["job_id"]
+    assert ids[0] not in warm_api._JOBS and last in warm_api._JOBS
+    assert all(i in warm_api._JOBS for i in ids[1:])
+
+
 # ───────────────────────── через настоящие PageTab / InPageGraph ─────────────────────────
 
 class RealishCdp:
