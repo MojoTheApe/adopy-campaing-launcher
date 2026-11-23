@@ -214,6 +214,19 @@ def test_page_unresponsive_cools_the_profile_for_ten_minutes(monkeypatch, tmp_pa
     assert "nothing more was sent" in str(ei3.value)      # the fresh tab's own stop text: nothing was written
 
 
+def test_acl2668_publish_is_not_refused_by_the_timed_pause(monkeypatch, tmp_path):
+    """ACL-2668 decision 7: a rate-limit pause holds background reads only; Publish opens the profile at once."""
+    from src.analysis_agent import account_spend_api as api
+
+    opened: list = []
+    pa = _publisher_with(monkeypatch, HangTab(ADSMANAGER), opened, tmp_path)
+    api._start_cooldown(pa._frozen_api("Acc")[1], g.RateLimited("slow down"), "Acc")
+    assert pa._cooldown("Acc")[1] == "rate_limited" and pa._cooldown("Acc")[0] > 0
+    with pytest.raises(pa.ApiPublishError) as ei:      # the hung tab of this rig, not a refusal
+        pa.ApiPublisher().open("Acc")
+    assert ei.value.code == "page_unresponsive" and len(opened) == 1
+
+
 # ───────────────────────── F2: телеметрия на исключении ─────────────────────────
 
 def test_pilot_line_written_when_creator_raises_cdp_timeout(monkeypatch):

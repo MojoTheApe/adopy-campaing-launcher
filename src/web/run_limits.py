@@ -1,14 +1,13 @@
 """Run limits of this computer, changed in Settings without a restart (ACL-2293).
 
-Three machine settings live in the machine `.env` and are applied to the running
+Two machine settings live in the machine `.env` and are applied to the running
 process at once (`update_machine_env` also sets `os.environ`):
 
 * `ACL_MAX_PROFILES`        - how many Multilogin profiles run at once (the ceiling);
                               unset - by machine memory (ACL-2668, `profile_slots.ceiling_for_memory`);
-* `ACL_WARM_MAX_HEAVY`      - how many heavy account actions run at once;
 * `ACL_MEMORY_MAX_USED_PCT` - the share of memory in use above which no new profile starts.
 
-`ProfileSlots` and `HeavyGate` re-read the environment on every decision, so a change
+`ProfileSlots` re-reads the environment on every decision, so a change
 applies to the next start decision; running jobs are never stopped.
 """
 from __future__ import annotations
@@ -22,12 +21,11 @@ from config.paths import update_machine_env
 log = logging.getLogger(__name__)
 
 CEILING_KEY = "ACL_MAX_PROFILES"
-HEAVY_KEY = "ACL_WARM_MAX_HEAVY"
 SHARE_KEY = "ACL_MEMORY_MAX_USED_PCT"
 
-# Границы — решение владельца 09.11: потолок 1–8, тяжёлых 1–3, доля памяти 50–95 (как в ACL-2400).
+# Границы — решение владельца 09.11: потолок 1–8, доля памяти 50–95 (как в ACL-2400).
+# ACL-2668 (16.11): поля «Heavy actions at once» больше нет — лимит тяжёлых действий убран.
 CEILING_BOUNDS = (1, 8)
-HEAVY_BOUNDS = (1, 3)
 SHARE_BOUNDS = (50.0, 95.0)
 
 #: Выше этих значений страница просит подтверждение (один диалог на всё сохранение).
@@ -35,7 +33,7 @@ SHARE_BOUNDS = (50.0, 95.0)
 CONFIRM_CEILING_ABOVE = 3
 CONFIRM_SHARE_ABOVE = 80.0
 
-FIELDS = ("ceiling", "warm_heavy", "memory_max_used_pct")
+FIELDS = ("ceiling", "memory_max_used_pct")
 
 
 class RunLimitError(ValueError):
@@ -48,13 +46,11 @@ class NeedsConfirm(RunLimitError):
 
 def defaults() -> dict[str, float | int]:
     from src.web import profile_slots as ps
-    return {"ceiling": ps.default_ceiling(), "warm_heavy": 1,
-            "memory_max_used_pct": ps.DEFAULT_MAX_USED_PCT}
+    return {"ceiling": ps.default_ceiling(), "memory_max_used_pct": ps.DEFAULT_MAX_USED_PCT}
 
 
 def bounds() -> dict[str, list]:
-    return {"ceiling": list(CEILING_BOUNDS), "warm_heavy": list(HEAVY_BOUNDS),
-            "memory_max_used_pct": list(SHARE_BOUNDS)}
+    return {"ceiling": list(CEILING_BOUNDS), "memory_max_used_pct": list(SHARE_BOUNDS)}
 
 
 def confirm_ceiling_above() -> int:
@@ -93,10 +89,6 @@ def check_ceiling(raw: Any) -> int:
     return _whole(raw, "Profiles at once", *CEILING_BOUNDS)
 
 
-def check_heavy(raw: Any) -> int:
-    return _whole(raw, "Heavy actions at once", *HEAVY_BOUNDS)
-
-
 def check_share(raw: Any) -> float:
     lo, hi = SHARE_BOUNDS
     value = _number(raw, "Memory in use")
@@ -110,12 +102,10 @@ def _fmt(value: float | int) -> str:
 
 
 def effective() -> dict[str, float | int]:
-    """The values the engine uses right now (the same readers as ProfileSlots / HeavyGate)."""
-    from src.fb_api.warm import max_heavy
+    """The values the engine uses right now (the same reader as ProfileSlots)."""
     from src.web.profile_slots import load_settings
     settings = load_settings()
-    return {"ceiling": settings.ceiling, "warm_heavy": max_heavy(),
-            "memory_max_used_pct": settings.max_used_pct}
+    return {"ceiling": settings.ceiling, "memory_max_used_pct": settings.max_used_pct}
 
 
 def _context() -> dict[str, Any]:
@@ -159,7 +149,7 @@ def current() -> dict[str, Any]:
             "warnings": warnings_for(values, ctx["total_mb"])}
 
 
-def save(ceiling: Any = None, warm_heavy: Any = None, memory_max_used_pct: Any = None,
+def save(ceiling: Any = None, memory_max_used_pct: Any = None,
          *, reset: bool = False, confirm: bool = False) -> dict[str, Any]:
     """Validate everything first, then write all values in one update.
 
@@ -170,13 +160,10 @@ def save(ceiling: Any = None, warm_heavy: Any = None, memory_max_used_pct: Any =
     values: dict[str, str] = {}
     if reset:
         d = defaults()
-        values = {CEILING_KEY: _fmt(d["ceiling"]), HEAVY_KEY: _fmt(d["warm_heavy"]),
-                  SHARE_KEY: _fmt(d["memory_max_used_pct"])}
+        values = {CEILING_KEY: _fmt(d["ceiling"]), SHARE_KEY: _fmt(d["memory_max_used_pct"])}
     else:
         if ceiling is not None:
             values[CEILING_KEY] = _fmt(check_ceiling(ceiling))
-        if warm_heavy is not None:
-            values[HEAVY_KEY] = _fmt(check_heavy(warm_heavy))
         if memory_max_used_pct is not None:
             values[SHARE_KEY] = _fmt(check_share(memory_max_used_pct))
     if not confirm and not reset:

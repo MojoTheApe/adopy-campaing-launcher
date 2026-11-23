@@ -175,3 +175,4 @@ def test_a_person_write_leaves_a_code_31_hold_to_meta_answer(monkeypatch):
         assert blocks.lift_after_probe("k") is False and blocks.is_held("k")
     with blocks.problem_action("retry"):
         assert blocks.lift_after_probe("k") is True
+

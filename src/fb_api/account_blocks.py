@@ -98,6 +98,11 @@ def lock_seen_now(key: str) -> bool:
     return bool(key) and _LOCK_SEEN.get() == key
 
 
+def reset_lock_seen() -> None:
+    """Each tab look starts clean: a checkpoint the person fixed is not refused on a later look of the same action."""
+    _LOCK_SEEN.set("")
+
+
 def lift_after_probe(key: str) -> bool:
     """ACL-2668: the page of a held profile answered a person's own action: the hold is over.
 
