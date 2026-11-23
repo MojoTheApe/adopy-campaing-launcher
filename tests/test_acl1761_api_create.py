@@ -474,6 +474,9 @@ class FakeMeta:
         mode = self.fail_next.pop(edge, None)
         if mode == "unsent":
             return {"error": "call_unknown"}
+        if mode == "unsent_stuck":                    # no answer, not created - and the re-send gets none either
+            self.fail_next[edge] = "unsent"
+            return {"error": "call_unknown"}
         if edge == "adimages":
             data = files["filename"]
             assert isinstance(data, bytes)
@@ -697,7 +700,7 @@ def test_a_rerun_creates_nothing(tmp_path):
 
 def test_a_rerun_after_a_partial_run_only_adds_what_is_missing(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"          # первое объявление не создано, ответа нет
+    meta.fail_next["ads"] = "unsent_stuck"    # первое объявление не создано, ответа нет
     first, _ = _run(meta, _draft(tmp_path, ads=2))
     assert first.stop_kind == "unknown" and first.campaign_id
     camps = len([o for o in meta.objects.values() if o["_kind"] == "campaign"])
@@ -722,11 +725,12 @@ def test_unknown_result_is_reconciled_by_readback_and_not_retried(tmp_path):
 
 def test_unknown_result_not_found_stops_before_any_further_write(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["adsets"] = "unsent"
+    meta.fail_next["adsets"] = "unsent_stuck"
     out, client = _run(meta, _draft(tmp_path, ads=2))
     assert out.stop_kind == "unknown" and "re-run" in out.error
     edges = [p.rsplit("/", 1)[1] for p, _ in meta.posts]
-    assert edges == ["campaigns", "adsets"]
+    assert edges == ["campaigns", "adsets", "adsets"]     # one re-send (owner rule 12.11), never a third write
+    assert out.run_continues is True
 
 
 def test_readback_mismatch_is_flagged(tmp_path):
@@ -1029,7 +1033,7 @@ def _publisher(meta, *, dry_run=False):
 
 def test_after_an_unknown_result_the_rest_of_the_job_is_refused(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["adsets"] = "unsent"
+    meta.fail_next["adsets"] = "unsent_stuck"
     pub = _publisher(meta)
     first = pub.publish_draft(_draft(tmp_path, ads=1))
     assert first["failure"]["key"] == "graph_write_unconfirmed"        # ACL-2392: plain text, raw in details
@@ -1038,7 +1042,8 @@ def test_after_an_unknown_result_the_rest_of_the_job_is_refused(tmp_path):
     d2 = _draft(tmp_path, ads=1)
     d2.name = d2.ad_sets[0].name = "MX Leads 2"
     second = pub.publish_draft(d2)
-    assert second["error"].startswith("Not started: an earlier write") and len(meta.posts) == n
+    # owner rule 12.11: the write stayed unknown after its one re-send, so only the first campaign stopped
+    assert not (second["error"] or "").startswith("Not started") and len(meta.posts) > n
 
 
 def test_own_call_cap_does_not_end_later_campaigns(tmp_path, monkeypatch):
@@ -1247,10 +1252,10 @@ def test_backend_switch(monkeypatch):
     from src.web import publish_api
 
     monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
-    assert publish_api.backend() == "rpa"
+    assert publish_api.backend() == "api"                                       # ACL-2785: по умолчанию api
     monkeypatch.setenv("ACL_FB_BACKEND", "API")
     assert publish_api.backend() == "api"
-    monkeypatch.setenv("ACL_FB_BACKEND", "bogus")
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     assert publish_api.backend() == "rpa"
 
 

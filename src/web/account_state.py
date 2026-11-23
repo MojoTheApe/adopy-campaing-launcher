@@ -118,6 +118,37 @@ def _status_tip(code: str, res: dict, st: dict, label: str, by_spend: bool = Fal
     return ""
 
 
+def _person_lock(hold) -> dict | None:
+    """ACL-2653: words of a Facebook user lock from a profile hold (`account_blocks.view`), else None.
+
+    The Facebook user lock (a person checkpoint) is not an ad account restriction: different words, both red."""
+    if not isinstance(hold, dict) or not hold.get("person_lock"):
+        return None
+    try:
+        since = datetime.fromtimestamp(float(hold.get("at"))).strftime("%d.%m")
+    except (TypeError, ValueError, OverflowError, OSError):
+        since = ""
+    try:
+        seen = datetime.fromtimestamp(float(hold.get("seen") or hold.get("at"))).strftime("%d.%m %H:%M")
+    except (TypeError, ValueError, OverflowError, OSError):
+        seen = ""
+    login = hold.get("page") == "login"
+    word = "Logged out of Facebook" if login else "Facebook locked"
+    title = " ".join(str(hold.get("title") or "").split())
+    if title:
+        # ACL-2841: Meta's own text from the tab title; without a readable title the fixed wording stays.
+        head = f'Facebook says: "{title}".'
+    elif login:
+        head = "The profile is logged out of Facebook."
+    else:
+        head = "The Facebook user of this profile is locked (for example: log in with another device to unlock it)."
+    return {
+        "word": word,
+        "line": word + (f" · since {since}" if since else "") + (f" · read {seen}" if seen else ""),
+        "tip": (head + " " + str(hold.get("next") or "Solve it in the open profile window, then press Retry.")).strip(),
+    }
+
+
 def stale_clear_too_old(at: str, today: date) -> bool:
     """Удачное чтение `clear` старше STATE_STALE_DAYS (или без даты) не считается фактом."""
     day = _parse_day(at)
@@ -147,9 +178,13 @@ def account_state(row: dict, today: date | None = None) -> dict:
     # Не распознанный API-код (`unknown` со словами Meta) — тоже незнание, не «нет статуса».
     has_status = bool(code)
 
+    lock = _person_lock(row.get("hold"))
     by_spend = False
     if code in DEAD_STATUSES:
         key = "dead"
+    elif lock:
+        # ACL-2653: the person's Facebook user is locked. A saved `clear`, however fresh, says nothing about it.
+        key = "issue"
     elif code in ISSUE_STATUSES:
         key = "issue"
     elif res["known"] and code == "clear":
@@ -177,7 +212,9 @@ def account_state(row: dict, today: date | None = None) -> dict:
     elsewhere = row.get("elsewhere") or {}
     label = read_label(at, now)
     tried_label = read_label(st.get("tried_at") or "", now) if (st.get("tried_at") or st.get("tried_error")) else ""
-    if key in ("issue", "dead"):
+    if lock and key == "issue" and code not in ISSUE_STATUSES:
+        reason = lock["word"]
+    elif key in ("issue", "dead"):
         reason = text or short_reason(code, text)
     elif key == "unknown":
         tried = _short_date(st.get("tried_at") or "")
@@ -197,6 +234,11 @@ def account_state(row: dict, today: date | None = None) -> dict:
     if key in ("unknown", "new") and elsewhere and not reason.startswith("spend filed"):
         reason = f"{reason} · spend filed under " + ", ".join(str(k) for k in elsewhere)
 
+    status_line = _status_line(code, text, res, st, label, tried_label,
+                               bool(row.get("act_id") or row.get("profile_id")), key, by_spend)
+    status_tip = _status_tip(code, res, st, label, by_spend, tried_label)
+    if lock and key == "issue" and code not in ISSUE_STATUSES:
+        status_line, status_tip = lock["line"], lock["tip"]
     return {
         "key": key,
         "label": STATE_LABELS[key],
@@ -210,9 +252,9 @@ def account_state(row: dict, today: date | None = None) -> dict:
         # ACL-2419: слово статуса из Meta и время чтения для ячейки состояния.
         "status_word": res["shown"],
         "status_read": label,
-        "status_line": _status_line(code, text, res, st, label, tried_label,
-                                    bool(row.get("act_id") or row.get("profile_id")), key, by_spend),
-        "status_tip": _status_tip(code, res, st, label, by_spend, tried_label),
+        "status_line": status_line,
+        "status_tip": status_tip,
+        "person_lock": bool(lock),
         "by_spend": by_spend,
     }
 

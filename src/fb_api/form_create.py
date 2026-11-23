@@ -255,7 +255,7 @@ def refused_message(exc: Exception, tpl: dict[str, Any] | None = None) -> str:
 PENDING_WINDOW_S = 15 * 60
 MSG_NO_STATE = ("Couldn't record the form state locally - not creating a form. "
                 "Check that the ACL data folder is writable, then run again")
-MSG_PENDING = ("A form with this name may still be appearing at Meta - wait a few minutes and run again")
+MSG_PENDING = ("A form with this name may still be appearing at Meta - Publish again")
 
 
 def pending_path() -> Path:
