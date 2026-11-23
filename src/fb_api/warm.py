@@ -18,7 +18,8 @@
   `account_spend_api` действуют как прежде);
 * замок профиля: два действия никогда не работают в одной вкладке;
 * ворота памяти считают только ИДУЩИЕ тяжёлые действия, не открытые профили.
-  По умолчанию одно, настраивается 1–3 (`ACL_WARM_MAX_HEAVY`).
+  Отдельного лимита «сколько разом» нет (ACL-2668, решение владельца 16.11): разом
+  идут столько действий, сколько пускают ворота памяти и потолок профилей.
 
 Чего здесь нет и не будет: опроса по таймеру, автоповтора входа, остановки
 профиля, который поднял не дешборд, открытия аккаунта вне Multilogin. Состояние
@@ -144,7 +145,6 @@ def _show(hook: "JobWait | None", view: dict | None) -> None:
 
 RESTART_COOLDOWN_ENV = _stop_log.RESTART_COOLDOWN_ENV
 DEFAULT_RESTART_COOLDOWN_S = _stop_log.DEFAULT_RESTART_COOLDOWN_S
-MAX_HEAVY_ENV = "ACL_WARM_MAX_HEAVY"
 GATE_WAIT_ENV = "ACL_WARM_GATE_WAIT_S"
 DEFAULT_GATE_WAIT_S = 300.0
 #: Сколько ждём места по памяти под запуск одного профиля.
@@ -248,11 +248,6 @@ def restart_cooldown_s() -> float:
 def restart_refusal(profile_id: str) -> str:
     """Общая проверка «не запускать сразу после остановки» (пусто — можно). См. `stop_log`."""
     return _stop_log.refusal(profile_id)
-
-
-def max_heavy() -> int:
-    """Сколько тяжёлых действий идут разом: по умолчанию одно, настройкой 1–3."""
-    return int(_env_number(MAX_HEAVY_ENV, 1, 1, 3))
 
 
 def _hhmm(epoch: float) -> str:
@@ -397,16 +392,16 @@ def _my_start() -> float:
 class HeavyGate:
     """Считает ИДУЩИЕ тяжёлые действия (вкладка Ads Manager в работе), не открытые профили.
 
-    Первое действие идёт всегда (пол: одно при любой памяти). Второе и третье —
-    только если лимит (`max_heavy`) позволяет И свободной памяти хватает на ещё
-    один профиль: замер дерева процессов идущих профилей, если он есть
-    (`ProfileUsage`), иначе оценка из `profile_slots`. Память не прочиталась —
-    не больше двух разом. Повторный вход того же профиля (вложенное чтение тем
-    же потоком) места не занимает.
+    Первое действие идёт всегда (пол: одно при любой памяти). Следующие — если
+    свободной памяти хватает (доля занятой памяти, ACL-2255). Числового лимита
+    «сколько разом» нет (ACL-2668): действие на уже открытом профиле память не
+    добавляет и не держится вовсе, а сколько профилей открыто, решает потолок
+    профилей (`profile_slots`). Память не прочиталась — не больше двух разом.
+    Повторный вход того же профиля (вложенное чтение тем же потоком) места не
+    занимает; два действия на одном профиле разводит замок профиля (`sess.lock`).
     """
 
-    def __init__(self, *, limit: Callable[[], int] = max_heavy,
-                 memory: Callable[[], Any] | None = None,
+    def __init__(self, *, memory: Callable[[], Any] | None = None,
                  settings: Callable[[], Any] | None = None,
                  usage: Any = None, clock: Callable[[], float] = time.monotonic,
                  tick_s: float = 1.0, grace_s: float = MEMORY_GRACE_S,
@@ -415,7 +410,6 @@ class HeavyGate:
         from src.web import profile_slots as _ps
 
         self._ps = _ps
-        self._limit = limit
         self._memory = memory or _ps.read_memory
         self._settings = settings or _ps.load_settings
         self._usage = usage if usage is not None else _ps.ProfileUsage()
@@ -433,19 +427,16 @@ class HeavyGate:
 
     def _allowed(self, *, memory_gated: bool = True) -> tuple[bool, str]:
         n = len(self._active)
-        limit = max(1, int(self._limit()))
-        memory = self._memory()
         if n == 0:
             # ACL-2369: шлюз работает только на уже открытом (тёплом) профиле — его память уже занята,
             # новой не прибавится; у открытия профиля свой тест памяти. Первое действие не блокируем.
             return True, "first"
-        if n >= limit:
-            return False, "limit"
         if not memory_gated:
             # ACL-2369 (#1369): an action on an already open profile adds no memory; never held by it.
             return True, "open_profile"
+        memory = self._memory()
         if memory is None:
-            return (n < min(self._ps.FALLBACK_LIMIT, limit)), "memory_unknown"
+            return (n < self._ps.FALLBACK_LIMIT), "memory_unknown"
         # ACL-2255: by the SHARE of memory in use (the running actions are already in it), not by "N GB per profile".
         ok = memory.available_mb >= self._ps.keep_free_mb(memory.total_mb, self._settings())
         return ok, "memory_ok" if ok else "memory_low"
@@ -460,10 +451,8 @@ class HeavyGate:
         if probe.get("status") == "ok" and measured:
             per_mb = max(max(measured), settings.profile_floor_mb)
         low = why in ("memory_low", "below_reserve")
-        # `hold` - что показывает дешборд; `why` - настоящая причина шлюза (например, `limit`).
-        # ACL-2293: упёрлись в лимит тяжёлых действий - так и показываем, а не «ждёт другой аккаунт».
-        view = {"hold": "memory_low" if low else ("heavy_limit" if why == "limit" else "account_busy"),
-                "heavy_limit": max(1, int(self._limit())), "why": why,
+        # `hold` - что показывает дешборд; `why` - настоящая причина шлюза.
+        view = {"hold": "memory_low" if low else "account_busy", "why": why,
                 "available_mb": None if memory is None else int(memory.available_mb),
                 "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
                 "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}

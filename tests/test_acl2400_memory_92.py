@@ -112,7 +112,7 @@ def _fail_if_slow(started: float, limit: float = 5.0) -> None:
 def test_a_held_action_gets_the_memory_message_at_once_without_waiting(tmp_path):
     import time
 
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))   # default 300 s account gate wait
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))   # default 300 s account gate wait
     rig.warm_up()
     other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
@@ -129,16 +129,13 @@ def test_a_held_action_gets_the_memory_message_at_once_without_waiting(tmp_path)
 
 
 def test_a_busy_account_gate_still_waits_but_memory_does_not(tmp_path, monkeypatch):
-    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
-    rig = Rig(tmp_path, limit=1)
-    a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
-    rig.warm_up(a)
-    rig.warm_up(b)
-    first = rig.checkout(a)
+    # ACL-2668: лимита тяжёлых действий нет - другое действие держит только неизвестная память (не больше двух).
+    gate = warm.HeavyGate(memory=lambda: None, settings=ps.load_settings, usage=None, tick_s=0.01)
+    gate.acquire("a")
+    gate.acquire("b")
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout(b)
+        gate.acquire("c", wait_s=0.1, fail_on_memory=True)
     assert ei.value.code == "gate_wait"
-    first.release()
 
 
 def test_starting_a_closed_profile_reports_memory_after_the_short_grace(tmp_path):
@@ -195,7 +192,7 @@ def _second_action_rig(rig):
 
 
 def test_gate_memory_dip_that_recovers_within_the_grace_lets_the_second_action_go(tmp_path):
-    rig = Rig(tmp_path, limit=2)
+    rig = Rig(tmp_path)
     first = _second_action_rig(rig)
     rig.gate_skew[0] = 0
     reads = []
@@ -213,7 +210,7 @@ def test_gate_memory_dip_that_recovers_within_the_grace_lets_the_second_action_g
 
 
 def test_gate_sustained_shortage_refuses_the_second_action_after_at_most_ten_seconds(tmp_path):
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
     first = _second_action_rig(rig)
     rig.gate_skew[0] = 0
     rig.gate_pauses.clear()
@@ -229,7 +226,7 @@ def test_gate_sustained_shortage_refuses_the_second_action_after_at_most_ten_sec
 def test_gate_refusal_log_of_the_second_action_keeps_the_numbers_of_acl_2400(tmp_path, caplog):
     import logging
 
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
     first = _second_action_rig(rig)
     with caplog.at_level(logging.INFO), pytest.raises(warm.WarmError):
         rig.gate.acquire(PID, fail_on_memory=True)
@@ -237,17 +234,16 @@ def test_gate_refusal_log_of_the_second_action_keeps_the_numbers_of_acl_2400(tmp
     assert any("memory holds the action" in r.getMessage() and "GB free" in r.getMessage() for r in caplog.records)
 
 
-def test_gate_busy_account_wait_is_not_shortened_by_the_grace(tmp_path, monkeypatch):
-    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
-    rig = Rig(tmp_path, limit=1)
-    a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
-    rig.warm_up(a)
-    rig.warm_up(b)
-    first = rig.checkout(a)
+def test_gate_busy_account_wait_is_not_shortened_by_the_grace():
+    # ACL-2668: лимита тяжёлых действий нет; занятый шлюз - это неизвестная память (не больше двух разом).
+    pauses: list = []
+    gate = warm.HeavyGate(memory=lambda: None, settings=ps.load_settings, usage=None, tick_s=0.01,
+                          pause=pauses.append)
+    gate.acquire("a")
+    gate.acquire("b")
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout(b)
-    assert ei.value.code == "gate_wait" and rig.gate_pauses == []
-    first.release()
+        gate.acquire("c", wait_s=0.1, fail_on_memory=True)
+    assert ei.value.code == "gate_wait" and pauses == []
 
 
 def test_start_memory_dip_that_recovers_within_the_grace_lets_the_profile_start(tmp_path):

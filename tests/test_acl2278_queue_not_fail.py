@@ -83,51 +83,50 @@ def test_prepare_request_defers_instead_of_waiting(tmp_path):
     assert rig.sleeps == [] and rig.started == []
 
 
-def test_job_waits_for_a_busy_gate_past_the_old_limit_and_goes_when_it_frees(tmp_path, monkeypatch):
-    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")          # the old limit: 1 s here
-    rig = Rig(tmp_path, limit=1)
-    rig.warm_up(A)
-    rig.warm_up(B)
-    first = rig.checkout(A)
+def _unknown_memory_gate():
+    # ACL-2668: лимита тяжёлых действий нет; держит только память. Память не прочиталась - не больше двух разом.
+    gate = warm.HeavyGate(memory=lambda: None, settings=ps.load_settings, usage=None, tick_s=0.01)
+    gate.acquire(A)
+    gate.acquire(B)
+    return gate
+
+
+def test_job_waits_for_a_busy_gate_past_the_old_limit_and_goes_when_it_frees():
+    gate = _unknown_memory_gate()
     got: list = []
     views: list = []
 
     def job():
-        with warm.job_wait(lambda: False, views.append):
-            got.append(rig.checkout(B))
+        gate.acquire("c", wait_s=float("inf"), on_tick=lambda why: views.append(gate.wait_view(why)))
+        got.append("c")
 
     t = threading.Thread(target=job)
     t.start()
-    time.sleep(1.6)
-    assert got == [], "the job must still be queued after the old limit"
-    assert any(v and v["hold"] == "heavy_limit" and v["why"] == "limit" for v in views)
-    first.release()
+    time.sleep(0.3)
+    assert got == [], "the job must stay queued, not fail"
+    assert any(v["hold"] == "account_busy" and v["why"] == "memory_unknown" for v in views)
+    assert all("heavy_limit" not in v for v in views), "ACL-2668: no heavy-action limit is shown"
+    gate.release(A)
     t.join(5)
-    assert len(got) == 1 and views[-1] is None
-    got[0].release()
+    assert got == ["c"]
 
 
 def test_a_job_held_by_something_other_than_the_limit_still_reads_account_busy(tmp_path):
-    rig = Rig(tmp_path, limit=1)
+    rig = Rig(tmp_path)
     view = rig.reg.gate.wait_view("memory_ok")
     assert view["hold"] == "account_busy" and view["why"] == "memory_ok"
 
 
-def test_cancelling_a_job_waiting_for_the_gate(tmp_path, monkeypatch):
-    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
-    rig = Rig(tmp_path, limit=1)
-    rig.warm_up(A)
-    rig.warm_up(B)
-    first = rig.checkout(A)
+def test_cancelling_a_job_waiting_for_the_gate():
+    gate = _unknown_memory_gate()
     stop = [False]
     errors: list = []
 
     def job():
-        with warm.job_wait(lambda: stop[0], lambda v: None):
-            try:
-                rig.checkout(B)
-            except warm.WarmError as exc:
-                errors.append(exc)
+        try:
+            gate.acquire("c", wait_s=float("inf"), cancelled=lambda: stop[0])
+        except warm.WarmError as exc:
+            errors.append(exc)
 
     t = threading.Thread(target=job)
     t.start()
@@ -135,8 +134,7 @@ def test_cancelling_a_job_waiting_for_the_gate(tmp_path, monkeypatch):
     stop[0] = True
     t.join(5)
     assert errors and errors[0].code == "cancelled"
-    assert rig.gate.active() == [A]
-    first.release()
+    assert gate.active() == [A, B]
 
 
 def test_publish_job_shows_the_wait_as_queued_with_numbers_and_resumes():

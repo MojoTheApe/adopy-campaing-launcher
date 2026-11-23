@@ -200,8 +200,8 @@ def test_jobs_wait_when_memory_in_use_goes_above_the_share_and_start_when_it_dro
 
 # ── ворота тяжёлых действий и прогрев профиля (warm.py) ──────────────────
 
-def _gate(mem: ps.MemoryReading, active=1, limit=3):
-    gate = warm.HeavyGate(limit=lambda: limit, memory=lambda: mem, settings=lambda: settings(), usage=None)
+def _gate(mem: ps.MemoryReading, active=1):
+    gate = warm.HeavyGate(memory=lambda: mem, settings=lambda: settings(), usage=None)
     for i in range(active):
         gate._active[f"p{i}"] = 1
     return gate
