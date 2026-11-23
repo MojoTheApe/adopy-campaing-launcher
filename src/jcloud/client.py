@@ -14,8 +14,11 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import contextlib
 import os
 import re
+import threading
 from typing import Any
 
 PAGE_SIZE = 20
@@ -86,25 +89,124 @@ def _classify_exception(exc: BaseException) -> str:
     return "failed"
 
 
-async def _call_tool(tool: str, args: dict) -> dict:
+#: Сколько сессия MCP живёт без вызовов. Дольше не держим: сервер мог её закрыть.
+IDLE_S = 120.0
+
+
+@contextlib.asynccontextmanager
+async def _open_session(url: str, token: str):
+    """Одно соединение с MCP: исходит из httpx, нужен только заголовок Authorization."""
     import httpx
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
-    url, token = _settings()
     async with httpx.AsyncClient(headers={"Authorization": "Bearer " + token}, timeout=TIMEOUT_S) as client:
         async with streamable_http_client(url, http_client=client) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                response = await session.call_tool(tool, args)
+                yield session
+
+
+async def _invoke(session, tool: str, args: dict) -> dict:
+    response = await session.call_tool(tool, args)
     data = getattr(response, "structuredContent", None)
     if getattr(response, "isError", False) or not isinstance(data, dict):
         raise RuntimeError("JCloudFront returned an invalid response")
     return data
 
 
+class _Worker:
+    """Фоновый поток держит одну открытую сессию MCP и обслуживает вызовы по очереди (ACL-2881).
+
+    Сессию открывает и закрывает одна и та же задача: так требует anyio. Устаревшая сессия
+    переоткрывается, вызов повторяется один раз; после IDLE_S простоя или смены адреса/токена
+    следующий вызов открывает новую.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._queue: asyncio.Queue | None = None
+        self._thread: threading.Thread | None = None
+
+    def _ensure(self) -> None:
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                return
+            ready = threading.Event()
+
+            def run() -> None:
+                loop = asyncio.new_event_loop()
+                self._loop = loop
+                self._queue = asyncio.Queue()
+                ready.set()
+                try:
+                    loop.run_until_complete(self._serve())
+                finally:
+                    loop.close()
+
+            self._thread = threading.Thread(target=run, name="jcloud-mcp", daemon=True)
+            self._thread.start()
+            ready.wait(5)
+
+    async def _serve(self) -> None:
+        pending = None  # (tool, args, future, retries, settings)
+        while True:
+            if pending is None:
+                pending = await self._queue.get()
+                if pending is None:
+                    return
+            settings = pending[4]
+            opened = False
+            try:
+                async with _open_session(*settings) as session:
+                    opened = True
+                    while True:
+                        if pending is None:
+                            try:
+                                pending = await asyncio.wait_for(self._queue.get(), IDLE_S)
+                            except asyncio.TimeoutError:
+                                break  # простой: закрываем, следующий вызов откроет заново
+                            if pending is None:
+                                return
+                        tool, args, fut, retries, wanted = pending
+                        if wanted != settings:
+                            break  # адрес или токен сменились: переоткрываем, вызов не теряем
+                        try:
+                            data = await asyncio.wait_for(_invoke(session, tool, args), TIMEOUT_S + 5)
+                        except Exception as exc:  # noqa: BLE001
+                            if retries < 1:
+                                pending = (tool, args, fut, retries + 1, wanted)  # устаревшая сессия
+                            else:
+                                fut.set_exception(exc)
+                                pending = None
+                            break
+                        fut.set_result(data)
+                        pending = None
+            except Exception as exc:  # noqa: BLE001 — не открылось соединение
+                # Сбой при закрытии уже начатой сессии не трогает вызов: он повторится или уже завершён.
+                if pending is not None and not opened:
+                    pending[2].set_exception(exc)
+                    pending = None
+
+    def call(self, tool: str, args: dict) -> dict:
+        self._ensure()
+        fut: concurrent.futures.Future = concurrent.futures.Future()
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, (tool, args, fut, 0, _settings()))
+        return fut.result(timeout=TIMEOUT_S * 2 + 10)
+
+    def stop(self) -> None:
+        if self._thread and self._thread.is_alive() and self._loop:
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
+            self._thread.join(5)
+        self._thread = None
+
+
+_worker = _Worker()
+
+
 def _call(tool: str, args: dict) -> dict:
-    return asyncio.run(asyncio.wait_for(_call_tool(tool, args), TIMEOUT_S + 5))
+    return _worker.call(tool, args)
 
 
 def _item(raw: dict) -> dict:
