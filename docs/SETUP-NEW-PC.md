@@ -13,8 +13,7 @@ something else, look in **If something goes wrong** at the end before asking.
 ## Step 0 — Have these ready
 
 - [ ] **The installer file** `Adopy-Campaign-Launcher-Setup-<version>.exe`, which you get from Evgeni.
-- [ ] **Your name exactly as it is written in the CM column of the Stats workbook**
-- [ ] **The Stats workbook** (Excel), saved somewhere on this computer
+- [ ] **Your name**, as BI knows you
 - [ ] **Multilogin Desktop**, installed, open and signed in
 - [ ] **Your Multilogin email and password.** You type them into ACL in Step 4, not in the setup window.
 
@@ -71,19 +70,12 @@ and *Step N of 7*. Nothing is published during setup, and no campaign is touched
    each: *Team library: connected (N targets, M texts)* and *BI: connected (last
    data date …)*. Click **Next**. You may skip this step and do it later in the
    dashboard (**Connections**). A red line gives its reason; see the table below.
-   If you skip it and have no Stats workbook, the dashboard opens on a **No data
+   If you skip it, the dashboard opens on a **No data
    file** page saying *BI is not connected on this computer*. Click **Sign in with
    Google** on that page (then **Check again** if needed); no restart is needed.
-4. **Your name.** Type it exactly as in the CM column (or as BI knows you). ACL
-   finds your ad accounts by this name. Click **Next**.
-5. **Local files.** Fill in both, then click **Next**. ACL opens the workbook
-   and looks for your name. If it cannot, a red line appears at the bottom of
-   the window and you stay on this step.
-   - **Stats workbook:** pick your Excel file with **Browse…**. If ACL finds it in
-     the usual place, it is already filled in (shown in green); change it only if
-     you were sent a different file. It is the Excel report your team lead keeps;
-     ACL does not create or download it. When BI is connected the workbook is
-     optional and your accounts come from BI.
+4. **Your name.** Type it as BI knows you. ACL finds your ad accounts by this
+   name when BI is connected. Click **Next**.
+5. **Local files.** Check the folder, then click **Next**. No Excel file is needed.
    - **Creatives folder:** it is already filled in as `Documents\ACL\Creatives`,
      and ACL creates the folder. Keep it, or pick another folder.
 6. **Readiness.** **You should see:** green ✓ next to *Runtime*, *Your accounts*,
@@ -103,7 +95,7 @@ Setup Campaign Launcher**. It keeps your accounts and connected profiles.
 Copy your videos and images into the Creatives folder. By default that is
 `Documents\ACL\Creatives`. ACL searches it and all its subfolders by file name.
 
-To use a different folder, or to point ACL at a different Stats workbook later,
+To use a different folder later,
 go to the dashboard → **Accounts** → **This computer**, paste the path, and click
 **Save**. To copy a path: in Explorer, hold Shift, right-click the file or folder,
 and choose **Copy as path**.
@@ -181,21 +173,15 @@ The messages in the middle column are what ACL shows, word for word.
 | Connections | *Sign-in was not finished. Try again.* | The browser sign-in was closed or took too long. Press **Sign in with Google** again. |
 | Connections | *The team connection file is not configured in this build.* or *The ACL connection file has no connection tab.* | Tell Evgeni: the connection file is not set up yet. |
 | Connections | *Team library: …* or *BI: could not connect (…)* | The file was read but that connection does not work. Tell Evgeni and send the reason shown. |
-| Local files | *BI is connected, but the account list could not be read from it.* | Try again, or pick the Stats workbook instead. |
-| Local files | *BI has no accounts for “your name”.* | Your name does not match what BI knows. Click **Back**, check the spelling, or pick the Stats workbook your team lead sent you. |
-| Your name | *Enter your name exactly as it appears in the Stats workbook.* | The name field is empty. Type your name. |
+| Your name | *Enter your name.* | The name field is empty. Type your name. |
 | Your name | *Replace the example campaign manager name with your own name.* | Type your own name, not the example. |
-| Your name | *Campaign manager name is too long.* | Type only your name, as in the CM column. |
-| Local files | *No Stats workbook chosen.* or *Stats workbook does not exist.* | The Stats workbook is the Excel report your team lead keeps. Ask your team lead for the current file, save it on this computer, and pick it with **Browse…**. |
-| Local files | *Stats workbook must be an .xlsx or .xlsm file.* | You picked a different file. Pick the Stats workbook. |
-| Local files | *Stats workbook cannot be opened: …* | Close the workbook in Excel, then click **Next** again. |
-| Local files | *Stats workbook is missing columns: …*, *Missing columns in Excel: …*, *Stats workbook has duplicated columns: …* or *Stats workbook is missing CM or Account Alias columns.* | You picked a different Excel file. Pick the Stats workbook. |
-| Local files | *Stats workbook is empty: no header row found* or *Stats workbook is not usable: …* | The file has no table in it, or is not the real workbook. Pick the Stats workbook again with **Browse…**. |
-| Local files | *… is not in the CM column of this Stats workbook, so the dashboard would show no accounts.* | Your name does not match the CM column. The message may add *Did you mean: …*. Click **Back**, type the name as shown there or copy it from the workbook exactly (capitals do not matter). |
+| Your name | *Campaign manager name is too long.* | Type only your name. |
+| Local files | *BI is connected, but the account list could not be read from it. Try again.* | Click **Next** again. If it repeats, tell Evgeni. |
+| Local files | *BI has no accounts for “your name”. Check the spelling of your name.* | Your name does not match what BI knows. Click **Back** and check the spelling. |
 | Local files | *Creatives folder could not be created: …* | Pick another folder with **Browse…**. |
 | Local files | *Creatives folder does not exist.* or *Creatives folder is not readable.* | Pick another folder with **Browse…**, or keep the suggested `Documents\ACL\Creatives`. |
-| Readiness | *Go back and confirm your name and the Stats workbook.* | Click **Back** twice and click **Next** on each step again. |
-| Readiness | *Existing account map is invalid…*, *…has malformed rows…*, *…has duplicate names…* or *Account ID changed for …* | ACL was set up here before and its saved accounts disagree with the workbook. Do not delete anything. Tell Evgeni. |
+| Readiness | *Go back and confirm your name.* | Click **Back** twice and click **Next** on each step again. |
+| Readiness | *Existing account map is invalid…*, *…has malformed rows…*, *…has duplicate names…* or *Account ID changed for …* | ACL was set up here before and its saved accounts disagree with the new ones. Do not delete anything. Tell Evgeni. |
 | Accounts | *Email and password, please* | One of the two fields is empty. |
 | Accounts | *This login has several Multilogin workspaces — choose the one with your profiles.* | Pick the workspace where your browser profiles are, then continue. |
 | Accounts | *Signed in, but no automation token was saved. Ask the workspace owner for a token.* | Your Multilogin plan or role does not allow automation. Tell Evgeni. |

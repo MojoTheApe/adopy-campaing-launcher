@@ -130,3 +130,33 @@ def test_machine_local_oauth_is_accepted(tmp_path, monkeypatch) -> None:
     doctor.check_google_client()
 
     assert doctor._failed == 0
+
+
+def _stats_source_env(monkeypatch, tmp_path, *, workbook: bool, bi: bool):
+    book = tmp_path / "cursor example.xlsx"
+    if workbook:
+        book.write_bytes(b"x")
+    monkeypatch.setattr(doctor, "get_excel_path", lambda: str(book))
+    from src.analysis_agent import bi_stats
+    monkeypatch.setattr(bi_stats, "bi_enabled", lambda: bi)
+
+
+def test_stats_source_ok_with_bi_and_no_workbook(tmp_path, monkeypatch, capsys) -> None:
+    _stats_source_env(monkeypatch, tmp_path, workbook=False, bi=True)
+    doctor.check_stats_source()
+    assert doctor._failed == 0
+    assert "BI" in capsys.readouterr().out
+
+
+def test_stats_source_warns_but_is_not_required_without_bi_and_workbook(tmp_path, monkeypatch, capsys) -> None:
+    _stats_source_env(monkeypatch, tmp_path, workbook=False, bi=False)
+    doctor.check_stats_source()
+    out = capsys.readouterr().out
+    assert doctor._failed == 0
+    assert "BI is not connected" in out
+
+
+def test_stats_source_ok_with_workbook(tmp_path, monkeypatch) -> None:
+    _stats_source_env(monkeypatch, tmp_path, workbook=True, bi=False)
+    doctor.check_stats_source()
+    assert doctor._failed == 0
