@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2890 — Update never refused for reads; waits for publishing on the release path — 2026-11-24
+
+The installed ACL.exe Update path (`_apply_release_update`) already follows owner decision 11
+since ACL-2668/ACL-2684 (release 2026-11-23.1880): a running read never blocks Update, a running
+publish job queues it ("Update starts after publishing finishes") and it installs by itself once
+the job ends. The buyer who saw "Wait for browser reading to finish" was on an older build. Added
+tests for a job that starts during the download (queued, then installs) and a guard that the old
+409 busy refusals do not come back.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1890).
+
 ## ACL-2682 — One account's problem marks only that account — 2026-11-24
 
 A rate limit, policy block, used-up call budget, logged-out profile or frozen tab on one account now marks only that account's row; a checkpoint stays its own profile's hold (ACL-2653). Reads of the other accounts go on. The whole machine pauses only for Multilogin problems, the API backend being off, or the shared machine state being unavailable. Per-account stops saved by older builds (queue store, `state.json`, attempt rows) no longer halt anything after the update.
