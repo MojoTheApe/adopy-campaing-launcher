@@ -166,6 +166,17 @@ test("assignments: re-assign clears removed_at; remove never deletes", async () 
   assert.equal(row.country, "DE");
 });
 
+test("assignments: account name is case-insensitive (one row, remove by other case)", async () => {
+  const env = makeEnv();
+  await call(env, "POST", "/api/assignments", OWNER, { user_email: "a@example.com", rows: [ROW("UL921")] });
+  await call(env, "POST", "/api/assignments", OWNER, { user_email: "a@example.com", rows: [ROW("ul921", { country: "CR" })] });
+  const n = await env.DB.prepare("SELECT count(*) AS n, max(country) AS c FROM account_assignments").first();
+  assert.equal(n.n, 1);
+  assert.equal(n.c, "CR");
+  const rm = await call(env, "POST", "/api/assignments/remove", OWNER, { user_email: "a@example.com", account_names: ["Ul921"] });
+  assert.equal((await rm.json()).removed, 1);
+});
+
 test("assignments: unknown or proxy/tracking fields are 400 and nothing is written", async () => {
   const env = makeEnv();
   for (const bad of [{ proxy_host: "1.2.3.4" }, { proxy_password: "x" }, { tracking_link: "http://t" }, { whatever: 1 }]) {

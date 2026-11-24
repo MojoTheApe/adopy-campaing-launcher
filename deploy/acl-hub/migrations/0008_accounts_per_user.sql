@@ -10,7 +10,7 @@ CREATE TABLE users (
 
 CREATE TABLE account_assignments (
   user_email          TEXT NOT NULL,
-  account_name        TEXT NOT NULL,
+  account_name        TEXT NOT NULL COLLATE NOCASE,  -- карта ACL сравнивает имена без регистра
   ad_account_id       TEXT,
   page_id             TEXT,
   page_name           TEXT,
