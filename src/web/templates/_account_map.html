@@ -177,4 +177,5 @@
       {% endfor %}
     </details>
     {% endif %}
+    {% if user_assign_enabled() %}{% include "_user_assign.html" %}{% endif %}
   </div>

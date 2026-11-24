@@ -4094,6 +4094,124 @@ def api_accounts_overview() -> JSONResponse:
     })
 
 
+# ── ACL-2900: назначение аккаунтов пользователю через хаб ───────────────────
+# Ключ владельца (ACL_HUB_OWNER_KEY) остаётся на сервере: браузер ходит сюда,
+# а отсюда — в хаб. Без ключа маршруты отказывают, а блок на странице не рисуется.
+
+def _user_assign_guard() -> "JSONResponse | None":
+    from src.web import user_assign as _ua
+
+    if not _ua.enabled():
+        return JSONResponse({"ok": False, "error": _ua.DISABLED_MESSAGE}, status_code=403)
+    return None
+
+
+def _user_assign_resolve(text: str) -> list[dict]:
+    """Строки столбца → состояния. Источники: карта владельца и общий список."""
+    from src.web import user_assign as _ua
+
+    map_path = get_ad_account_map_path()
+    account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    labels: list[str] = []
+    try:
+        from src.analysis_agent.gsheet_accounts import fetch_account_rows
+
+        for row in fetch_account_rows():
+            label = (row.get("account_label") or row.get("alias") or "").strip()
+            if label:
+                labels.append(label)
+    except Exception:  # noqa: BLE001 — общий список необязателен, карта владельца важнее
+        labels = []
+    return _ua.resolve_lines(_ua.parse_lines(text), account_map, labels, normalise=normalise_ad_account_id)
+
+
+def _user_assign_enabled() -> bool:
+    from src.web import user_assign as _ua
+
+    return _ua.enabled()
+
+
+templates.env.globals["user_assign_enabled"] = _user_assign_enabled
+
+
+@app.get("/api/user-assign/users")
+async def api_user_assign_users() -> JSONResponse:
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        users = await _in_report_pool(_ua.HubClient().users)
+    except _ua.HubError as exc:
+        return JSONResponse({"ok": False, "error": str(exc), "users": []})
+    return JSONResponse({"ok": True, "users": [
+        {"email": u.get("email", ""), "name": u.get("name", ""), "role": u.get("role", ""),
+         "disabled": bool(u.get("disabled")), "active_accounts": u.get("active_accounts", 0)}
+        for u in users]})
+
+
+@app.post("/api/user-assign/preview")
+async def api_user_assign_preview(request: Request) -> JSONResponse:
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    results = await _in_report_pool(_user_assign_resolve, str(data.get("text") or ""))
+    return JSONResponse({"ok": True, "results": results})
+
+
+@app.post("/api/user-assign/send")
+async def api_user_assign_send(request: Request) -> JSONResponse:
+    """Заново разбирает строки на сервере и шлёт в хаб только `found` — браузеру строки не доверяем."""
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    email = _ua.clean_email(data.get("user_email") or "")
+    if not email:
+        return JSONResponse({"ok": False, "error": "Pick a user or type a valid email."}, status_code=400)
+    results = await _in_report_pool(_user_assign_resolve, str(data.get("text") or ""))
+    rows = _ua.found_rows(results)
+    if not rows:
+        return JSONResponse({"ok": False, "error": "Nothing to assign: no line matched an account.",
+                             "results": results})
+    try:
+        await _in_report_pool(_ua.HubClient().assign, email, rows)
+    except _ua.HubError as exc:
+        return JSONResponse({"ok": False, "error": str(exc), "results": results})
+    for r in results:
+        r["sent"] = r.get("state") == "found"
+    return JSONResponse({"ok": True, "assigned": [r["account_name"] for r in rows], "results": results})
+
+
+@app.post("/api/user-assign/remove")
+async def api_user_assign_remove(request: Request) -> JSONResponse:
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    email = _ua.clean_email(data.get("user_email") or "")
+    names = [str(n).strip() for n in (data.get("account_names") or []) if str(n).strip()]
+    if not email or not names:
+        return JSONResponse({"ok": False, "error": "A user and at least one account name are required."},
+                            status_code=400)
+    try:
+        await _in_report_pool(_ua.HubClient().remove, email, names)
+    except _ua.HubError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)})
+    return JSONResponse({"ok": True, "removed": names})
+
+
 @app.get("/api/team-library")
 def api_team_library_state() -> JSONResponse:
     """Подключена ли общая библиотека на этой машине (ACL-2038). Токен не отдаётся."""
