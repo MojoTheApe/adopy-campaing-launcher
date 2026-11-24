@@ -53,8 +53,9 @@
       else if (r.state === 'ambiguous') extra = esc((r.candidates || []).join(', '));
       else if (r.state === 'clash') extra = esc(r.error || '');
       else if (r.state === 'duplicate') extra = esc(r.account_name) + ' is already in this list';
+      var label = (r.state === 'found' && r.match === 'partial') ? 'Matched by part of the name' : (STATES[r.state] || r.state);
       return '<div class="ua-line ua-' + esc(r.state) + '"><span class="ua-in">' + esc(r.input) + '</span> '
-        + '<b>' + esc(STATES[r.state] || r.state) + '</b> <span class="amap-note">' + extra + '</span></div>';
+        + '<b>' + esc(label) + '</b> <span class="amap-note">' + extra + '</span></div>';
     }).join('');
     var mine = assigned[who] || [];
     if (who && mine.length) {

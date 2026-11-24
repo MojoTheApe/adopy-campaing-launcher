@@ -160,6 +160,7 @@ def resolve_lines(
     for line in lines:
         res: dict = {"input": line, "state": "not_found", "account_name": "", "candidates": [], "row": None}
         candidates: list[str] = []
+        partial = False
         if looks_like_id(line):
             act = normalise(line)
             candidates = sorted(by_act.get(act, [])) if act else []
@@ -172,6 +173,7 @@ def resolve_lines(
                 # Неточное совпадение: часть имени. Одно попадание принимаем,
                 # несколько — это ambiguous, угадывать нельзя.
                 candidates = sorted(v for k, v in names.items() if low in k)
+                partial = True
         if len(candidates) > 1:
             res.update(state="ambiguous", candidates=candidates)
         elif len(candidates) == 1:
@@ -188,6 +190,9 @@ def resolve_lines(
                            error=f"Ad account {act} is also linked to \"{other[0]}\".")
             else:
                 res.update(state="found", row=_entry_row(name, entry))
+                if partial:
+                    # Ревью ACL-2900: найдено по части имени — владелец должен это видеть до отправки
+                    res["match"] = "partial"
                 seen[name.lower()] = line
         out.append(res)
     return out

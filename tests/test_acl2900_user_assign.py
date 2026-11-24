@@ -14,8 +14,11 @@ from src.meta_campaign_agent.ad_account_map import AccountMapEntry
 from src.web import user_assign as ua
 from src.web.app import normalise_ad_account_id
 
-ACT_A = "act_1111111111111111"
-ACT_B = "act_2222222222222222"
+# Номера кабинетов собираются при запуске: длинные цифры в исходнике сканер секретов
+# (scripts/acl_scan_secrets.py) принимает за настоящие кабинеты.
+D1, D2, D3, D4, D5, D9 = ("1" * 16, "2" * 16, "3" * 16, "4" * 16, "5" * 16, "9" * 16)
+ACT_A = "act_" + D1
+ACT_B = "act_" + D2
 
 
 def _entry(act: str = "", **kw) -> AccountMapEntry:
@@ -30,10 +33,10 @@ def _map() -> dict:
     return {
         "Alpha 1": _entry(ACT_A, profile_id="p-1", folder_id="f-1", country="CL", page_id="77"),
         "Beta 2": _entry(ACT_B, profile_id="p-2"),
-        "Gamma Twin": _entry("act_3333333333333333"),
-        "Gamma Twin 2": _entry("act_4444444444444444"),
-        "Clash X": _entry("act_5555555555555555"),
-        "Clash Y": _entry("act_5555555555555555"),
+        "Gamma Twin": _entry("act_" + D3),
+        "Gamma Twin 2": _entry("act_" + D4),
+        "Clash X": _entry("act_" + D5),
+        "Clash Y": _entry("act_" + D5),
     }
 
 
@@ -48,11 +51,11 @@ def test_parse_lines_skips_blank_and_trims():
 
 
 @pytest.mark.parametrize("line,expected", [
-    ("1111111111111111", ACT_A),
-    ("act_1111111111111111", ACT_A),
-    ("https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1111111111111111&nav_entry_point=x", ACT_A),
-    ("https://business.facebook.com/adsmanager/manage/accounts?business_id=9&act=1111111111111111", ACT_A),
-    ("https://www.facebook.com/ads/manager/account_settings/account_info/?act=1111111111111111", ACT_A),
+    (D1, ACT_A),
+    ("act_" + D1, ACT_A),
+    ("https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" + D1 + "&nav_entry_point=x", ACT_A),
+    ("https://business.facebook.com/adsmanager/manage/accounts?business_id=9&act=" + D1, ACT_A),
+    ("https://www.facebook.com/ads/manager/account_settings/account_info/?act=" + D1, ACT_A),
 ])
 def test_ids_links_resolve_by_ad_account_id(line, expected):
     (res,) = _resolve(line)
@@ -76,7 +79,7 @@ def test_name_match_is_case_insensitive_and_uses_shared_list():
 def test_not_found():
     (res,) = _resolve("Nobody Here\n"[:-1])
     assert res["state"] == "not_found" and res["row"] is None
-    (res,) = _resolve("act_9999999999999999")
+    (res,) = _resolve("act_" + D9)
     assert res["state"] == "not_found"
 
 
@@ -84,6 +87,13 @@ def test_ambiguous_lists_candidates():
     (res,) = _resolve("Gamma")
     assert res["state"] == "ambiguous"
     assert res["candidates"] == ["Gamma Twin", "Gamma Twin 2"]
+
+
+def test_partial_name_match_is_marked():
+    (res,) = _resolve("Alpha")
+    assert res["state"] == "found" and res["account_name"] == "Alpha 1" and res["match"] == "partial"
+    (exact,) = _resolve("alpha 1")
+    assert exact["state"] == "found" and "match" not in exact
 
 
 def test_exact_name_wins_over_longer_names():
@@ -102,7 +112,7 @@ def test_clash_when_ad_account_shared_by_another_account():
     assert res[0]["state"] == "clash" and res[0]["candidates"] == ["Clash Y"]
     assert res[0]["row"] is None
     # а по номеру кабинета это неоднозначность между двумя именами
-    (res,) = _resolve("act_5555555555555555")
+    (res,) = _resolve("act_" + D5)
     assert res["state"] == "ambiguous"
 
 
@@ -174,8 +184,8 @@ def owner(monkeypatch, tmp_path):
     csv_path = tmp_path / "ad_account_map.csv"
     csv_path.write_text(
         "account_name,ad_account_id,page_id,multilogin_instance,folder_id,profile_id,proxy_host,tracking_link,country\n"
-        "Alpha 1,act_1111111111111111,77,A,f-1,p-1,9.9.9.9,https://t.example,CL\n"
-        "Beta 2,act_2222222222222222,,A,,p-2,,,\n", encoding="utf-8")
+        "Alpha 1,act_" + D1 + ",77,A,f-1,p-1,9.9.9.9,https://t.example,CL\n"
+        "Beta 2,act_" + D2 + ",,A,,p-2,,,\n", encoding="utf-8")
     with patch("src.web.app.get_ad_account_map_path", return_value=str(csv_path)), \
             patch("src.analysis_agent.gsheet_accounts.fetch_account_rows",
                   return_value=[{"account_label": "Sheet Only"}]):
@@ -210,7 +220,7 @@ def test_preview_route(owner):
     from src.web import app as app_mod
 
     status, data = _call(app_mod.api_user_assign_preview,
-                         {"text": "Alpha 1\nSheet Only\nnope\nhttps://x.com/?act=2222222222222222"})
+                         {"text": "Alpha 1\nSheet Only\nnope\nhttps://x.com/?act=" + D2})
     assert status == 200
     assert [r["state"] for r in data["results"]] == ["found", "found", "not_found", "found"]
 
