@@ -1,5 +1,108 @@
 # System history
 
+## ACL-2867 — Installer no longer asks for an Excel stats workbook — 2026-11-24
+
+The Windows setup wizard no longer shows a Stats workbook (Excel) picker, its help text or its validation, and the readiness check no longer needs a workbook. Without BI sign-in setup finishes with no accounts; they are connected to profiles later on the Accounts screen. `FB_STATS_EXCEL` is no longer written unless given. `acl_doctor.py` treats the workbook as informational: with BI connected it reports "Stats source: BI", without BI and without a workbook it warns clearly but does not fail. `docs/SETUP-NEW-PC.md` no longer asks for `cursor example.xlsx`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1867).
+
+## ACL-2883 — Landing preview shows the real page as a thumbnail — 2026-11-23
+
+The hover preview of a landing in the builder now loads the landing with its own origin, so landings that depend on their own scripts show the real page instead of their error page. The page is laid out at phone size and scaled down into the preview box, so the whole first screen is visible instead of a cropped piece. The frame still cannot reach the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1883).
+
+## ACL-2881 — Landing search is faster: one reused connection and a 1-second pending poll — 2026-11-23
+
+The landing picker now keeps one open connection to JCloudFront for later searches instead of connecting for every call, and repeats a "preparing the catalog" answer every second instead of every three. A repeated search takes about 0.2 s instead of 1.3 s, a new code about 0.5 s instead of 5 s. The first search after a long idle still waits while JCloudFront prepares its catalog.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1881).
+
+## ACL-2878 — Landing preview frame is no longer blocked by the dashboard policy — 2026-11-23
+
+The hover preview of a landing in the builder showed an empty grey box because the dashboard's Content-Security-Policy had no `frame-src`. It now allows https pages in the preview frame; the frame stays sandboxed and the dashboard itself still cannot be framed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1878).
+
+## ACL-2876 — Landing picker: the hover preview stays beside the results list — 2026-11-23
+
+The landing preview in the builder is now placed relative to the window next to the hovered row (right of the list, else left, else at the right edge) instead of at a fixed offset, so it no longer lands over the scrollbar in a narrow panel.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1876).
+
+## ACL-2872 — Landing picker: grouped Variant search by configuration — 2026-11-23
+
+Searching a Variant code such as `1_ar_fm` now finds it inside longer landing addresses and shows one card per unique configuration with the number of pages in it, plus a "unique configurations · landings" line. A pasted URL shows the grouped variants of its template on all domains. The Asset filter narrows the same grouped search.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1872).
+
+## ACL-2694 — Run limits save without a confirm dialog; memory threshold 0-95 % — 2026-11-23
+
+Settings saves any in-bounds run limit at once: no confirm dialog, no warning text, no `confirm` flag in the API. The memory threshold accepts 0-95 % (default 92 %); Profiles at once stays 1-8.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1694).
+
+## ACL-2692 — Publish, commands, Check plan and Open profile work as Retry on a held profile — 2026-11-23
+
+A person-started Publish, campaign command (incl. shut-off), Check plan or Open profile now probes a held profile like Retry: a healthy page lifts the hold, a page that still has the problem sets it again and the row shows the reason. Automatic reads keep respecting the hold. A code-31 hold is still cleared only after Meta answered a person's write.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1692).
+
+## ACL-2697 — Report rebuild waits only for low memory, not for a publish — 2026-11-23
+
+The report no longer defers its own rebuild because a publish is running; it waits only while the computer is short of memory (the same 92 % gate as a new profile). Refresh is never deferred.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1697).
+
+## ACL-2677 — Timed Meta pause no longer refuses actions the person started — 2026-11-23
+
+After a Meta stop, the timed per-profile pause (rate limit, frozen tab) holds only automatic background reads. Publish, Check plan, commands and Read/Retry started by the person go at once. Persisted holds (checkpoint, login page, policy block) are unchanged, and the account row still shows the reason.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1677).
+
+## ACL-2735 — No limit on heavy account actions at once — 2026-11-16
+
+The "Heavy actions at once" limit (default 1, `ACL_WARM_MAX_HEAVY`) is removed by the owner's decision on audit row 3:
+publish, Check plan, commands and reads on different accounts no longer wait for each other. How many run at once is
+decided only by the memory gate and "Profiles at once". Two actions on the same profile still never run together
+(the profile lock). The field is gone from Settings → Run limits; an old `ACL_WARM_MAX_HEAVY` value in `.env` is ignored.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1735).
+
+## ACL-2870 — Home: Open on one account no longer blocks the others — 2026-11-23
+
+Pressing Open on one account disables only that account's button; other accounts and the warm bar stay usable, and the server accepts open jobs for different accounts at once.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1870).
+
+## ACL-2676 — Profile starts no longer wait for the CPU — 2026-11-23
+
+The next profile of a job no longer waits for the CPU to stay below 70 % for 5 s (up to 180 s). The settings
+`ACL_START_CPU_SETTLE_S` and `ACL_START_MAX_HOLD_S` are removed. A start is held only by the memory gate (ACL-2255)
+and the profile ceiling; profiles of a job still start one at a time while the previous one is warming up. The
+restart pause after a profile closed under load no longer waits for the CPU to drop either. The load wait text shows
+the CPU reading without a "starts below" level. `ACL_LOAD_CPU_PCT` stays for tab patience.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1676).
+
+## ACL-2695 — Retry a failed account read on expand and in the next window — 2026-11-23
+
+An ordinary failed read (network, timeout, replaced tab) no longer blocks the account for an hour: expanding it reads it again at once, and the next 08/13/18 window reads it as well. A held profile (ACL-2091) is still skipped by every automatic read; only a person's Retry reaches it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1695).
+
+## ACL-2686 — A kept profile window takes no slot and defers nothing — 2026-11-23
+
+A kept convenience profile window (after a clean publish, Check plan, read or command) no longer counts against "Profiles at once" and no longer defers the scheduled sweep or the report rebuild; only running or waiting jobs do. It closes at once when a job is short of memory; `ACL_KEPT_IDLE_CLOSE_MIN` stays an override. Review windows keep their slot. Multilogin log out/repair still sees kept windows.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1686).
+
+## ACL-2683 — Lead forms: create right away after a lost Meta answer — 2026-11-23
+
+If Meta never answered a lead form write and the form list does not show it, the next Publish no longer waits: it creates the form at once under the name "<template> copy N". A duplicate is acceptable; the copy is matched as our own form on later runs.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1683).
+
+## ACL-2693 — One 24 h freshness rule for account status, show read age — 2026-11-23
+
+Home now uses the same 24 h freshness rule as Manage: a clear read older than 24 h is not shown as fresh Active. A fresh Active status shows its read age next to the word, e.g. "Active · 3h ago".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1693).
+
+## ACL-2738 — Publish waits for Meta's video processing until the video is ready — 2026-11-16
+
+Publish no longer stops with "the video is still processing after 300 s; publish again later". The creator polls the
+video's status until Meta reports it ready (every 15 s, every 60 s after 20 polls), with no time or poll cap; the
+buyer's Cancel still works at every poll. The live status line shows "video processing at Meta (NN%), M min SS s"
+(Meta's `processing_progress` when given). Polls beyond the plan's reserve (`CALLS_PER_VIDEO_POLLS`) extend the run's
+call budget instead of ending the run. Only a real processing error stops that ad, with Meta's reason from the
+status phases. A resumed publish no longer stops on a video that is still processing; only a failed video stops it.
+Owner decision 16 of the ACL-2668 audit (#1668).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1738).
+
 ## ACL-2863 — Home map no longer takes another account's stats by a name-ending guess — 2026-11-23
 
 The tail guess uses only the account's own name (without the " - Person" annotation), needs a digit in the tail, and never matches a non-Facebook alias.

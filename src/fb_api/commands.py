@@ -33,7 +33,7 @@ from contextlib import AbstractContextManager
 import logging
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from src.fb_api import write_policy as _wp
 from src.fb_api.creator import ZERO_DECIMAL, budget_minor
@@ -50,8 +50,6 @@ FINAL_STATES = frozenset({SUCCEEDED, FAILED, UNKNOWN})
 
 LEVELS = ("campaign", "adset", "ad")
 COMMANDS = ("set_status", "set_budget", "set_bid")
-#: Сколько объектов за одну команду: вызовов на объект — чтение, запись, сверка.
-MAX_TARGETS = 20
 #: Сколько живёт превью, секунд.
 PREVIEW_TTL_S = 900.0
 #: Пауза перед сверкой записи без ответа: запрос мог ещё лететь.
@@ -292,8 +290,6 @@ def clean_actor(actor: Any) -> str:
 def parse_targets(raw: Any) -> list[dict]:
     if not isinstance(raw, list) or not raw:
         raise CommandRefused("Pick at least one campaign, ad set or ad.")
-    if len(raw) > MAX_TARGETS:
-        raise CommandRefused(f"At most {MAX_TARGETS} objects per command.")
     seen: set[str] = set()
     out: list[dict] = []
     for item in raw:
@@ -488,15 +484,30 @@ def call_ceiling() -> int:
 
 
 def call_budget(n_targets: int) -> int:
-    """Вызовы на команду: кабинет + чтение, запись и сверка на каждый объект + запас.
+    """Вызовы на кусок команды: кабинет + чтение, запись и сверка на каждый объект + запас.
 
-    Не выше потолка оператора: команда, которой нужно больше, отказывается в превью.
+    Не выше потолка оператора: потолок теперь на кусок, а не на всю команду (ACL-2668, решение 30).
     """
     return min(1 + 3 * n_targets + 6, call_ceiling())
 
 
-def max_targets_for_ceiling() -> int:
+def chunk_size() -> int:
+    """Сколько объектов в одном куске: столько, сколько влезает в потолок вызовов."""
     return max(1, (call_ceiling() - 1) // 3)
+
+
+def _in_chunks(client: Any, items: list) -> Iterator:
+    """Объекты по кускам; перед каждым куском — свежий бюджет вызовов на этот кусок.
+
+    ACL-2668, решение 30 (владелец, 16.11): число объектов в команде не ограничено —
+    ACL сам проходит их кусками, ничего не спрашивая. Пауза между вызовами Graph
+    (`min_interval_s` клиента) остаётся как была. Стопы Meta `reset_budget` не снимает.
+    """
+    size = chunk_size()
+    for start in range(0, len(items), size):
+        chunk = items[start:start + size]
+        client.reset_budget(call_budget(len(chunk)))
+        yield from chunk
 
 
 def preview(store: OperationStore, open_session: OpenSession, *, account: str, actor: str,
@@ -507,10 +518,6 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
     if not account:
         raise CommandRefused("Pick an account.")
     items = parse_targets(targets)
-    if len(items) > max_targets_for_ceiling():
-        raise CommandRefused(
-            f"At most {max_targets_for_ceiling()} objects per command with the current call limit "
-            f"({MAX_CALLS_ENV}={call_ceiling()}). Pick fewer objects or split the command.")
     if command == "set_status":
         value = str(value or "").strip()
         if value not in _wp.OBJECT_STATUSES:
@@ -521,7 +528,7 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
             raise CommandRefused("Enter a positive amount with at most two decimals.")
     with open_session(account, False) as sess:
         client = sess.client
-        client.reset_budget(call_budget(len(items)))
+        client.reset_budget(call_budget(min(len(items), chunk_size())))
         currency, status = _check_account(client, sess.act)
         if command == "set_status" and value == "ACTIVE" and status != 1:
             raise CommandRefused("The ad account is not active, so nothing can be switched on.",
@@ -529,7 +536,7 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
         new: Any = value if command == "set_status" else parse_money(value, currency)
         affected: list[dict] = []
         skipped: list[dict] = []
-        for t in items:
+        for t in _in_chunks(client, items):
             try:
                 snap = read_object(client, sess.act, t["level"], t["id"])
             except GraphError as exc:
@@ -751,7 +758,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
                              status=409, code="stale")
     if not getattr(client, "allow_writes", False):
         raise CommandRefused("This session cannot write.")
-    client.reset_budget(call_budget(len(op["affected"])))
+    client.reset_budget(call_budget(min(len(op["affected"]), chunk_size())))
     command, currency = op["command"], op["currency"]
     _currency, acc_status = _check_account(client, act, expect_currency=currency)
     if command == "set_status" and op["value"] == "ACTIVE" and acc_status != 1:
@@ -759,7 +766,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
                              status=409, code="stale")
 
     # 1) Перечитать ВСЁ до первой записи: изменилось хоть что-то — не пишем ничего.
-    for item in op["affected"]:
+    for item in _in_chunks(client, op["affected"]):
         snap = read_object(client, act, item["level"], item["id"])
         new = item["after"]
         entry, why = plan_one(command, snap, new, currency)
@@ -777,7 +784,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
     # 2) Одна запись на объект. Первая неудача — остальные не пробуем.
     stop_rest = False
     history_blocked = False   # локально: флаг не попадает ни в журнал, ни в снимки
-    for item in op["affected"]:
+    for item in _in_chunks(client, op["affected"]):
         if stop_rest:
             item["result"] = "not_attempted"
             continue
@@ -812,7 +819,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
     # 3) Сверка чтением того, что ушло (или могло уйти).
     op["state"], op["message"] = VERIFYING, "Reading the values back from Meta"
     store.try_save(op)
-    for item in op["affected"]:
+    for item in _in_chunks(client, op["affected"]):
         if item["result"] not in ("sent", "unknown"):
             continue
         was_unknown = item["result"] == "unknown"

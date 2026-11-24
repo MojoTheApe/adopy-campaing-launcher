@@ -424,6 +424,20 @@ def test_rate_limit_codes_stop_and_cool_the_profile_down(world, code):
     assert len(world.opened_profiles) == 1, "and its profile is not opened again"
 
 
+def test_acl2668_a_read_the_person_started_runs_inside_the_cooldown(world):
+    """ACL-2668 decision 7: the timer holds only background reads; a person's press goes to Meta at once."""
+    from src.fb_api.connection import user_started_action
+
+    world.page.routes["/ACT||"] = err(4)
+    assert api.read_via_api(ACCOUNT, D, D).state == "failed"
+    assert [k for k, _ in world.stops] == ["rate_limited"]
+    n = len(world.page.specs)
+    with user_started_action():
+        again = api.read_via_api(ACCOUNT, D, D)
+    assert "Nothing was called" not in again.error
+    assert len(world.page.specs) > n, "the person's read reaches Graph despite the timer"
+
+
 def test_368_is_a_policy_stop_with_a_long_cooldown(world):
     world.page.routes["/ACT||"] = err(368)
     r = api.read_via_api(ACCOUNT, D, D)
@@ -747,7 +761,7 @@ def test_profile_is_not_held_when_the_split_was_read_in_the_same_session(world):
 def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
     """Живая очередь с потолком 2 и `kept_idle_close_s` по умолчанию (600 с): третье чтение не ждёт.
 
-    ACL-2790: окна первых двух чтений остаются «уступающими»; третье закрывает одно из них сразу.
+    ACL-2686: окна чтений остаются открытыми и места не занимают — третье чтение их не закрывает.
     """
     import dataclasses
     import threading
@@ -799,8 +813,9 @@ def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
     t.join(20)
     assert not t.is_alive(), "the third read must not wait forever for a kept window"
     assert done == ["Acc1:ok", "Acc2:ok", "Acc3:ok"]
-    assert evicted == ["Acc1"], "the least recently used kept window made room at once"
-    assert len(open_profiles) == 2
+    # ACL-2686: kept windows take no slot, so no ceiling eviction; only a memory shortage closes them
+    assert evicted == [], "kept windows are not closed at the slot ceiling"
+    assert len(open_profiles) == 3
     assert all(r["kept"] for r in queue.snapshot()["running"])
 
 

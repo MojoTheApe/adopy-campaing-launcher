@@ -319,6 +319,9 @@ def _current_failure_row(dashboard, message, code):
     from datetime import datetime, timezone
     from src.analysis_agent import campaign_inventory as ci
     site, page = dashboard
+    # ACL-2668 #26: обычная неудача больше не выключает аккаунт из окна 08/13/18 на час.
+    # Окно 08:00 проходит до сбоя (аккаунт свежий), чтобы открытие страницы ниже его не перечитало.
+    assert site.q.page_open(port=9095)["sweep"] == "started"
     stamp = datetime.fromtimestamp(site.now, timezone.utc).isoformat()
     failed = ci.Snapshot(account='Acc', state='failed', error=message,
                          error_code=code, finished_at_utc=stamp)

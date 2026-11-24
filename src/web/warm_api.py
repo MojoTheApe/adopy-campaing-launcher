@@ -90,7 +90,7 @@ def availability() -> dict:
                 "reason": "Opening and closing profiles needs the dashboard to listen on 127.0.0.1 only"}
     from src.fb_api import warm
 
-    return {"available": True, "actions": True, "max_heavy": warm.max_heavy(),
+    return {"available": True, "actions": True,
             "restart_cooldown_s": int(warm.restart_cooldown_s())}
 
 
@@ -140,8 +140,11 @@ REFUSAL_TEXT = {
 _AUTO: dict[str, dict] = {}          # label -> {status: queued|opening|done|refused, code, retried}
 _AUTO_QUEUE: list[str] = []
 _AUTO_LOCK = threading.Lock()
-_AUTO_RUNNING = [0]  # automatic warm-ups being opened right now (0 or 1)
-_AUTO_WORKER: threading.Thread | None = None
+_AUTO_RUNNING = [0]  # automatic warm-ups being opened right now (each in its own thread)
+# ACL-2668 №39: профили, которые автоподъём уже пропустил через допуск и сейчас поднимает.
+# Допуск считает их занятыми местами, чтобы параллельные подъёмы не перешли потолок профилей.
+_AUTO_ADMITTED: set[str] = set()
+_ADMIT_LOCK = threading.Lock()
 
 
 def _sleep(seconds: float) -> None:
@@ -221,16 +224,21 @@ def ensure_open(accounts: Any, trigger: Any = "", campaigns: Any = 0) -> tuple[d
 
 
 def _start_worker_locked() -> None:
-    global _AUTO_WORKER
-    if _AUTO_QUEUE and (_AUTO_WORKER is None or not _AUTO_WORKER.is_alive()):
-        _AUTO_WORKER = threading.Thread(target=_auto_worker, daemon=True, name="acl-warm-auto")
-        _AUTO_WORKER.start()
+    """ACL-2668 №39: каждая заявка — свой поток, без очереди «по одному на машину».
+
+    Сколько профилей поднимается одновременно, решают только потолок профилей и порог
+    памяти в `_admission`.
+    """
+    while _AUTO_QUEUE:
+        label = _AUTO_QUEUE.pop(0)
+        _AUTO_RUNNING[0] += 1
+        threading.Thread(target=_auto_worker, args=(label,), daemon=True, name="acl-warm-auto").start()
 
 
 def running_job_count() -> int:
     """Warm-session launch work that is not finished: manual jobs plus automatic warm-ups.
 
-    Automatic warm-ups count while queued and while one is being opened.
+    Automatic warm-ups count while queued and while they are being opened.
     """
     with _JOBS_LOCK:
         n = sum(1 for j in _JOBS.values() if j.get("state") in ("running", "waiting"))
@@ -241,32 +249,23 @@ def running_job_count() -> int:
 
 def _manual_job_running() -> bool:
     with _JOBS_LOCK:
-        return bool(_ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running")
+        return any(j.get("state") == "running" and j.get("kind") == "open" for j in _JOBS.values())
 
 
-def _auto_worker() -> None:
-    """One account at a time; a person's «Open profiles for today» is never interrupted - wait for it."""
-    global _AUTO_WORKER
-    while True:
+def _auto_worker(label: str) -> None:
+    """One account; a person's «Open profiles for today» is never interrupted - wait for it."""
+    try:
+        waited = 0
+        while _manual_job_running() and waited < 600:
+            _sleep(1.0)
+            waited += 1
+        _auto_one(label)
+    except Exception as exc:  # noqa: BLE001 - one account must not break the others
+        log.exception("Automatic warm-up of %s failed", label)
+        _finish(label, "start_failed", started=False, error=type(exc).__name__)
+    finally:
         with _AUTO_LOCK:
-            if not _AUTO_QUEUE:
-                if _AUTO_WORKER is threading.current_thread():
-                    _AUTO_WORKER = None
-                return
-            label = _AUTO_QUEUE.pop(0)
-            _AUTO_RUNNING[0] += 1
-        try:
-            waited = 0
-            while _manual_job_running() and waited < 600:
-                _sleep(1.0)
-                waited += 1
-            _auto_one(label)
-        except Exception as exc:  # noqa: BLE001 - the queue must not die on one account
-            log.exception("Automatic warm-up of %s failed", label)
-            _finish(label, "start_failed", started=False, error=type(exc).__name__)
-        finally:
-            with _AUTO_LOCK:
-                _AUTO_RUNNING[0] = max(0, _AUTO_RUNNING[0] - 1)
+            _AUTO_RUNNING[0] = max(0, _AUTO_RUNNING[0] - 1)
 
 
 def _requeue_later(label: str) -> None:
@@ -286,6 +285,10 @@ _OK_CODES = ("started", "already_open")
 def _finish(label: str, code: str, *, started: bool, **diag: Any) -> None:
     """Record the end of one attempt: chip state, telemetry row, event. Numbers and codes only."""
     _auto_set(label, "done" if code in _OK_CODES else "refused", code)
+    if code in _OK_CODES:
+        # ACL-2668 №39: как после ручного Open profile (ACL-2419) — одна заявка на чтение статуса,
+        # чтобы к Check plan/Publish статус аккаунта был свежим. Своих таймеров здесь нет.
+        diag["status_read"] = request_status_read(label)
     with _AUTO_LOCK:
         mark = dict(_AUTO.get(label, {}))
     body = {"trigger": mark.get("trigger", ""), "outcome": code, "started": bool(started),
@@ -317,6 +320,8 @@ def _admission(reg: Any, pid: str) -> tuple[str, dict]:
     if snap.get("waiting"):
         return "jobs_waiting", numbers
     open_ids = set(reg.open_profile_ids()) | {r.get("profile") for r in snap.get("running") or []}
+    with _AUTO_LOCK:
+        open_ids |= _AUTO_ADMITTED - {pid}      # параллельные автоподъёмы уже заняли свои места
     open_ids.discard("")
     open_ids.discard(None)
     ceiling = int((snap.get("settings") or {}).get("ceiling") or 0)
@@ -331,7 +336,8 @@ def _admission(reg: Any, pid: str) -> tuple[str, dict]:
     except Exception:  # noqa: BLE001
         return "machine_busy", numbers
     numbers["used_pct"] = load.get("used_pct")
-    if load.get("busy") or reg.warming_others(pid):
+    # ACL-2668 №39: другие прогревающиеся профили больше не повод ждать — подъёмы идут параллельно.
+    if "cpu_high" in (load.get("reasons") or ()):
         return "machine_busy", numbers
     return "", numbers
 
@@ -394,9 +400,23 @@ def _under_lease(label: str, entry: Any, pid: str, reg: Any) -> tuple[str, bool,
         return "cooldown", False, {}
     numbers: dict = {}
     if kind != "port":      # a profile that is already running is only adopted: no admission needed
-        why, numbers = _admission(reg, pid)
-        if why:
-            return why, False, numbers
+        # Допуск и бронь места — одним шагом, иначе два параллельных подъёма увидят одно свободное место.
+        with _ADMIT_LOCK:
+            why, numbers = _admission(reg, pid)
+            if why:
+                return why, False, numbers
+            with _AUTO_LOCK:
+                _AUTO_ADMITTED.add(pid)
+    try:
+        return _start_quietly(label, entry, pid, reg, numbers)
+    finally:
+        with _AUTO_LOCK:
+            _AUTO_ADMITTED.discard(pid)
+
+
+def _start_quietly(label: str, entry: Any, pid: str, reg: Any, numbers: dict) -> tuple[str, bool, dict]:
+    from src.fb_api import connection, mlx_session, stop_log, warm
+
     batch = f"auto-{uuid.uuid4().hex[:6]}"
     mlx_session.begin_batch(batch)
     try:
@@ -428,15 +448,19 @@ def start_open(labels: Any, confirm_reopen: bool = False) -> tuple[dict, int]:
     if len(labels) > MAX_ACCOUNTS:
         return {"error": f"Open at most {MAX_ACCOUNTS} accounts at a time."}, 400
     with _JOBS_LOCK:
-        if _ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running":
-            return {"error": "Profiles are already being opened; wait for it to finish.",
-                    "job_id": _ACTIVE_JOB}, 409
+        # ACL-2870: задания разных аккаунтов идут параллельно; отказ — только если аккаунт уже открывается.
+        for jid, other in _JOBS.items():
+            if other.get("state") == "running" and set(labels) & set(other.get("results") or {}):
+                return {"error": "Profiles are already being opened; wait for it to finish.",
+                        "job_id": jid}, 409
         job_id = uuid.uuid4().hex[:10]
         job = {"job_id": job_id, "state": "running", "kind": "open", "started": time.time(),
                "total": len(labels), "results": {l: {"state": "waiting"} for l in labels}}
         _JOBS[job_id] = job
         _ACTIVE_JOB = job_id
-        for old in sorted(_JOBS, key=lambda j: _JOBS[j]["started"])[:-10]:
+        # ACL-2870: чистим только завершённые задания — бегущее нельзя терять, его опрашивает строка
+        done = [j for j in sorted(_JOBS, key=lambda j: _JOBS[j]["started"]) if _JOBS[j].get("state") != "running"]
+        for old in done[:max(0, len(_JOBS) - 10)]:
             _JOBS.pop(old, None)
     threading.Thread(target=_run_open, args=(job_id, labels, confirm_reopen), daemon=True, name="acl-warm-open").start()
     return _job_view(job), 202
@@ -505,6 +529,7 @@ def note_tab_lock(label: str, *, urls=None, action: str = "Open profile") -> boo
         if urls is None:
             urls = _local_tabs(label, pid)
         key = account_spend._profile_key(label)  # noqa: SLF001
+        account_blocks.reset_lock_seen()     # ACL-2668: this look decides afresh
         # ACL-2841: a tab is an address or an `(address, title)` pair; the title is Meta's own text for the lock.
         pairs = [(u, "") if isinstance(u, str) else (str(u[0]), str(u[1])) for u in urls]
         found = any([account_blocks.note_tab_url(key, label, u, action, t) for u, t in pairs])
@@ -542,6 +567,7 @@ def request_status_read(label: str) -> str:
             account_blocks.mark_person_open(key_)
         except Exception:  # noqa: BLE001
             log.debug("could not mark the person's open", exc_info=True)
+        # ACL-2668/2653: Open profile is the person's own press: the `open` read passes a held profile like Retry.
         got = account_refresh.queue().request(label, "open", force=True)
         reason = str(got.get("reason") or "")
         with _SKIP_LOCK:

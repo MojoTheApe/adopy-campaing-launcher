@@ -299,18 +299,14 @@
   function openProfiles(grid) {
     var p = picked(grid);
     var rows = p.ticked.length ? p.ticked : p.rows;
-    var accounts = rows.map(function (r) { return r.account; });
-    if (rows.length <= 3) { runOpen(grid, accounts); return; }
-    window.aclConfirm('They open one after another and stay open.',
-      { title: 'Start ' + rows.length + ' Multilogin profiles?', okLabel: 'Start' })
-      .then(function (yes) { if (yes) runOpen(grid, accounts); });
+    // ACL-2668 #32: без подтверждения при любом числе аккаунтов — кнопка сама и есть намерение
+    runOpen(grid, rows.map(function (r) { return r.account; }));
   }
 
   function runClose(grid, labels) {
     if (!labels.length) { say(grid, 'Tick the accounts whose profiles to close.', true); return; }
     window.aclConfirm('Only profiles that this dashboard opened are closed, '
-      + 'gently, through Multilogin. Anything opened another way stays open. A closed profile can be '
-      + 'started again after about 3 minutes.',
+      + 'gently, through Multilogin. Anything opened another way stays open.',
       { title: 'Close ' + labels.length + ' profile(s)?', okLabel: 'Close profiles' })
       .then(function (ok) { if (ok) closeNow(grid, labels); });
   }
@@ -344,6 +340,7 @@
      перерисовка строки после открытия. Ничего не открывается само и таймеров на живые аккаунты нет:
      пока идёт задание, опрашивается только локальное состояние (задание и очередь чтения). */
   var homeAvail = null;
+  var homeOpening = {};   // аккаунты, у которых сейчас идёт своё задание Open
 
   function homeButtons() { return Array.prototype.slice.call(document.querySelectorAll('[data-aov-open]')); }
 
@@ -394,17 +391,17 @@
 
   function homeFinish(btn, text, bad) {
     btn.removeAttribute('data-aov-busy');
+    delete homeOpening[btn.getAttribute('data-aov-open')];
     btn.textContent = 'Open profile';
-    busy = false;
-    setBusy(false);
+    homePaint();   // ACL-2870: только своя кнопка; общий busy и warm-bar одиночный Open не трогает
     return homeSay(btn, text, bad);
   }
 
   function homeOpen(btn, account, confirmed) {
-    if (busy) return;   // второй щелчок, пока идёт открытие, ничего не делает
-    busy = true;
+    // ACL-2870: «занято» — у самой кнопки аккаунта; остальные Open и warm-bar остаются живыми
+    if (btn.getAttribute('data-aov-busy') === '1' || homeOpening[account]) return;   // второй щелчок по тому же аккаунту ничего не делает
+    homeOpening[account] = true;
     btn.setAttribute('data-aov-busy', '1');
-    setBusy(true);
     btn.disabled = true;
     btn.textContent = 'Opening…';
     homeSay(btn, '', false);

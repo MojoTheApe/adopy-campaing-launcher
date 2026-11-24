@@ -827,7 +827,7 @@ def may_open_closed_profile() -> bool:
 #: кнопка «Open profiles for today», на `rpa` её нет — там кнопка «open profile» в строке.
 HAND_OPEN_MESSAGE_API = ("Opened in Multilogin by hand — close its window there, then run Check plan or "
                          "Publish and the dashboard opens it for automation")
-HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, "
                      "then use the open profile button on this row")
 HAND_WINDOW_MESSAGE = HAND_OPEN_MESSAGE
 
@@ -1344,8 +1344,8 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         return
     if keep_for_next and convenience and opened.slot_id:
         # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
-        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
-        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        # окном: Publish берёт его место (`_reuse_kept`), а вытеснение решает очередь
+        # (LRU; ACL-2668 — место не занимает и уступает сразу при нехватке памяти). Своего таймера нет.
         try:
             _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
         except Exception:

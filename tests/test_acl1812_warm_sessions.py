@@ -104,7 +104,7 @@ class FakeGraph:
 class Rig:
     """Реестр с подставными процессами, вкладками, MLX и часами."""
 
-    def __init__(self, tmp_path, *, limit=1, memory=None, usage=None, reg_memory=None, reg_usage=None):
+    def __init__(self, tmp_path, *, memory=None, usage=None, reg_memory=None, reg_usage=None):
         self.tabs: list[FakeTab] = []
         self.tab_urls: list[str] = []
         self.alive_pids: set[int] = set()
@@ -125,7 +125,7 @@ class Rig:
         self.gate_skew = [0.0]
         self.gate_pauses: list[float] = []
         self.gate = warm.HeavyGate(
-            limit=lambda: limit, memory=memory or (lambda: ps.MemoryReading(64000, 40000)),
+            memory=memory or (lambda: ps.MemoryReading(64000, 40000)),
             settings=lambda: _s90(), usage=usage if usage is not None else FakeUsage(), tick_s=0.01,
             clock=lambda: time.monotonic() + self.gate_skew[0], pause=self._gate_pause)
         self.reg = warm.WarmRegistry(
@@ -206,6 +206,13 @@ class FakeQueue:
 
     def others_on(self, profile, job_id=""):
         return self.rig.others
+
+
+@pytest.fixture(autouse=True)
+def _restart_cooldown_override(monkeypatch):
+    # ACL-2668: по умолчанию паузы нет (0). Здесь проверяется сам механизм паузы,
+    # который остался аварийным рычагом, — поэтому включаем его явно, как раньше: 180 с.
+    monkeypatch.setenv(stop_log.RESTART_COOLDOWN_ENV, "180")
 
 
 def entry(pid=PID, label="Acc"):
@@ -397,7 +404,7 @@ def test_nested_checkout_in_the_same_thread_is_refused_not_deadlocked(rig):
 
 def test_idle_warm_profiles_do_not_block_the_gate(tmp_path, monkeypatch):
     monkeypatch.setenv(warm.GATE_WAIT_ENV, "2")      # зависание не должно ждать 5 минут
-    rig = Rig(tmp_path, limit=1)
+    rig = Rig(tmp_path)
     pids = [f"{i:08d}-0000-4000-8000-000000000000" for i in range(6)]
     for pid in pids:
         rig.warm_up(pid)
@@ -409,37 +416,42 @@ def test_idle_warm_profiles_do_not_block_the_gate(tmp_path, monkeypatch):
     lease.release()
 
 
-def test_one_heavy_action_at_a_time_by_default(tmp_path):
-    rig = Rig(tmp_path, limit=1)
+def test_actions_on_two_accounts_run_at_once_even_with_an_old_limit_in_env(tmp_path, monkeypatch):
+    """ACL-2668 (решение владельца 16.11): лимита «Heavy actions at once» нет; старое значение в .env не действует."""
+    monkeypatch.setenv("ACL_WARM_MAX_HEAVY", "1")
+    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
+    rig = Rig(tmp_path)
     a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
     rig.warm_up(a)
     rig.warm_up(b)
     first = rig.checkout(a)
+    started = time.monotonic()
+    second = rig.checkout(b)
+    assert time.monotonic() - started < 0.5, "the second account waited for the first one"
+    assert sorted(rig.gate.active()) == [a, b]
+    first.release()
+    second.release()
+
+
+def test_two_actions_on_the_same_profile_still_never_run_together(tmp_path):
+    """ACL-2668: без лимита тяжёлых действий замок профиля по-прежнему разводит два действия на одном профиле."""
+    rig = Rig(tmp_path)
+    rig.warm_up()
+    first = rig.checkout()
     got = []
-    t = threading.Thread(target=lambda: got.append(rig.checkout(b)))
+    t = threading.Thread(target=lambda: got.append(rig.checkout()))
     t.start()
     time.sleep(0.2)
-    assert got == [], "the second heavy action must wait while the first one runs"
+    assert got == [], "a second action on the same profile must wait for the first one"
     first.release()
     t.join(3)
     assert len(got) == 1
     got[0].release()
 
 
-def test_two_heavy_actions_when_configured_and_memory_is_free(tmp_path):
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(64000, 40000))
-    a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
-    rig.warm_up(a)
-    rig.warm_up(b)
-    first, second = rig.checkout(a), rig.checkout(b)
-    assert sorted(rig.gate.active()) == [a, b]
-    first.release()
-    second.release()
-
-
 def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(tmp_path):
     free = [4000]
-    rig = Rig(tmp_path, limit=3, memory=lambda: ps.MemoryReading(16000, free[0]),
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, free[0]),
               usage=FakeUsage(per_profile=6000))
     a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
     rig.warm_up(a)
@@ -456,23 +468,14 @@ def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(
     first.release()
 
 
-def test_gate_wait_times_out_with_a_clear_message(tmp_path, monkeypatch):
-    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
-    rig = Rig(tmp_path, limit=1)
-    a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
-    rig.warm_up(a)
-    rig.warm_up(b)
-    first = rig.checkout(a)
+def test_gate_wait_times_out_with_a_clear_message():
+    # Память не прочиталась - не больше двух разом (FALLBACK_LIMIT); третье ждёт и отказывает понятно.
+    gate = warm.HeavyGate(memory=lambda: None, settings=lambda: _s90(), usage=None, tick_s=0.01)
+    gate.acquire("a")
+    gate.acquire("b")
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout(b)
+        gate.acquire("c", wait_s=0.1)
     assert ei.value.code == "gate_wait" and "Nothing was called" in str(ei.value)
-    first.release()
-
-
-def test_max_heavy_is_clamped_to_one_to_three(monkeypatch):
-    for raw, want in [("", 1), ("0", 1), ("2", 2), ("3", 3), ("9", 3), ("x", 1)]:
-        monkeypatch.setenv(warm.MAX_HEAVY_ENV, raw)
-        assert warm.max_heavy() == want, raw
 
 
 # ───────────────────────── окно, открытое руками ─────────────────────────
@@ -752,6 +755,36 @@ def test_open_endpoint_needs_loopback(monkeypatch):
     assert code == 403 and data["code"] == "not_loopback"
 
 
+def test_open_jobs_of_different_accounts_run_in_parallel(monkeypatch):
+    """ACL-2870: второй Open другого аккаунта не ждёт первый; тот же аккаунт — отказ."""
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_guard", lambda: None)
+    monkeypatch.setattr(warm_api, "_run_open", lambda *a, **k: None)   # задания остаются «running»
+    monkeypatch.setattr(warm_api, "_JOBS", {})
+    first, code1 = warm_api.start_open(["A"])
+    second, code2 = warm_api.start_open(["B"])
+    again, code3 = warm_api.start_open(["A"])
+    assert (code1, code2) == (202, 202) and first["job_id"] != second["job_id"]
+    assert code3 == 409 and again["job_id"] == first["job_id"]
+    assert warm_api._manual_job_running()
+
+
+def test_many_parallel_opens_never_prune_a_running_job(monkeypatch):
+    """ACL-2870: 12 параллельных Open — самое старое, ещё бегущее задание остаётся доступным для опроса."""
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_guard", lambda: None)
+    monkeypatch.setattr(warm_api, "_run_open", lambda *a, **k: None)
+    monkeypatch.setattr(warm_api, "_JOBS", {})
+    ids = [warm_api.start_open([f"Acc{i}"])[0]["job_id"] for i in range(12)]
+    assert all(i in warm_api._JOBS for i in ids)
+    warm_api._JOBS[ids[0]]["state"] = "done"
+    last = warm_api.start_open(["Acc99"])[0]["job_id"]
+    assert ids[0] not in warm_api._JOBS and last in warm_api._JOBS
+    assert all(i in warm_api._JOBS for i in ids[1:])
+
+
 # ───────────────────────── через настоящие PageTab / InPageGraph ─────────────────────────
 
 class RealishCdp:
@@ -948,6 +981,22 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
         assert forbidden not in js, f"opening a list must not trigger {forbidden}"
     for text in ("Open profiles for today", "Close profiles", "Opened by hand"):
         assert text in js or text == "Opened by hand"
+
+
+def test_open_profiles_never_asks_and_close_promises_no_wait():
+    """ACL-2668 #32: «Open profiles for today» стартует сразу при любом числе аккаунтов;
+    «Close profiles» спрашивает, но больше не обещает ждать ~3 минуты перед повторным открытием."""
+    root = Path(__file__).resolve().parents[1] / "src"
+    js = (root / "web" / "static" / "warm_sessions.js").read_text(encoding="utf-8")
+    body = js.split("function openProfiles(grid) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "aclConfirm" not in body and "runOpen(grid" in body
+    close = js.split("function runClose(grid, labels) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "window.aclConfirm(" in close, "Close profiles keeps its confirmation"
+    sources = [js, (root / "web" / "static" / "acm_commands.js").read_text(encoding="utf-8"),
+               (root / "fb_api" / "warm.py").read_text(encoding="utf-8"),
+               (root / "analysis_agent" / "account_spend.py").read_text(encoding="utf-8")]
+    for text in sources:
+        assert "about 3 minutes" not in text and "wait about 3" not in text
 
 
 def test_chip_texts_for_every_state_come_from_the_server(rig):

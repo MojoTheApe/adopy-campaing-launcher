@@ -982,8 +982,11 @@
     .cb-landing-sub { color: var(--muted); font-size: var(--adopy-text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cb-landing-note { color: var(--muted); font-size: var(--adopy-text-sm); padding: 0.35rem 0.6rem; }
     /* Справа от списка, а не поверх него: иначе закрывает кнопки Select и Open. */
-    .cb-landing-preview { position: absolute; left: 35rem; top: 4.2rem; z-index: 30; width: 22rem; height: 30rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); box-shadow: 0 8px 24px rgba(0,0,0,.25); overflow: hidden; pointer-events: none; }
+    .cb-landing-preview { position: fixed; left: 0; top: 0; z-index: 30; width: 22rem; height: 30rem; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); box-shadow: 0 8px 24px rgba(0,0,0,.25); overflow: hidden; pointer-events: none; }
     .cb-landing-preview iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+    /* ACL-2883: страница верстается в размере телефона и уменьшается до окна: видна миниатюра, а не обрезок. */
+    .cb-landing-preview { width: 253px; height: 549px; }
+    .cb-landing-preview iframe { width: 390px; height: 844px; transform: scale(.65); transform-origin: 0 0; }
     /* Account map field rows */
     .cb-map-field-row {
       display: flex; align-items: center; gap: 0.4rem; flex-wrap: nowrap;
@@ -2047,6 +2050,7 @@
     .aov-foldrow td { text-align: center; background: var(--adopy-surface-subtle); }
     .aov-more { border: 1px dashed var(--adopy-border-strong); background: transparent; color: var(--adopy-link); border-radius: 999px; min-height: 26px; padding: 0 12px; font: inherit; font-size: var(--adopy-text-sm); cursor: pointer; }
     .aov-st { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 9px; min-height: 22px; font-size: var(--adopy-text-sm); font-weight: 600; white-space: nowrap; }
+    .aov-ago { font-weight: 400; opacity: .8; }
     .aov-st.active { background: var(--st-active-bg); color: var(--st-active); } .aov-st.issue { background: var(--st-issue-bg); color: var(--st-issue); }
     .aov-st.dead { background: var(--st-dead-bg); color: var(--st-dead); } .aov-st.new { background: var(--st-new-bg); color: var(--st-new); }
     .aov-st.unknown { background: var(--st-unknown-bg); color: var(--st-unknown); border: 1px dashed var(--adopy-border-strong); }
@@ -4721,6 +4725,9 @@ function dashRefreshUpdateCheck() {
         btn.hidden = false;
         btn.dataset.target = name;
         btn.dataset.fixed = fixed.join('\n');
+        // ACL-2668 №11: обновление ждёт конца публикации — состояние на сервере,
+        // поэтому и после перезагрузки страницы кнопка говорит, что оно ждёт.
+        if (s.queued && s.queued.state === 'waiting') aclUpdateQueued(s.queued.message);
       })
       .catch(function () { /* offline, or not a git install — no button, no noise */ });
   }
@@ -4756,6 +4763,7 @@ function dashRefreshUpdateCheck() {
           aclInlineError(btn, 'Update not started: ' + ((data && data.error) || 'unknown error'));
           return;
         }
+        if (data.queued) { aclUpdateQueued(data.message); return; }
         aclWaitForRestart();
       })
       .catch(function () {
@@ -4763,6 +4771,30 @@ function dashRefreshUpdateCheck() {
         // success, not failure, so wait rather than reporting an error.
         aclWaitForRestart();
       });
+  }
+
+  // Идёт публикация: сервер сам начнёт обновление, когда она закончится.
+  // Страница только показывает это и ждёт, пока начнётся рестарт.
+  function aclUpdateQueued(message) {
+    btn.disabled = true;
+    btn.textContent = message || 'Update starts after publishing finishes';
+    (function poll() {
+      fetch('/acl/update/check?fetch=0', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          var q = (s && s.queued) || {};
+          if (q.state === 'waiting') { setTimeout(poll, 5000); return; }
+          if (q.state === 'failed') {
+            btn.disabled = false;
+            btn.textContent = 'Update ACM';
+            aclInlineError(btn, 'Update not started: ' + (q.error || 'unknown error'));
+            return;
+          }
+          aclWaitForRestart();
+        })
+        // Сервер уже ушёл на рестарт.
+        .catch(function () { aclWaitForRestart(); });
+    })();
   }
 
   // Итог последней установки пишет помощник обновления (ACL-1240). Показываем
@@ -5002,22 +5034,17 @@ function dashRefreshUpdateCheck() {
   {#- ACL-2293: лимиты запуска этой машины - без перезапуска дашборда. -#}
   <section class="acc-connect" id="rl-box">
     <h3>Run limits</h3>
-    <p class="acc-sub">How many profiles and heavy actions run at once on this computer. Change them here, not in the file. A change applies to the next start; runs already going are not stopped.</p>
+    <p class="acc-sub">How many profiles run at once on this computer. Change them here, not in the file. A change applies to the next start; runs already going are not stopped.</p>
     <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
       <label>
         <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Profiles at once (1-8, default <span id="rl-def-ceiling">2</span>)</div>
         <input id="rl-ceiling" type="number" min="1" max="8" step="1" style="width:8rem">
       </label>
       <label>
-        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Heavy actions at once (1-3, default <span id="rl-def-heavy">1</span>)</div>
-        <input id="rl-heavy" type="number" min="1" max="3" step="1" style="width:8rem">
-      </label>
-      <label>
-        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Max memory in use before a new profile starts, % (50-95, default <span id="rl-def-share">92</span>)</div>
-        <input id="rl-share" type="number" min="50" max="95" step="1" style="width:8rem">
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Max memory in use before a new profile starts, % (0-95, default <span id="rl-def-share">92</span>)</div>
+        <input id="rl-share" type="number" min="0" max="95" step="1" style="width:8rem">
       </label>
       <div id="rl-now" style="font-size:var(--adopy-text-sm);color:var(--muted)"></div>
-      <div id="rl-warn" style="font-size:var(--adopy-text-sm);color:var(--danger)"></div>
       <div style="display:flex;gap:0.6rem;align-items:center">
         <button type="button" id="rl-save" class="btn">Save</button>
         <button type="button" id="rl-reset" class="btn">Reset to default</button>
@@ -12212,7 +12239,7 @@ window.cbBuild = (function () {
     if (q.hold === 'idle_windows') {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
-    if (q.hold === 'account_busy' || q.hold === 'heavy_limit') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
+    if (q.hold === 'account_busy') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
     if (q.hold === 'machine_busy') return { state: 'build-wait', sign: '', why: cbLoadWait(q) };
     if (q.hold === 'machine_stalled') {
       return { state: 'build-wait', sign: '',
@@ -22206,7 +22233,8 @@ function cbCloseWindows(q) {
 /* ACL-2283: профили заданий стартуют по одному; занятая машина - ждём очереди и спада нагрузки, стартуем сами. */
 function cbLoadWait(q) {
   var parts = [];
-  if (q && q.cpu_pct != null) parts.push('CPU ' + Math.round(q.cpu_pct) + '%' + (q.cpu_level ? ' (starts below ' + Math.round(q.cpu_level) + '%)' : ''));
+  /* ACL-2668: CPU only shown as a reading - profile starts no longer wait for it. */
+  if (q && q.cpu_pct != null) parts.push('CPU ' + Math.round(q.cpu_pct) + '%');
   if (q && q.used_pct != null) parts.push(Math.round(q.used_pct) + '% memory in use');
   if (q && Number(q.running) > 0) parts.push(q.running + ' other profile' + (Number(q.running) === 1 ? ' is' : 's are') + ' still starting');
   var rest = (q && Number(q.restart_wait_s) > 0) ? ', next start in ~' + Math.ceil(q.restart_wait_s) + ' s' : '';
@@ -22229,11 +22257,6 @@ function cbCeilingWait(q) {
     + '. The next one starts when a run finishes';
 }
 function cbAccountWait(q) {
-  /* ACL-2293: the limit of heavy account actions, not "another account" */
-  if (q && q.hold === 'heavy_limit' && q.heavy_limit) {
-    return 'Waiting: ' + (parseInt(q.running, 10) || q.heavy_limit) + ' of ' + q.heavy_limit
-      + ' heavy actions in progress (limit ' + q.heavy_limit + ') - it starts by itself, Stop cancels it';
-  }
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
   var mem = (q && q.available_mb != null) ? ' (' + gb(q.available_mb) + ' GB free)' : '';
   return 'Waiting for another account action to finish' + mem + ' - it starts by itself, Stop cancels it';
@@ -25478,19 +25501,17 @@ function aclPickerSearch(inst, text) {
   if ((location.hash || '').indexOf('accounts') !== -1) document.addEventListener('DOMContentLoaded', load);
 })();
 
-// ── ACL-2293: лимиты запуска (потолок профилей, тяжёлые действия, доля памяти) ──
+// ── ACL-2293: лимиты запуска (потолок профилей, доля памяти; лимит тяжёлых действий убран в ACL-2668) ──
 (function () {
-  var pending = false, loaded = {}, info = {};
+  var pending = false, loaded = {};
   function el(id) { return document.getElementById(id); }
   function say(text, error) { el('rl-msg').textContent = text || ''; el('rl-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function show(d) {
-    info = d;
-    loaded = {ceiling: String(d.ceiling), warm_heavy: String(d.warm_heavy), memory_max_used_pct: String(d.memory_max_used_pct)};
+    loaded = {ceiling: String(d.ceiling), memory_max_used_pct: String(d.memory_max_used_pct)};
     el('rl-ceiling').value = loaded.ceiling;
-    el('rl-heavy').value = loaded.warm_heavy;
     el('rl-share').value = loaded.memory_max_used_pct;
     var df = d.defaults || {};
-    el('rl-def-ceiling').textContent = df.ceiling; el('rl-def-heavy').textContent = df.warm_heavy;
+    el('rl-def-ceiling').textContent = df.ceiling;
     el('rl-def-share').textContent = df.memory_max_used_pct;
     var now = [];
     if (d.total_mb) now.push('This computer: ' + (d.total_mb / 1024).toFixed(0) + ' GB memory, ' + Math.round(d.used_pct) + '% in use');
@@ -25498,7 +25519,6 @@ function aclPickerSearch(inst, text) {
     now.push(d.running + ' of ' + d.ceiling + ' profiles running' + (d.ceiling_reached ? ' - ceiling reached' : '')
       + (d.waiting ? ', ' + d.waiting + ' waiting' : ''));
     el('rl-now').textContent = now.join(' · ');
-    el('rl-warn').textContent = (d.warnings || []).join(' ');
   }
   async function load() {
     try {
@@ -25507,9 +25527,8 @@ function aclPickerSearch(inst, text) {
       if (r.ok && d.ok) show(d);
     } catch (e) { say(String(e), true); }
   }
-  async function post(body, ask) {
+  async function post(body) {
     if (pending) return;
-    if (ask && !await window.aclConfirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use.', { title: 'Save anyway?', okLabel: 'Save' })) return;
     pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
     try {
       var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -25523,20 +25542,15 @@ function aclPickerSearch(inst, text) {
   function save() {
     var body = {};
     if (el('rl-ceiling').value !== loaded.ceiling) body.ceiling = el('rl-ceiling').value;
-    if (el('rl-heavy').value !== loaded.warm_heavy) body.warm_heavy = el('rl-heavy').value;
     if (el('rl-share').value !== loaded.memory_max_used_pct) body.memory_max_used_pct = el('rl-share').value;
     if (!Object.keys(body).length) { say('Nothing changed.'); return; }
-    var c = parseFloat(el('rl-ceiling').value), p = parseFloat(el('rl-share').value);
-    var cf = info.confirm_above || {};
-    var risky = ('ceiling' in body && c > (cf.ceiling || 3)) || ('memory_max_used_pct' in body && p > (cf.memory_max_used_pct || 80));
-    if (risky) body.confirm = true;   // сервер без этого флага рискованное значение не принимает
-    post(body, risky);
+    post(body);   // ACL-2668: без подтверждения — любое значение в границах сохраняется сразу
   }
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (!t || !t.getAttribute) return;
     if (t.id === 'rl-save') { save(); return; }
-    if (t.id === 'rl-reset') { post({reset: true}, false); return; }
+    if (t.id === 'rl-reset') { post({reset: true}); return; }
     if (t.getAttribute('data-view') === 'accounts') load();
   });
   document.addEventListener('acl:viewchange', function (e) {

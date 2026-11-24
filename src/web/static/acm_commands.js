@@ -20,7 +20,6 @@
   var STATUSES = ['ACTIVE', 'PAUSED'];
   var FINAL = ['Succeeded', 'Failed', 'Outcome unknown'];
   var LEVEL_WORD = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' };
-  var MAX_TARGETS = 20;
 
   function refuse(message) { var e = new Error(message); e.refused = true; return e; }
 
@@ -31,7 +30,6 @@
       throw refuse('Only status, daily budget and bid commands are allowed.');
     }
     if (!Array.isArray(req.targets) || !req.targets.length) throw refuse('Pick at least one object.');
-    if (req.targets.length > MAX_TARGETS) throw refuse('At most ' + MAX_TARGETS + ' objects per command.');
     req.targets.forEach(function (t) {
       if (!t || LEVELS.indexOf(t.level) < 0 || !/^[1-9][0-9]{4,}$/.test(String(t.id))) {
         throw refuse('Each target needs a level and a numeric id.');
@@ -257,7 +255,7 @@
 
   function availability() {
     return root.fetch('/campaign-commands/availability').then(readReply).catch(function (e) {
-      return { available: false, reason: String((e && e.message) || e), max_targets: 0 };
+      return { available: false, reason: String((e && e.message) || e) };
     });
   }
 
@@ -328,10 +326,7 @@
     var accounts = {};
     rows.forEach(function (r) { accounts[r.account] = true; });
     if (Object.keys(accounts).length > 1) return { ok: false, reason: 'Select rows from one account' };
-    var cap = Math.min(MAX_TARGETS, avail.max_targets || MAX_TARGETS);
-    if (rows.length > cap) {
-      return { ok: false, reason: 'At most ' + cap + ' objects per command with the current call limit' };
-    }
+    // ACL-2668, решение 30: сколько угодно строк — сервер сам идёт кусками.
     return { ok: true, account: rows[0].account, rows: rows, skippedBusy: total - rows.length,
              targets: rows.map(function (r) { return { level: r.level, id: String(r.id) }; }) };
   }
@@ -468,7 +463,7 @@
   // (open_by_hand, restart_cooldown, not_loopback, rpa), отдаётся как есть.
   var FRIENDLY = {
     mlx: "Multilogin isn't running — start it and try again",
-    hand: 'Profile is open in Multilogin by hand — close it there, wait about 3 minutes, then press Open profile',
+    hand: 'Profile is open in Multilogin by hand — close it there, then press Open profile',
     closing: 'Profile is closing — try again in a few seconds',
     loggedOut: 'Logged out in this profile — log in inside Multilogin, then retry',
     checkpoint: 'Facebook checkpoint — resolve it inside the profile',

@@ -428,7 +428,7 @@ def _map(cases):
 LAUNCHER = ("Not sent: Facebook_5414_x the profile could not be opened with automation: HTTPSConnectionPool(host='launcher.mlx.yt', "
             "port=45001): Max retries exceeded (Caused by NewConnectionError: [WinError 10061] No connection could be made)")
 HAND = "the profile is open but has no automation port (opened by hand in MLX Desktop?). Close it in MLX Desktop or open it from the dashboard, then retry."
-HAND_NEW = "Profile is open in Multilogin by hand — close it there, wait about 3 minutes, then press Open profile"
+HAND_NEW = "Profile is open in Multilogin by hand — close it there, then press Open profile"
 LOOP = "Campaign commands are only available when the dashboard listens on this computer alone (127.0.0.1). It is bound to a network address."
 RPA = "Campaign commands need the Graph API backend (ACL_FB_BACKEND=api). This machine uses the RPA backend, so nothing was changed."
 MLX = "Multilogin isn't running — start it and try again"

@@ -530,10 +530,21 @@ def active_job_count() -> int:
 
 
 def publishing_busy() -> bool:
-    """A publish job is live, or a profile window (running or kept open) holds a slot.
+    """A publish job is live, or a job runs or waits in the profile queue.
 
     ACL-2260: the report must not start a rebuild of its own while this is true.
+    ACL-2668: a profile window kept open after a publish or Check plan does not count:
+    it neither defers the scheduled account reads nor the report rebuild.
     Cheap and non-blocking: two short locks, no snapshot of the queue decision.
+    """
+    return active_job_count() > 0 or _slots.working()
+
+
+def profile_slots_held() -> bool:
+    """A publish job is live, or a profile window (running or kept open) holds a queue entry.
+
+    For work that needs the Multilogin connections themselves (log out, repair): a kept
+    window is an open profile on that connection.
     """
     return active_job_count() > 0 or _slots.occupied()
 
@@ -1235,8 +1246,10 @@ def _wait_out_machine_load(job_id: str, account_label: str, publisher: Any, rq: 
             snap = reg.load_snapshot(pid)
             pause = float(reg.restart_wait_s(pid)) if pid else 0.0
             waited = time.monotonic() - began
+            # ACL-2676: the CPU reading no longer holds a restart; only warming profiles and memory do.
+            held = [r for r in (snap.get("reasons") or []) if r != "cpu_high"]
             if waited >= backoff and pause <= 0 and (
-                    snap.get("clear") or waited >= max(backoff, _warm.LOAD_BACKOFF_CAP_S)):
+                    not held or waited >= max(backoff, _warm.LOAD_BACKOFF_CAP_S)):
                 return True
             _show_resource_wait(job_id, account_label, {
                 "hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"), "cpu_level": snap.get("cpu_level"),
@@ -1327,7 +1340,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
-                  else "waiting_account" if hold in ("account_busy", "heavy_limit")
+                  else "waiting_account" if hold == "account_busy"
                   else "waiting_load" if hold == "machine_busy"
                   else "waiting_memory" if (hold in ("memory_low", "below_reserve", "auto_resume")
                                             or verdict.get("behind_memory"))
@@ -1351,8 +1364,6 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "used_pct": verdict.get("used_pct"),
         "max_used_pct": verdict.get("max_used_pct"),
         "running": verdict.get("running"),
-        # ACL-2293: the warm heavy-action limit, when it is what holds the action.
-        "heavy_limit": verdict.get("heavy_limit"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),

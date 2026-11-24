@@ -45,7 +45,7 @@ def auto_refresh_enabled(port: int) -> bool:
     return bool(getattr(sys, "frozen", False)) or port == 9090
 
 def _publishing_busy() -> bool:
-    """A publish job is live or a profile window holds a slot (ACL-2260). No import side effects."""
+    """A publish job is live or queued (ACL-2260; a kept window does not count, ACL-2668). No import side effects."""
     module = sys.modules.get("src.web.publish_jobs")
     try:
         return bool(module is not None and module.publishing_busy())
@@ -143,22 +143,6 @@ def _held_blocks(account: str, trigger: str, force: bool = False) -> bool:
     return _profile_held(account)
 
 
-def recently_failed(account: str, *, now: float | None = None) -> bool:
-    """Последняя попытка чтения не удалась и моложе `FRESH_S`: автоматические заявки её не повторяют.
-
-    Только явные Retry/действие (force) читают такой аккаунт раньше срока.
-    """
-    if _profile_held(account):
-        return True     # ACL-2091: a held profile waits for a person; no automatic read is queued for it
-    attempt = campaign_inventory.get_attempt(account)
-    if not attempt or attempt.get("state") != "failed":
-        return False
-    at = _parse_utc(attempt.get("at_utc") or "")
-    if at is None:
-        return False
-    return 0 <= (time.time() if now is None else now) - at < FRESH_S
-
-
 def _cooldown_s(kind: str, text: str) -> float:
     """Сколько ждать по таймеру: минуты из текста, иначе COOLDOWN_S по виду остановки."""
     from src.analysis_agent.account_spend_api import COOLDOWN_S
@@ -249,6 +233,8 @@ class RefreshQueue:
         self._seq = 0
         #: Аккаунты, которые сейчас читаются этим процессом (ACL-2668: их может быть несколько).
         self._reading: list[str] = []
+        #: Заявка каждого идущего чтения: после рестарта посреди чтения оно ставится заново (ACL-2668 №11).
+        self._reading_triggers: dict[str, str] = {}
         self._halt: dict | None = None
         self._sweep: dict | None = None
         self._rows: dict[str, dict] = {}
@@ -354,6 +340,10 @@ class RefreshQueue:
                     # Состояние прежней версии: одно поле `running`.
                     reading = [state["running"]] if state.get("running") else []
                 self._reading = list(reading)
+                triggers = state.get("reading_triggers")
+                if not isinstance(triggers, dict):
+                    triggers = {state["running"]: str(state.get("running_trigger") or "")} if state.get("running") else {}
+                self._reading_triggers = {a: str(t or "") for a, t in triggers.items()}
                 self._rows = state["rows"]
                 self._keys = state.get("machine_bindings", {})
                 self._halt = state.get("halt")
@@ -362,6 +352,7 @@ class RefreshQueue:
                 yield state
                 # `running` (первый из читаемых) оставлен для прежних версий на том же каталоге настроек.
                 state.update(seq=self._seq, entries=self._entries, reading=self._reading,
+                             reading_triggers={a: t for a, t in self._reading_triggers.items() if a in self._reading},
                              running=self._reading[0] if self._reading else None,
                              rows=self._rows, halt=self._halt, sweep=self._sweep,
                              bypass=sorted(self._bypass), machine_bindings=self._keys)
@@ -393,8 +384,9 @@ class RefreshQueue:
         if window is None:
             return {"sweep": "no_window", "window": None, "queued": 0}
         if _publishing_busy():
-            # ACL-2260: reads open profiles; not while a publish runs or a window is
-            # kept open. The window is not marked done, so the next page open retries.
+            # ACL-2260: reads open profiles; not while a publish runs. ACL-2668: a window
+            # kept open after a publish or Check plan does not defer the sweep.
+            # The window is not marked done, so the next page open retries.
             return {"sweep": "deferred_publish", "window": window, "queued": 0}
         if self._store is None or self._accounts is None:
             raise RuntimeError("Scheduled account reads require persisted dashboard settings.")
@@ -441,7 +433,9 @@ class RefreshQueue:
                     self._rows[account] = {"list_at": snap.finished_at, "state": snap.state, "error": ""}
                     self._sweep_complete(account)
                     skipped.append((account, label))
-                elif recently_failed(account, now=self._clock()):
+                elif _profile_held(account):
+                    # ACL-2091: удержанный профиль ждёт человека. Обычная неудача окно не пропускает
+                    # (ACL-2668 #26): следующее окно 08/13/18 читает аккаунт снова.
                     self._sweep_complete(account)
                 else:
                     self._push(account, "schedule", label, False)
@@ -583,14 +577,15 @@ class RefreshQueue:
         Явный `retry`/`action` (force) пересчитывает свежесть, но паузу всей очереди не снимает:
         без таймера он читает только свой аккаунт мимо паузы, и пауза уходит, лишь если чтение
         удалось; с таймером ждёт его конца. Остальные заявки на паузе встают в очередь.
-        Автоматические заявки (`attention`, `schedule`) не читают аккаунт, чьё последнее чтение
-        упало меньше часа назад. `window` помечает обход по расписанию в телеметрии.
+        Упавшее чтение без удержания профиля не ждёт часа (ACL-2668 #26): раскрытие аккаунта
+        (`attention`) читает его сразу, обход по расписанию — в следующем окне. Удержанный
+        профиль (ACL-2091) автоматические заявки не трогают. `window` помечает обход по
+        расписанию в телеметрии.
         """
         if trigger not in PRIORITY:
             raise ValueError(f"unknown trigger {trigger!r}")
         label = f"schedule:{window}" if trigger == "schedule" and window else trigger
         skipped = False
-        failed_recently = False
         halted = False
         with self._state_guard():
             self._maybe_lift()
@@ -609,8 +604,6 @@ class RefreshQueue:
                                        "state": snap.state if snap else "", "error": ""}
                 self._sweep_complete(account, label)
                 skipped = True
-            elif not force and recently_failed(account, now=self._clock()):
-                failed_recently = True
             else:
                 # A request joins a currently running read; inline action refreshes
                 # use their already-open session and settle separately.
@@ -623,8 +616,6 @@ class RefreshQueue:
         if skipped:
             self._telemetry_skipped(account, label)
             return {"queued": False, "reason": "fresh"}
-        if failed_recently:
-            return {"queued": False, "reason": "recent_failure"}
         return {"queued": True, "reason": "halted" if halted else "queued"}
 
     def _push(self, account: str, trigger: str, label: str, force: bool) -> None:
@@ -734,9 +725,6 @@ class RefreshQueue:
                     self._pending_skips.append((account, entry[2]))
                     self._sweep_complete(account, entry[2])
                     continue
-                if recently_failed(account, now=self._clock()):
-                    self._sweep_complete(account, entry[2])
-                    continue
             return account, entry[2], False
         return None
 
@@ -813,6 +801,7 @@ class RefreshQueue:
         with self._state_guard():
             if account not in self._reading:
                 self._reading.append(account)
+            self._reading_triggers[account] = trigger
             self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": "", "since": self._clock()}
         snap = None
         try:
@@ -830,14 +819,40 @@ class RefreshQueue:
                     self._sweep_complete(account, trigger)
         return snap
 
-    def _interrupted_rows(self) -> None:
-        """Под замком: OS-аренда диспетчера свободна - сохранённые «читается» остались от прерванного процесса."""
-        for account in list(self._reading):
-            previous = self._rows.get(account, {}).get("list_at", "")
-            self._rows[account] = {"list_at": previous, "state": "failed",
-                                   "error": "The read was interrupted. Press Retry."}
-            self._sweep_complete(account)
-        self._reading = []
+    def _resume_interrupted(self) -> None:
+        """Чтение, оборванное концом прежнего процесса, встаёт в очередь заново. Под замком.
+
+        ACL-2668 №11: обновление ACM больше не ждёт чтений — рестарт их
+        обрывает, и аккаунт просто читается снова, без Retry. Заявка та же,
+        что была, но принудительная: координатор машины уже записал оборванное
+        чтение неудачей, и без force автоматическая заявка её бы не повторила.
+        Удержанный профиль это не трогает (`_held_blocks` смотрит на вид заявки),
+        а заявка обхода окна переходит в `attention`: окно оборванное чтение уже
+        засчитало.
+        """
+        interrupted, triggers = list(self._reading), self._reading_triggers
+        self._reading, self._reading_triggers = [], {}
+        for account in interrupted:
+            self._resume_one(account, triggers.get(account) or "attention")
+
+    def _resume_one(self, account: str, trigger: str) -> None:
+        kind = trigger.split(":")[0]
+        if kind not in PRIORITY or kind == "schedule":
+            kind = trigger = "attention"
+        row = self._rows.get(account, {})
+        if self._known_account(account):
+            try:
+                self._push(account, kind, trigger, True)
+            except (ValueError, CoordinationError):
+                pass
+            else:
+                snap = campaign_inventory.get_snapshot(account)
+                self._rows[account] = {"list_at": row.get("list_at", ""),
+                                       "state": snap.state if snap else "", "error": ""}
+                return
+        self._rows[account] = {"list_at": row.get("list_at", ""), "state": "failed",
+                               "error": "The read was interrupted. Press Retry."}
+        self._sweep_complete(account)
 
     @staticmethod
     def _read_limit() -> int:
@@ -874,8 +889,7 @@ class RefreshQueue:
                 self._import_result(account)
                 skip = (_held_blocks(account, trigger, force)      # ACL-2548: nothing is read, no attempt row
                         or (force and not self._machine.pending(key, self._owner))
-                        or (not force and (is_fresh(account, now=self._clock())
-                                           or recently_failed(account, now=self._clock()))))
+                        or (not force and is_fresh(account, now=self._clock())))
             finally:
                 dispatch.__exit__(None, None, None)
             if skip:
@@ -922,7 +936,7 @@ class RefreshQueue:
                 return 0
             done, blocked, yielded = 0, set(), False
             with self._state_guard():
-                self._interrupted_rows()
+                self._resume_interrupted()
             while True:
                 with changed:
                     for account, outcome in finished:
@@ -988,7 +1002,7 @@ class RefreshQueue:
                     return 0
                 with self._state_guard():
                     # OS-аренда свободна: сохранённое «читается» осталось от прерванного процесса.
-                    self._interrupted_rows()
+                    self._resume_interrupted()
             done = 0
             while True:
                 with self._state_guard():
@@ -997,6 +1011,7 @@ class RefreshQueue:
                     if item is not None:
                         account, trigger, bypassed = item
                         self._reading.append(account)
+                        self._reading_triggers[account] = trigger
                         self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": "", "since": self._clock()}
                 for acc, label in skips:
                     self._telemetry_skipped(acc, label)

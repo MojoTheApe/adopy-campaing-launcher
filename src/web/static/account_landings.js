@@ -5,6 +5,8 @@
   'use strict';
   var MAX = 3;
   var PREVIEW_DELAY_MS = 400;
+  // ACL-2881: `pending` повторяем раз в секунду (JCloud обычно готов за 1–2 с), а не по retry_after_seconds.
+  var PENDING_POLL_MS = 1000;
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -91,16 +93,34 @@
       preview.hidden = true;
       preview.replaceChildren();
     }
-    function showPreview(item) {
+    function showPreview(item, anchor) {
       if (!/^https?:\/\//i.test(item.url || '')) return;
       var frame = document.createElement('iframe');
-      // Скрипты страницы разрешены (лендинг рендерится на JS), но без доступа к ACL: другой origin.
-      frame.setAttribute('sandbox', 'allow-scripts');
+      // Скрипты страницы разрешены (лендинг рендерится на JS). allow-same-origin оставляет лендингу его
+      // собственный origin (без него его запросы и хранилище падают, и он показывает страницу ошибки);
+      // к ACL доступа нет: origin другой. Переходы верхнего окна, формы и всплывающие окна запрещены.
+      frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
       frame.setAttribute('referrerpolicy', 'no-referrer');
       frame.setAttribute('loading', 'lazy');
       frame.src = item.url;
       preview.replaceChildren(frame);
       preview.hidden = false;
+      placePreview(anchor);
+    }
+    // ACL-2876: окно привязано к окну браузера, а не к блоку: справа от списка, если влезает,
+    // иначе слева, иначе у правого края; по вертикали всегда внутри окна.
+    function placePreview(anchor) {
+      var box = preview.getBoundingClientRect();
+      var list = (anchor || results).closest('[data-landings-results]') || results;
+      var lr = list.getBoundingClientRect();
+      var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight, gap = 8;
+      var left = lr.right + gap;
+      if (left + box.width > vw - gap) left = lr.left - box.width - gap;
+      if (left < gap) left = Math.max(gap, vw - box.width - gap);
+      var ar = (anchor || list).getBoundingClientRect();
+      var top = Math.min(Math.max(gap, ar.top), Math.max(gap, vh - box.height - gap));
+      preview.style.left = Math.round(left) + 'px';
+      preview.style.top = Math.round(top) + 'px';
     }
 
     function addRows(items) {
@@ -109,8 +129,9 @@
         row.setAttribute('data-landing-id', item.id);
         var main = el('div', 'cb-landing-main');
         main.appendChild(el('div', 'cb-landing-title', item.title || ('#' + item.id)));
+        var pages = Number(item.count) > 1 ? item.count + ' pages' : '';
         main.appendChild(el('div', 'cb-landing-sub',
-          [(item.domain || '') + (item.path || ''), item.template, item.language, item.status].filter(Boolean).join(' · ')));
+          [(item.domain || '') + (item.path || ''), item.template, item.language, item.status, pages].filter(Boolean).join(' · ')));
         row.appendChild(main);
         var open = el('a', 'cb-landing-sub', 'Open ↗');
         open.href = /^https?:\/\//i.test(item.url || '') ? item.url : '#'; open.target = '_blank'; open.rel = 'noopener noreferrer';
@@ -125,7 +146,7 @@
         row.appendChild(pick);
         row.addEventListener('mouseenter', function () {
           clearTimeout(previewTimer);
-          previewTimer = setTimeout(function () { showPreview(item); }, PREVIEW_DELAY_MS);
+          previewTimer = setTimeout(function () { showPreview(item, row); }, PREVIEW_DELAY_MS);
         });
         row.addEventListener('mouseleave', hidePreview);
         results.appendChild(row);
@@ -154,10 +175,16 @@
             note('JCloudFront is preparing the catalog…');
             setTimeout(function () {
               if (mine === token && !search.hidden) { clearNotes(); run(text, page, data.searched_as, snapshot, mine, stock); }
-            }, Math.max(1, Number(data.retry_after_seconds) || 3) * 1000);
+            }, PENDING_POLL_MS);
             return;
           }
           if (page === 1 && !data.items.length) { note('Nothing found.'); return; }
+          if (page === 1) {
+            // Выдача сгруппирована: total — уникальные конфигурации, matching_landings — все лендинги в них.
+            var sum = el('div', 'cb-landing-note', data.total + ' unique configurations · ' + data.matching_landings + ' landings');
+            sum.setAttribute('data-landings-summary', '');
+            results.appendChild(sum);
+          }
           addRows(data.items);
           if (!data.complete) note(data.unclassified_count + ' landings could not be checked.');
           if (data.has_more) {

@@ -75,15 +75,15 @@ def availability() -> dict:
     """Что страница может предлагать: включены ли команды и почему нет. Ничего не читает у Meta."""
     if not api_enabled():
         return {"available": False, "code": "rpa_backend", "reason": "Needs ACL_FB_BACKEND=api",
-                "max_targets": 0, "bulk": {"available": False, "reason": BULK_RPA_REASON, "max_campaigns": 0}}
+                "bulk": {"available": False, "reason": BULK_RPA_REASON, "max_campaigns": 0}}
     if not bound_to_loopback():
         reason = "Only when the dashboard listens on this computer alone (127.0.0.1)"
-        return {"available": False, "code": "not_loopback", "reason": reason, "max_targets": 0,
+        return {"available": False, "code": "not_loopback", "reason": reason,
                 "bulk": {"available": False, "reason": reason, "max_campaigns": 0}}
     from src.fb_api import bulk_edit
 
+    # ACL-2668, решение 30: потолка объектов на команду нет — сервер идёт кусками сам.
     return {"available": True, "code": "", "reason": "",
-            "max_targets": min(_cmd.MAX_TARGETS, _cmd.max_targets_for_ceiling()),
             "bulk": {"available": True, "reason": "",
                      "max_campaigns": min(bulk_edit.MAX_CAMPAIGNS, max(1, (_cmd.call_ceiling() - 5) // 3))}}
 
@@ -238,5 +238,7 @@ def open_session(account: str, commands: bool):
         from src.fb_api import account_blocks as _blocks
         # ACL-2791: превью (commands=False) берёт тот же режим графа, что и выполнение, - без повторной передачи токена
         extra = {} if commands else {"preview": True}
-        with _blocks.person_edit(), user_started_action(), _api._session(account, commands=commands, **extra) as sess:
+        # ACL-2668: and a held profile is probed like Retry (healthy page lifts the hold, else the reason shows).
+        with (_blocks.person_edit(), user_started_action(), _blocks.problem_action("command"),
+              _api._session(account, commands=commands, **extra) as sess):
             yield sess

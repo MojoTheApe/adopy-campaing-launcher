@@ -271,10 +271,13 @@ def upload_calls(size: int, worker: bool | None = None, *, chunked: bool = False
 #: ACL-2637: calls reserved for a growing upload window (1, 2, 4 ... 64 MB) on the worker path.
 CALLS_UPLOAD_WINDOW_RAMP = 6
 
-#: Ожидание обработки видео — с потолком по времени и по числу вызовов.
-VIDEO_WAIT_S = 300.0
+#: Ожидание обработки видео (ACL-2668, решение 16): без потолка - публикация не останавливается, пока Meta
+#: обрабатывает видео; стоп только по ошибке обработки. Опрос раз в 15 с, после `VIDEO_POLL_SLOW_AFTER`
+#: опросов - раз в `VIDEO_POLL_MAX_S` (большие видео обрабатываются десятки минут). Отмена задания работает всегда.
 VIDEO_POLL_S = 15.0
-VIDEO_MAX_POLLS = 20
+VIDEO_POLL_MAX_S = 60.0
+VIDEO_POLL_SLOW_AFTER = 20
+VIDEO_CANCEL_SLICE_S = 1.0      # пауза опроса режется на куски: отмена слышна за секунду
 
 #: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
 #: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
@@ -2044,8 +2047,48 @@ MSG_MISMATCH = ('"{name}" was changed or removed in Ads Manager after it was cre
                 "Fix or delete it there, then publish again.")
 MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campaign. '
                      "Delete or move it, then publish again.")
-MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected by Meta. "
-                       "Publish again once it is ready, or replace the video.")
+def video_error_reason(status: dict) -> str:
+    """Причина Meta из `status` видео с ошибкой обработки (ACL-2668): тексты ошибок фаз, иначе пусто."""
+    texts: list[str] = []
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        for err in part.get("errors") or []:
+            text = str((err or {}).get("message") or "").strip() if isinstance(err, dict) else str(err).strip()
+            if text and text not in texts:
+                texts.append(text)
+    err = status.get("error")
+    text = str(err.get("message") or "").strip() if isinstance(err, dict) else str(err or "").strip()
+    if text and text not in texts:
+        texts.append(text)
+    return "; ".join(texts)
+
+
+def video_failed(status: dict, state: str) -> bool:
+    """Конечное состояние без готовности (ACL-2668): `error`, `expired` или ошибка любой фазы - ждать дальше нечего."""
+    if state in ("error", "expired"):
+        return True
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        if str(part.get("status") or "").lower() in ("error", "expired"):
+            return True
+    return False
+
+
+def video_progress_text(status: dict) -> str:
+    """` (45%)` по `processing_progress` Meta, если она его дала; иначе пусто."""
+    try:
+        pct = int(status.get("processing_progress"))
+    except (TypeError, ValueError):
+        return ""
+    return f" ({max(0, min(100, pct))}%)"
+
+
+def _wait_span(seconds: float) -> str:
+    s = max(0, int(seconds))
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60:02d} s"
+
+
+MSG_VIDEO_NOT_READY = ("Meta could not process the video for {name}. Replace the video, then publish again.")
 MSG_BUSY = ("Another run is creating {what} right now. Publish again when it is done. "
             "Nothing was created twice.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
@@ -2067,8 +2110,7 @@ class CampaignCreator:
                  read_range: Callable[[str, int, int], bytes] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
-                 video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
-                 video_max_polls: int = VIDEO_MAX_POLLS,
+                 video_poll_s: float = VIDEO_POLL_S, video_poll_max_s: float = VIDEO_POLL_MAX_S,
                  reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None,
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
@@ -2099,9 +2141,8 @@ class CampaignCreator:
         self.read_range = read_range
         self.sleep = sleep
         self.clock = clock
-        self.video_wait_s = video_wait_s
         self.video_poll_s = video_poll_s
-        self.video_max_polls = video_max_polls
+        self.video_poll_max_s = max(video_poll_s, video_poll_max_s)
         self.reconcile_wait_s = RECONCILE_WAIT_S if reconcile_wait_s is None else reconcile_wait_s
         #: Имя → id наших креативов (список кабинета читается раз на кампанию).
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
@@ -2598,8 +2639,11 @@ class CampaignCreator:
                 if oid not in video_ids[0] and video_ids[1]:     # complete listing and the video is not in it
                     raise mismatch(key, MSG_OTHER_ACCOUNT)
                 status = row.get("status") if isinstance(row.get("status"), dict) else {}
-                if str(status.get("video_status") or "").lower() != "ready":
-                    raise mismatch(key, MSG_VIDEO_NOT_READY)
+                # ACL-2668 (решение 16): видео, которое Meta ещё обрабатывает, - не стоп: его дождётся `_wait_video`.
+                # Стоп только по ошибке обработки.
+                if str(status.get("video_status") or "").lower() == "error":
+                    reason = video_error_reason(status).replace("{", "{{").replace("}", "}}")
+                    raise mismatch(key, MSG_VIDEO_NOT_READY + (f" Meta's reason: {reason}" if reason else ""))
         if adset_names or ad_names:
             # Кампания: найденная выбором имени, иначе подтверждённая в журнале (запись о ней могла не сохраниться).
             campaign_id = campaign_id or next((st["object_id"] for _k, st in stages if st["kind"] == "campaign"), "")
@@ -4312,26 +4356,48 @@ class CampaignCreator:
         return vid
 
     def _wait_video(self, out: Outcome, ad: AdPlan, vid: str, *, who: str = "") -> str:
-        """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
+        """Ждать обработку видео до готовности (ACL-2668, решение 16): без потолка по времени и опросам.
+
+        Стоп только по ошибке обработки у Meta (с её причиной) и по отмене задания. Пока ждём - живая строка
+        статуса с процентом Meta и временем; сторож тишины видит ожидание, а не зависание. Опросы сверх запаса
+        плана (`CALLS_PER_VIDEO_POLLS`) добавляются к бюджету вызовов запуска: ожидание не упирается в бюджет.
+        """
         who = who or f"ad {ad.index}"
-        deadline = self.clock() + self.video_wait_s
+        began = self.clock()
         polls = 0
-        while True:
-            self._check_cancel(out)
-            row = self.client.get(f"/{vid}", {"fields": "status"})
-            polls += 1
-            status = row.get("status") if isinstance(row.get("status"), dict) else {}
-            state = str(status.get("video_status") or "").lower()
-            if state == "ready":
-                break
-            if state == "error":
-                raise CreationStopped(f"{who}: Meta could not process the video", created=out.created,
-                                      kind="video_error")
-            if polls >= self.video_max_polls or self.clock() + self.video_poll_s > deadline:
-                raise CreationStopped(
-                    f"{who}: the video is still processing after {int(self.video_wait_s)} s; "
-                    "publish again later (nothing is duplicated)", created=out.created, kind="video_timeout")
-            self.sleep(self.video_poll_s)
+        announced = False
+        try:
+            while True:
+                self._check_cancel(out)
+                if polls >= CALLS_PER_VIDEO_POLLS and isinstance(getattr(self.client, "max_calls", None), int):
+                    self.client.max_calls += 1          # опрос сверх запаса плана - часть бюджета этого запуска
+                row = self.client.get(f"/{vid}", {"fields": "status"})
+                polls += 1
+                status = row.get("status") if isinstance(row.get("status"), dict) else {}
+                state = str(status.get("video_status") or "").lower()
+                if state == "ready":
+                    break
+                if video_failed(status, state):
+                    reason = video_error_reason(status) or (f"video status {state}" if state else "")
+                    raise CreationStopped(
+                        f"{who}: Meta could not process the video" + (f": {reason}" if reason else ""),
+                        created=out.created, kind="video_error")
+                if not announced:
+                    self._waiting("video_processing")
+                    announced = True
+                self._beat()
+                self.live_progress(f"{who}: video processing at Meta{video_progress_text(status)}, "
+                                   f"{_wait_span(self.clock() - began)}")
+                # Пауза короткими кусками: Stop слышен за секунду, а не после полного шага опроса (до 60 с).
+                left = self.video_poll_s if polls < VIDEO_POLL_SLOW_AFTER else self.video_poll_max_s
+                while left > 0:
+                    self._check_cancel(out)
+                    piece = min(left, VIDEO_CANCEL_SLICE_S)
+                    self.sleep(piece)
+                    left -= piece
+        finally:
+            if announced:
+                self._waiting("")
         self._step(out, f"{who}: video processed")
         thumbs = self.client.get_all(f"/{vid}/thumbnails", {"fields": "uri,is_preferred"}, max_pages=1)
         pick = next((t for t in thumbs if t.get("is_preferred")), thumbs[0] if thumbs else None)
@@ -5553,10 +5619,11 @@ class CampaignCreator:
                 self._refuse_existing_without_cover(plan, tpl, existing)
                 _fc.clear_pending(plan.act, plan.page_id, fname)
             elif _fc.is_pending(plan.act, plan.page_id, fname):
-                # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
-                raise PlanError(_fc.MSG_PENDING + ".")
+                # ACL-2668: прошлая запись могла дойти, но формы в списке нет - не ждём, создаём
+                # сразу; дубль допустим и называется «<шаблон> copy N · ACL <хэш>».
+                fname = _fc.next_copy_name(read, tpl)
             self._form_steps[tid] = _fc.FormStep(template_id=tid, template_name=tpl["name"],
-                                                 form_name=_ft.form_name(tpl), existing_id=existing)
+                                                 form_name=fname, existing_id=existing)
         if any(step.action == "create" for step in self._form_steps.values()):
             # Условия Lead Ads: робот их не принимает никогда; без них - остановка до записи.
             if _forms.page_terms_accepted(self.client, plan.page_id) is False:
@@ -5647,16 +5714,19 @@ class CampaignCreator:
             self._cover_ids[tid] = got["photo_id"]
             self._step(out, f"form {step.form_name!r}: background picture uploaded to the Page")
 
-    def _find_form_id(self, plan: CampaignPlan, tpl: dict) -> str | None:
-        """Сверка чтением списка форм Страницы: id своей формы по точному имени."""
+    def _find_form_id(self, plan: CampaignPlan, tpl: dict, name: str = "") -> str | None:
+        """Сверка чтением списка форм Страницы: id своей формы по точному имени (`name` - имя дубля)."""
         read = _forms.read_page_forms(self.client, plan.page_id)
         if not read.ok:
             raise GraphError(read.message)
+        if name and name != _ft.form_name(tpl):
+            hit = sorted((f for f in read.forms if f.name == name and f.usable), key=lambda f: f.id)
+            return hit[0].id if hit else None
         existing, _why = _fc.match_existing(read, tpl)
         return existing or None
 
     def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str, reused: bool = False,
-                     cover_id: str = "") -> None:
+                     cover_id: str = "", name: str = "") -> None:
         """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп.
 
         Картинка (ACL-2188): у новой формы расхождение - стоп, у переиспользованной - заметка и дальше
@@ -5665,7 +5735,11 @@ class CampaignCreator:
         # ACL-2571: the Page photo id of a local picture is known only at publish; the name stays the template's.
         cov = dict(tpl, cover_photo_id=cover_id) if cover_id else tpl
         row = self.client.get(f"/{form_id}", {"fields": _fc.readback_fields(cov)})
-        bad = _fc.compare_form(tpl, plan.page_id, row)
+        if reused and isinstance(row, dict):
+            # ACL-2668: переиспользуется и дубль «<шаблон> copy N · ACL <хэш>» - тоже своя.
+            got = str(row.get("name") or "")
+            name = got if _fc.copy_number(got, tpl) >= 0 else name
+        bad = _fc.compare_form(tpl, plan.page_id, row, name=name)
         cover = _fc.compare_cover(cov, row)
         if cover and reused and not bad:
             self._step(out, f"form {_ft.form_name(tpl)!r}: {_fc.MSG_COVER_UNCONFIRMED}")
@@ -5696,30 +5770,32 @@ class CampaignCreator:
                 out.reused.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: found on the Page, reused")
             else:
+                base = _ft.form_name(tpl)
                 try:
-                    # Метка ДО записи: без неё повторный запуск может создать вторую форму.
-                    _fc.record_pending(plan.act, plan.page_id, step.form_name)
-                except OSError as exc:
-                    raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
-                                          kind="form_state") from exc
+                    # Метка ДО записи: если ответ потеряется, следующий запуск назовёт дубль «copy N».
+                    _fc.record_pending(plan.act, plan.page_id, base)
+                except OSError:
+                    pass    # ACL-2668: метка - только имя дубля, публикацию она не останавливает
                 cover_id = self._cover_ids.get(tpl["id"], "")
+                params = _ft.form_params(tpl, cover_id)
+                params["name"] = step.form_name     # имя дубля после потерянного ответа
                 try:
                     step.form_id = self._write(
                         out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
-                        _ft.form_params(tpl, cover_id), lambda: self._find_form_id(plan, tpl),
+                        params, lambda: self._find_form_id(plan, tpl, step.form_name),
                         form_page=plan.page_id)
                 except GraphError as exc:
-                    _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
+                    _fc.clear_pending(plan.act, plan.page_id, base)   # Meta отказала: формы нет
                     if cover_id and tpl.get("cover_local_sha256"):
                         # The cached photo may be gone from the Page: the next publish uploads again.
                         _cover_store.forget_photo(plan.page_id, tpl["cover_local_sha256"])
                     raise CreationStopped(_fc.refused_message(exc, dict(tpl, cover_photo_id=cover_id) if cover_id else tpl),
                                           created=out.created, kind="form_refused") from exc
-                _fc.clear_pending(plan.act, plan.page_id, step.form_name)
+                _fc.clear_pending(plan.act, plan.page_id, base)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")
             self._verify_form(out, plan, tpl, step.form_id, reused=bool(step.existing_id),
-                              cover_id=self._cover_ids.get(tpl["id"], ""))
+                              cover_id=self._cover_ids.get(tpl["id"], ""), name=step.form_name)
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 

@@ -18,17 +18,17 @@
   `account_spend_api` действуют как прежде);
 * замок профиля: два действия никогда не работают в одной вкладке;
 * ворота памяти считают только ИДУЩИЕ тяжёлые действия, не открытые профили.
-  По умолчанию одно, настраивается 1–3 (`ACL_WARM_MAX_HEAVY`).
+  Отдельного лимита «сколько разом» нет (ACL-2668, решение владельца 16.11): разом
+  идут столько действий, сколько пускают ворота памяти и потолок профилей.
 
 Чего здесь нет и не будет: опроса по таймеру, автоповтора входа, остановки
 профиля, который поднял не дешборд, открытия аккаунта вне Multilogin. Состояние
 для экрана (`states`) берётся ТОЛЬКО из реестра и процессов на машине — ни одного
 вызова к Meta, MLX или CDP.
 
-Перезапуск профиля быстро после остановки — вероятная причина двух разлогинов
-5414 (ACL-1811). Пока общий журнал остановок не вошёл, реестр ведёт свой
-(`stops` в том же файле): запуск раньше `ACL_PROFILE_RESTART_COOLDOWN_S`
-(3 минуты) после последней остановки отказывает с оставшимся временем.
+Пауза перед повторным запуском профиля после остановки (`ACL_PROFILE_RESTART_COOLDOWN_S`,
+журнал `stop_log`) с ACL-2668 по умолчанию 0 — профиль можно открыть сразу. Число > 0
+в переменной — только аварийный рычаг: тогда запуск раньше срока ждёт или отказывает.
 
 Антитроттлинг фоновой вкладки (focus emulation + lifecycle active) остаётся в
 `PageTab.open` — долгоживущая вкладка получает его при создании. Чтобы он не
@@ -144,7 +144,6 @@ def _show(hook: "JobWait | None", view: dict | None) -> None:
 
 RESTART_COOLDOWN_ENV = _stop_log.RESTART_COOLDOWN_ENV
 DEFAULT_RESTART_COOLDOWN_S = _stop_log.DEFAULT_RESTART_COOLDOWN_S
-MAX_HEAVY_ENV = "ACL_WARM_MAX_HEAVY"
 GATE_WAIT_ENV = "ACL_WARM_GATE_WAIT_S"
 DEFAULT_GATE_WAIT_S = 300.0
 #: Сколько ждём места по памяти под запуск одного профиля.
@@ -160,21 +159,13 @@ CLOSE_WAIT_S = 120.0
 CLOSE_POLL_S = 3.0
 SETTLE_ENV = "ACL_WARM_SETTLE_S"
 DEFAULT_SETTLE_S = 90.0
-#: ACL-2283. "Busy" machine = CPU at or above this share, or other profiles still warming up. Used for the
-#: staggered start (the next start waits for the CPU to settle below it), for patient readiness (a tab that
-#: has not answered yet is not called unresponsive for minutes) and for the closed-while-starting fallback.
+#: ACL-2283. "Busy" machine = CPU at or above this share, or other profiles still warming up. Used for patient
+#: readiness (a tab that has not answered yet is not called unresponsive for minutes) and for the
+#: closed-while-starting fallback. ACL-2668 (решение №13): старт профиля по CPU больше не ждёт — его охраняют
+#: только порог памяти (ACL-2255, 92 %) и потолок профилей.
 LOAD_CPU_ENV = "ACL_LOAD_CPU_PCT"
 #: ACL-2316: 70, not 85. Live freezes of 2026-10-29 happened at 59 %, 74 % and 76 % CPU; at 85 none of them counted as busy.
 DEFAULT_LOAD_CPU_PCT = 70.0
-#: A: how long the CPU must stay below the level before the next profile of a job starts.
-START_CPU_SETTLE_ENV = "ACL_START_CPU_SETTLE_S"
-DEFAULT_START_CPU_SETTLE_S = 5.0
-#: ACL-2328: the CPU part of the start wait is capped. After this many seconds a start goes ahead even if the CPU
-#: never settled below `ACL_LOAD_CPU_PCT` (a machine that idles at 70-85 % must not hold starts forever).
-#: Only the CPU condition is waived: the ACL-2255 memory gate is checked outside this wait and is never bypassed,
-#: and profiles that are still warming up keep the turn (they are bounded by `START_READY_CAP_S`).
-START_MAX_HOLD_ENV = "ACL_START_MAX_HOLD_S"
-DEFAULT_START_MAX_HOLD_S = 180.0
 #: A: a started profile counts as "not ready yet" until its tab answered, but not longer than this.
 START_READY_CAP_S = 300.0
 #: B: how long a tab may stay silent on a busy machine before it is called unresponsive (idle: today's limit).
@@ -256,11 +247,6 @@ def restart_cooldown_s() -> float:
 def restart_refusal(profile_id: str) -> str:
     """Общая проверка «не запускать сразу после остановки» (пусто — можно). См. `stop_log`."""
     return _stop_log.refusal(profile_id)
-
-
-def max_heavy() -> int:
-    """Сколько тяжёлых действий идут разом: по умолчанию одно, настройкой 1–3."""
-    return int(_env_number(MAX_HEAVY_ENV, 1, 1, 3))
 
 
 def _hhmm(epoch: float) -> str:
@@ -405,16 +391,16 @@ def _my_start() -> float:
 class HeavyGate:
     """Считает ИДУЩИЕ тяжёлые действия (вкладка Ads Manager в работе), не открытые профили.
 
-    Первое действие идёт всегда (пол: одно при любой памяти). Второе и третье —
-    только если лимит (`max_heavy`) позволяет И свободной памяти хватает на ещё
-    один профиль: замер дерева процессов идущих профилей, если он есть
-    (`ProfileUsage`), иначе оценка из `profile_slots`. Память не прочиталась —
-    не больше двух разом. Повторный вход того же профиля (вложенное чтение тем
-    же потоком) места не занимает.
+    Первое действие идёт всегда (пол: одно при любой памяти). Следующие — если
+    свободной памяти хватает (доля занятой памяти, ACL-2255). Числового лимита
+    «сколько разом» нет (ACL-2668): действие на уже открытом профиле память не
+    добавляет и не держится вовсе, а сколько профилей открыто, решает потолок
+    профилей (`profile_slots`). Память не прочиталась — не больше двух разом.
+    Повторный вход того же профиля (вложенное чтение тем же потоком) места не
+    занимает; два действия на одном профиле разводит замок профиля (`sess.lock`).
     """
 
-    def __init__(self, *, limit: Callable[[], int] = max_heavy,
-                 memory: Callable[[], Any] | None = None,
+    def __init__(self, *, memory: Callable[[], Any] | None = None,
                  settings: Callable[[], Any] | None = None,
                  usage: Any = None, clock: Callable[[], float] = time.monotonic,
                  tick_s: float = 1.0, grace_s: float = MEMORY_GRACE_S,
@@ -423,7 +409,6 @@ class HeavyGate:
         from src.web import profile_slots as _ps
 
         self._ps = _ps
-        self._limit = limit
         self._memory = memory or _ps.read_memory
         self._settings = settings or _ps.load_settings
         self._usage = usage if usage is not None else _ps.ProfileUsage()
@@ -441,19 +426,16 @@ class HeavyGate:
 
     def _allowed(self, *, memory_gated: bool = True) -> tuple[bool, str]:
         n = len(self._active)
-        limit = max(1, int(self._limit()))
-        memory = self._memory()
         if n == 0:
             # ACL-2369: шлюз работает только на уже открытом (тёплом) профиле — его память уже занята,
             # новой не прибавится; у открытия профиля свой тест памяти. Первое действие не блокируем.
             return True, "first"
-        if n >= limit:
-            return False, "limit"
         if not memory_gated:
             # ACL-2369 (#1369): an action on an already open profile adds no memory; never held by it.
             return True, "open_profile"
+        memory = self._memory()
         if memory is None:
-            return (n < min(self._ps.FALLBACK_LIMIT, limit)), "memory_unknown"
+            return (n < self._ps.FALLBACK_LIMIT), "memory_unknown"
         # ACL-2255: by the SHARE of memory in use (the running actions are already in it), not by "N GB per profile".
         ok = memory.available_mb >= self._ps.keep_free_mb(memory.total_mb, self._settings())
         return ok, "memory_ok" if ok else "memory_low"
@@ -468,10 +450,8 @@ class HeavyGate:
         if probe.get("status") == "ok" and measured:
             per_mb = max(max(measured), settings.profile_floor_mb)
         low = why in ("memory_low", "below_reserve")
-        # `hold` - что показывает дешборд; `why` - настоящая причина шлюза (например, `limit`).
-        # ACL-2293: упёрлись в лимит тяжёлых действий - так и показываем, а не «ждёт другой аккаунт».
-        view = {"hold": "memory_low" if low else ("heavy_limit" if why == "limit" else "account_busy"),
-                "heavy_limit": max(1, int(self._limit())), "why": why,
+        # `hold` - что показывает дешборд; `why` - настоящая причина шлюза.
+        view = {"hold": "memory_low" if low else "account_busy", "why": why,
                 "available_mb": None if memory is None else int(memory.available_mb),
                 "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
                 "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}
@@ -870,43 +850,24 @@ class WarmRegistry:
     def _wait_start_turn(self, pid: str, cancelled: Callable[[], bool], job: "JobWait") -> bool:
         """A (ACL-2283): profiles of jobs start one at a time.
 
-        Waits (queued, cancellable, live numbers) until no other started profile is still warming up and the
-        CPU has been below the level for `ACL_START_CPU_SETTLE_S`. The turn is taken atomically, so two jobs
-        cannot pass together. False - cancelled.
+        Waits (queued, cancellable, live numbers) until no other started profile is still warming up. The turn
+        is taken atomically, so two jobs cannot pass together. False - cancelled.
 
-        ACL-2328: the CPU condition holds for at most `ACL_START_MAX_HOLD_S` (default 180 s); then the start
-        goes ahead on a busy CPU. Memory (ACL-2255) is not part of this wait and is never waived by the cap.
+        ACL-2668 (решение №13): CPU здесь больше не читается и не держит старт (было: CPU ниже 70 % 5 с, до
+        180 с). Память (ACL-2255) проверяется вне этого ожидания.
         """
-        settle = _env_number(START_CPU_SETTLE_ENV, DEFAULT_START_CPU_SETTLE_S, 0.0, 600.0)
-        max_hold = _env_number(START_MAX_HOLD_ENV, DEFAULT_START_MAX_HOLD_S, 0.0, 3600.0)
-        began = self._mono()
-        level = _env_number(LOAD_CPU_ENV, DEFAULT_LOAD_CPU_PCT, 1.0, 100.0)
-        quiet_since: float | None = None
         try:
             while True:
                 if cancelled():
                     return False
-                cpu = None
-                try:
-                    cpu = self._cpu()
-                except Exception:  # noqa: BLE001
-                    cpu = None
-                now = self._mono()
-                if cpu is None or cpu < level:
-                    quiet_since = now if quiet_since is None else quiet_since
-                else:
-                    quiet_since = None
                 with self._lock:
                     now = self._mono()
                     self._starting = {p: t for p, t in self._starting.items() if now - t < START_READY_CAP_S}
                     others = self.warming_others(pid)
-                    cpu_ok = (quiet_since is not None and now - quiet_since >= settle) or now - began >= max_hold
-                    if not others and cpu_ok:
+                    if not others:
                         self._starting[pid] = now
                         return True
-                _show(job, {"hold": "machine_busy", "cpu_pct": None if cpu is None else round(float(cpu), 1),
-                            "cpu_level": level, "running": len(others), "warming": len(others),
-                            "max_hold_s": max_hold})
+                _show(job, {"hold": "machine_busy", "running": len(others), "warming": len(others)})
                 self._sleep(2.0)
         finally:
             _show(job, None)
@@ -1042,8 +1003,8 @@ class WarmRegistry:
             # ACL-2278: Stop of the job also stops the waits below (the caller passes no `cancelled`).
             base_cancelled = cancelled
             cancelled = lambda: base_cancelled() or job.cancelled()   # noqa: E731
-        # ACL-2283 (A): profiles of jobs start one at a time: wait for the previous start to be ready and the CPU
-        # to settle. The turn is released when this start fails, or when the tab answers (`mark_ready`).
+        # ACL-2283 (A): profiles of jobs start one at a time: wait for the previous start to be ready (CPU is
+        # not waited for since ACL-2668). The turn is released when this start fails, or when the tab answers (`mark_ready`).
         # The turn wait can take minutes while the warming profiles grow, so memory is checked AGAIN once the
         # turn is ours and right before the start; over the line -> give the turn back and wait for memory
         # (queued, cancellable, live numbers), then take a turn again.
@@ -1462,7 +1423,7 @@ class WarmRegistry:
         finally:
             sess.lock.release()
         log.info("warm: profile of %s closed on request", label)
-        return _result(True, "Closed. It can be started again in about 3 minutes.", "closed")
+        return _result(True, "Closed.", "closed")
 
     # -- аренда вкладки
     def checkout(self, profile_id: str, *, account: str, act: str, mode: str,
