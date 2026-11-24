@@ -21,10 +21,6 @@ from machine_config import (
 )
 
 
-from src.analysis_agent.stats_workbook import (
-    STATS_COLUMNS, StatsWorkbookError, first_content_row,
-    validate_stats_workbook as _validate_stats_workbook,
-)
 
 
 class WizardValidationError(ValueError):
@@ -54,44 +50,6 @@ def setup_is_complete(config_directory: str | Path) -> bool:
         )
     except Exception:
         return False
-
-
-STATS_WORKBOOK_HELP = (
-    "The Stats workbook is the Excel report your team lead keeps; it lists every campaign manager "
-    "(CM column) with their ad accounts. ACL does not create or download it: ask your team lead or "
-    "support to send you the current file, save it on this computer, then choose it here."
-)
-
-
-def default_stats_workbook() -> str:
-    """The workbook in the usual location (FB_STATS_EXCEL or Desktop), or '' if it is not there."""
-    try:
-        from config.paths import get_excel_path
-
-        candidate = get_excel_path()
-    except Exception:
-        return ""
-    try:
-        return candidate if candidate and Path(candidate).is_file() else ""
-    except OSError:
-        return ""
-
-
-def validate_stats_workbook(path: str, *, optional: bool = False) -> str:
-    """With ``optional`` (BI is connected) an empty choice is fine and returns ''."""
-    if not (path or "").strip():
-        if optional:
-            return ""
-        raise WizardValidationError("No Stats workbook chosen. " + STATS_WORKBOOK_HELP)
-    try:
-        return _validate_stats_workbook(path)
-    except StatsWorkbookError as exc:
-        message = str(exc)
-        if "does not exist" in message:
-            message += " " + STATS_WORKBOOK_HELP
-        else:
-            message += " Ask your team lead for the current report file, then choose it again."
-        raise WizardValidationError(message) from exc
 
 
 def similar_names(name: str, candidates, limit: int = 3) -> list[str]:
@@ -128,7 +86,7 @@ def validate_creatives_directory(path: str, *, create: bool = False) -> str:
 def validate_campaign_manager_name(value: str) -> str:
     name = (value or "").strip()
     if len(name) < 2:
-        raise WizardValidationError("Enter your name exactly as it appears in the Stats workbook.")
+        raise WizardValidationError("Enter your name.")
     if len(name) > 120:
         raise WizardValidationError("Campaign manager name is too long.")
     if any(marker in name.casefold() for marker in ("campaign manager name", "your name", "example")):
@@ -138,7 +96,7 @@ def validate_campaign_manager_name(value: str) -> str:
 
 def build_bi_setup(*, campaign_manager_name: str,
                    accounts_for: Callable[[str], list[str]] | None = None) -> MachineConfiguration:
-    """ACL-2306: the manager's accounts come from BI when the Stats workbook is not used."""
+    """ACL-2306: the manager's accounts come from BI."""
     name = validate_campaign_manager_name(campaign_manager_name)
     if accounts_for is None:
         from src.analysis_agent.connection_settings import bi_accounts_for_manager as accounts_for
@@ -146,12 +104,10 @@ def build_bi_setup(*, campaign_manager_name: str,
         aliases = list(accounts_for(name))
     except Exception as exc:
         raise WizardValidationError(
-            "BI is connected, but the account list could not be read from it. Try again, "
-            "or choose the Stats workbook instead.") from exc
+            "BI is connected, but the account list could not be read from it. Try again.") from exc
     if not aliases:
         raise WizardValidationError(
-            f"BI has no accounts for “{name}”. Check the spelling of your name, or choose the "
-            "Stats workbook your team lead sent you.")
+            f"BI has no accounts for “{name}”. Check the spelling of your name.")
     return MachineConfiguration(
         name, tuple(AccountAssignment(account_name=alias) for alias in sorted(aliases, key=str.casefold)))
 
@@ -183,57 +139,13 @@ def connect_with_google(config_directory: str | Path, *, sign_in: Callable | Non
             os.environ["ACL_CONFIG_DIR"] = previous
 
 
-def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> MachineConfiguration:
-    """Build machine configuration from fields entered in the setup wizard.
+def build_manual_setup(*, campaign_manager_name: str) -> MachineConfiguration:
+    """ACL-2867: без входа в BI аккаунтов заранее нет и Excel не нужен.
 
-    Account labels come from the Stats workbook. Ad-account IDs and Multilogin
-    profiles stay blank on purpose: on the Accounts screen the manager picks an
-    open profile by name, and ACL reads the ad account from that profile.
+    Аккаунты подключаются к профилям позже, на экране Accounts: менеджер
+    выбирает открытый профиль по имени, ad-аккаунт ACL читает из профиля.
     """
-    from openpyxl import load_workbook
-
-    name = validate_campaign_manager_name(campaign_manager_name)
-    workbook = load_workbook(stats_workbook, read_only=True, data_only=True)
-    try:
-        sheet = workbook[workbook.sheetnames[0]]
-        rows = sheet.iter_rows(values_only=True)
-        # ACL-1864: заголовок — первая непустая строка, а не обязательно первая.
-        first = first_content_row(rows)
-        headers = [str(value or "").strip() for value in (first[1] if first else [])]
-        by_name = {header.casefold(): index for index, header in enumerate(headers)}
-        if "cm" not in by_name or "account alias" not in by_name:
-            raise WizardValidationError("Stats workbook is missing CM or Account Alias columns.")
-        cm_index = by_name["cm"]
-        account_index = by_name["account alias"]
-        aliases: dict[str, str] = {}
-        known_managers: list[str] = []
-        for row in rows:
-            manager = str(row[cm_index] or "").strip() if cm_index < len(row) else ""
-            if manager and manager not in known_managers:
-                known_managers.append(manager)
-            alias = str(row[account_index] or "").strip() if account_index < len(row) else ""
-            if manager.casefold() == name.casefold() and alias:
-                aliases.setdefault(alias.casefold(), alias)
-    finally:
-        workbook.close()
-
-    if not aliases:
-        close = similar_names(name, known_managers)
-        hint = (
-            "Did you mean: " + ", ".join(f"“{item}”" for item in close) + "? "
-            "Go back to the name step and type it exactly as shown."
-            if close
-            else "No similar name was found. Check the spelling, or ask your team lead whether "
-                 "you are listed in the CM column of this workbook."
-        )
-        raise WizardValidationError(
-            f"“{name}” is not in the CM column of this Stats workbook, so the dashboard "
-            f"would show no accounts. {hint}"
-        )
-    return MachineConfiguration(
-        name,
-        tuple(AccountAssignment(account_name=alias) for alias in sorted(aliases.values(), key=str.casefold)),
-    )
+    return MachineConfiguration(validate_campaign_manager_name(campaign_manager_name), ())
 
 
 def system_readiness(config_directory: str | Path) -> list[ReadinessCheck]:
@@ -381,7 +293,7 @@ def sanitized_setup_summary(configuration: MachineConfiguration, version: str) -
             "Status: base setup ready; account connection continues in the dashboard",
             f"Assigned accounts: {len(configuration.accounts)} (labels and IDs omitted)",
             f"Multilogin instances: {', '.join(instances)}",
-            "Stats workbook and Creatives folder: validated (paths omitted)",
+            "Creatives folder: validated (path omitted)",
             "Safety mode: RPA / recorded_flow / attach-only",
             "Updates: offered in the dashboard, installed only when the user clicks Update",
             "Campaign actions during setup: none",
@@ -412,9 +324,6 @@ class SetupWizard:
         self.configuration: MachineConfiguration | None = None
         self.completed = False
         self.campaign_manager_name = tk.StringVar(value=self._existing_env_value("MY_CM_NAME"))
-        self.stats_path = tk.StringVar(
-            value=self._existing_env_value("FB_STATS_EXCEL") or default_stats_workbook()
-        )
         self.creatives_path = tk.StringVar(
             value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
         self.status = tk.StringVar()
@@ -584,15 +493,14 @@ class SetupWizard:
             pass  # the step was left while signing in
 
     def _identity(self) -> None:
-        self._text("Enter your name exactly as it is written in the CM column of the Stats workbook "
-                   "(or as BI knows you).")
+        self._text("Enter your name (as BI knows you).")
         self.tk.Label(self.body, text="Your name", anchor="w").pack(fill="x")
         self.tk.Entry(self.body, textvariable=self.campaign_manager_name).pack(fill="x", pady=(2, 12))
-        self._text("ACL finds your ad accounts in the workbook by this name.")
+        self._text("ACL finds your ad accounts by this name when BI is connected.")
         self._text("Run reports from this computer are labelled with this name, so support can tell whose "
                    "runs they are. You can change the label later in the dashboard (Accounts → This computer).")
 
-    def _path_row(self, label: str, variable, directory: bool = False) -> None:
+    def _path_row(self, label: str, variable) -> None:
         from tkinter import filedialog
 
         self.tk.Label(self.body, text=label, anchor="w", font=("Segoe UI", 10, "bold")).pack(fill="x")
@@ -601,11 +509,7 @@ class SetupWizard:
         self.tk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
 
         def choose() -> None:
-            selected = (
-                filedialog.askdirectory()
-                if directory
-                else filedialog.askopenfilename(filetypes=[("Excel workbook", "*.xlsx *.xlsm")])
-            )
+            selected = filedialog.askdirectory()
             if selected:
                 variable.set(selected)
 
@@ -613,23 +517,15 @@ class SetupWizard:
 
     def _files(self) -> None:
         self._text("Use the file pickers; no path needs to be typed or edited.")
-        if self.bi_connected:
-            self._text("BI is connected, so the Stats workbook is optional: your accounts come from BI. "
-                       "Choose a workbook only as a fallback.", color="#17663a")
-        self._text(STATS_WORKBOOK_HELP)
-        if self.stats_path.get() and default_stats_workbook() == self.stats_path.get():
-            self._text("A workbook was found in the usual place and is filled in below. "
-                       "Change it only if you were sent a different file.", color="#17663a")
-        self._path_row("Stats workbook (Excel)" + (" - optional" if self.bi_connected else ""), self.stats_path)
-        self._path_row("Creatives folder", self.creatives_path, directory=True)
+        self._path_row("Creatives folder", self.creatives_path)
         self._text("Put your videos and images into the Creatives folder. ACL creates it if it does not exist yet. "
-                   "Both paths can be changed later in the dashboard.")
+                   "The folder can be changed later in the dashboard.")
 
     def _readiness(self) -> None:
         checks = [
             ("Runtime", all(check.ok for check in getattr(self, "system_checks", []))),
             ("Your accounts", self.configuration is not None),
-            ("Local files", bool((self.stats_path.get() or self.bi_connected) and self.creatives_path.get())),
+            ("Local files", bool(self.creatives_path.get())),
             ("Safety mode", True),
         ]
         self._text("The launcher will open only when every required group is ready.")
@@ -637,8 +533,9 @@ class SetupWizard:
             self._text(f"{'✓' if ok else '✕'}  {label}", color="#17663a" if ok else "#9b1c1c")
         self._text("Safety: RPA / recorded_flow / Multilogin attach-only", color="#17663a")
         self._text("•  Multilogin — connected in the dashboard, after setup", color="#8a6d1f")
-        if self.configuration:
+        if self.configuration and self.configuration.accounts:
             self._text(f"Found {len(self.configuration.accounts)} account(s) for this campaign manager.")
+        if self.configuration:
             self._text("After the launcher opens, connect each account to its Multilogin profile on the Accounts screen.")
         self._text("Multilogin is connected in the dashboard, not here: open Accounts and press "
                    "“Connect Multilogin”, then sign in with your Multilogin email and password.")
@@ -675,22 +572,18 @@ class SetupWizard:
         elif self.step == 3:
             self.campaign_manager_name.set(validate_campaign_manager_name(self.campaign_manager_name.get()))
         elif self.step == 4:
-            self.stats_path.set(validate_stats_workbook(self.stats_path.get(), optional=self.bi_connected))
             self.creatives_path.set(validate_creatives_directory(self.creatives_path.get(), create=True))
             if self.bi_connected:
                 self.configuration = build_bi_setup(campaign_manager_name=self.campaign_manager_name.get())
             else:
                 self.configuration = build_manual_setup(
-                    campaign_manager_name=self.campaign_manager_name.get(),
-                    stats_workbook=self.stats_path.get(),
-                )
+                    campaign_manager_name=self.campaign_manager_name.get())
         elif self.step == 5:
             if not self.configuration:
-                raise WizardValidationError("Go back and confirm your name and the Stats workbook.")
+                raise WizardValidationError("Go back and confirm your name.")
             apply_machine_configuration(
                 self.configuration,
                 self.config_directory,
-                stats_workbook=self.stats_path.get(),
                 creatives_directory=self.creatives_path.get(),
             )
             version = self.version_text.splitlines()[0].rsplit(" ", 1)[-1]
