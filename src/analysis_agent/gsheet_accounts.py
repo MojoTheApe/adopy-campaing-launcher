@@ -76,12 +76,37 @@ _TOTALS_HEADERS = {"country", "total", "totals", "cm", "sum"}
 # Daily tab (2026+): col A is account bucket (Active/Dead/Issue/New), not CM name.
 _ACCOUNT_STATUS_BUCKETS = frozenset({"active", "dead", "issue", "new"})
 
-_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+_SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+# ACL-2899: вход сотрудника просит ещё и личность (email), чтобы хаб узнал юзера по токену Google.
+_SCOPES = _SHEETS_SCOPES + ["openid", "https://www.googleapis.com/auth/userinfo.email"]
+
+
+def saved_token_scopes(info: dict) -> list[str]:
+    """Права, которые реально выданы сохранённому токену.
+
+    Старый токен выдан только на таблицы; refresh с более широким списком
+    прав Google отвергает (invalid_scope), поэтому читаем под его же правами,
+    пока человек не войдёт заново.
+    """
+    scopes = (info or {}).get("scopes")
+    if isinstance(scopes, str):
+        scopes = scopes.split()
+    return list(scopes) if scopes else list(_SHEETS_SCOPES)
 
 
 # ── Google Sheets helpers ──────────────────────────────────────────────────────
 
-def _build_sheets_service_oauth(oauth_client_path: str, token_path: str, timeout_seconds: Optional[int] = None):
+IDENTITY_SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email"]
+
+
+def token_has_identity_scopes(info: dict) -> bool:
+    """Есть ли у токена права на email (openid + userinfo.email; «email» — короткая форма)."""
+    have = set(saved_token_scopes(info))
+    return "openid" in have and bool(have & {"https://www.googleapis.com/auth/userinfo.email", "email"})
+
+
+def _build_sheets_service_oauth(oauth_client_path: str, token_path: str, timeout_seconds: Optional[int] = None,
+                                require_identity: bool = False):
     """Create Google Sheets API service via OAuth2 user login.
 
     First run: opens browser so the user logs in with their Google account.
@@ -115,9 +140,10 @@ def _build_sheets_service_oauth(oauth_client_path: str, token_path: str, timeout
         try:
             from config import token_vault
 
-            creds = Credentials.from_authorized_user_info(
-                json.loads(token_vault.read_secret_text(token_file)), _SCOPES
-            )
+            saved = json.loads(token_vault.read_secret_text(token_file))
+            creds = Credentials.from_authorized_user_info(saved, saved_token_scopes(saved))
+            if require_identity and not token_has_identity_scopes(saved):
+                creds = None  # ACL-2899: старый токен без email — повторный вход, а не тихое переиспользование
         except Exception:
             creds = None
 
@@ -179,7 +205,7 @@ def _build_sheets_service_sa(credentials_path: str):
 
     creds = Credentials.from_service_account_file(
         str(creds_path),
-        scopes=_SCOPES,
+        scopes=_SHEETS_SCOPES,
     )
     return build("sheets", "v4", credentials=creds)
 

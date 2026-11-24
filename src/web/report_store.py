@@ -351,6 +351,8 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
         'onclick="if(window.aclConnections){window.aclConnections.open()}">Connections</button>'
         "</div>"
         '<script src="/static/connections.js"></script>'
+        # ACL-2899: синхронизация аккаунтов юзера нужна и на сохранённой странице (скрипт сам не дублируется)
+        '<script src="/static/user_accounts_sync.js"></script>'
     )
     frame = (
         '<style id="acl-stored-frame">html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
