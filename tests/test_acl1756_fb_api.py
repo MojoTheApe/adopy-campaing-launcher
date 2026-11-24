@@ -685,6 +685,17 @@ def test_call_budget_is_a_hard_stop():
     assert len(tr.requests) == 2
 
 
+def test_no_call_budget_when_max_calls_is_none():
+    """ACL-2668 (решение 8): `max_calls=None` - своего потолка нет, стопа `call_budget` не бывает."""
+    tr = FakeTransport([OK] * 30)
+    c, _ = _client(tr, max_calls=None)
+    for i in range(30):
+        c.get(f"/p{i}")
+    assert len(tr.requests) == 30 and c.stopped is None
+    c.reset_budget(None)
+    assert c.max_calls is None and c.calls == 0
+
+
 def test_usage_parser_hides_business_ids():
     u = g.usage_from_headers(_usage(42))
     assert u["max_pct"] == 42 and BIZ not in json.dumps(u)

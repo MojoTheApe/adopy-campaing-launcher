@@ -554,12 +554,6 @@ def test_unknown_destination_from_the_web_form_is_refused_out_loud(tmp_path, mon
     assert web._instant_form_refusal(slots).status_code == 409
 
 
-def test_the_call_budget_covers_the_extra_form_reads():
-    from src.web import publish_api
-
-    assert publish_api.DEFAULT_CREATE_MAX_CALLS >= 150
-
-
 def test_unsupported_objective_message_mentions_instant_form(tmp_path):
     d = _draft(tmp_path)
     d.objective = "Traffic"

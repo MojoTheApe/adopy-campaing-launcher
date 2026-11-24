@@ -1084,16 +1084,14 @@ def test_after_an_unknown_result_the_rest_of_the_job_is_refused(tmp_path):
     assert not (second["error"] or "").startswith("Not started") and len(meta.posts) > n
 
 
-def test_own_call_cap_does_not_end_later_campaigns(tmp_path, monkeypatch):
+def test_publish_has_no_call_cap_and_ignores_the_old_env(tmp_path, monkeypatch):
+    """ACL-2668 (решение 8): потолка 250/150 и `ACL_FB_API_CREATE_MAX_CALLS` больше нет."""
     monkeypatch.setenv("ACL_FB_API_CREATE_MAX_CALLS", "20")
-    meta = FakeMeta(video_states=("processing",))
+    meta = FakeMeta()
     pub = _publisher(meta)
-    first = pub.publish_draft(_draft(tmp_path, video=True, ads=1))
-    assert "call budget" in first["failure"]["details"]["raw"] and pub.stop is None
-    d2 = _draft(tmp_path, ads=1)
-    d2.name = d2.ad_sets[0].name = "MX Leads 2"
-    second = pub.publish_draft(d2)
-    assert second["success"] is True, second["error"]
+    first = pub.publish_draft(_draft(tmp_path, video=True, ads=3))
+    assert first["success"] is True, first["error"]
+    assert pub._client.max_calls is None and pub._client.calls > 20 and pub.stop is None
 
 
 def test_dry_run_runs_preflight_and_returns_the_plan_with_zero_writes(tmp_path):

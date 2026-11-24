@@ -321,14 +321,3 @@ def test_the_budget_fallback_never_encodes_a_video_whose_threshold_compression_f
     out = cr.Outcome(campaign_name=plan.name)
     assert creator._compress_over_threshold(out, plan, big, "ad 1") is big and len(calls) == 1
     assert creator._fit_for_chunks(out, plan, big, "ad 1") is big and len(calls) == 1
-
-
-def test_the_over_budget_refusal_for_a_too_long_video_does_not_blame_ffmpeg(tmp_path, monkeypatch, ffmpeg_present):
-    from src.fb_ads_rpa import creative_compress as cc
-    from src.web import publish_api
-    monkeypatch.setattr(cc, "duration_s", lambda path, **kw: 40000.0)
-    monkeypatch.delenv("ACL_VIDEO_COMPRESS_OVER_MB", raising=False)
-    monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
-    plan = B._plan(tmp_path, [3500, 3500, 3500], monkeypatch)
-    _budget, refusal = publish_api.create_call_budget(plan)
-    assert "too long to compress under 500 MB" in refusal and "ffmpeg" not in refusal, refusal
