@@ -375,3 +375,42 @@ def test_helper_launch_failure_leaves_the_dashboard_running(tmp_path, monkeypatc
     with pytest.raises(ru.UpdateError, match="still running"):
         ru.start_helper(tmp_path / "Setup.exe", {"version": "2026-09-20"})
     assert not (ru.updates_dir() / "pending.json").exists()
+
+
+def test_job_started_during_the_download_makes_the_update_wait(github, monkeypatch):
+    """ACL-2890: a publish job that starts while the installer downloads is not a
+    refusal — the update queues behind it and installs once it ends."""
+    from src.web import app as web, acl_update, update_queue
+    import src.web.publish_jobs as jobs
+
+    monkeypatch.setattr(web.sys, "frozen", True, raising=False)
+    started, exited = [], threading.Event()
+    monkeypatch.setattr(ru, "start_helper", lambda setup, manifest: started.append(manifest["version"]))
+    monkeypatch.setattr(acl_update, "schedule_exit", lambda *a, **k: exited.set())
+    real_download = ru.download
+
+    def download_while_a_job_starts(*args, **kwargs):
+        result = real_download(*args, **kwargs)
+        jobs._jobs["late"] = {"status": "running"}
+        return result
+    monkeypatch.setattr(ru, "download", download_while_a_job_starts)
+
+    response = asyncio.run(web.acl_update_apply())
+    body = json.loads(response.body)
+    assert response.status_code == 200 and body["ok"] and body["queued"]
+    assert body["message"] == update_queue.WAITING_TEXT
+    assert not exited.wait(0.2) and started == []
+
+    jobs._jobs["late"]["status"] = "done"
+    assert exited.wait(5)
+    assert started == ["2026-09-20"]
+
+
+def test_release_update_path_has_no_busy_refusals():
+    """ACL-2890: reads and publish jobs never turn into a 409 on the release path."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "src" / "web" / "app.py").read_text(encoding="utf-8")
+    for refusal in ("Wait for browser reading to finish", "Wait for campaign jobs to finish",
+                    "Campaign jobs started during the download"):
+        assert refusal not in source
