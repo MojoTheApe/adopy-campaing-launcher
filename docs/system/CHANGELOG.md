@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2682 — One account's problem marks only that account — 2026-11-24
+
+A rate limit, policy block, used-up call budget, logged-out profile or frozen tab on one account now marks only that account's row; a checkpoint stays its own profile's hold (ACL-2653). Reads of the other accounts go on. The whole machine pauses only for Multilogin problems, the API backend being off, or the shared machine state being unavailable. Per-account stops saved by older builds (queue store, `state.json`, attempt rows) no longer halt anything after the update.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1682).
+
+## ACL-2549 — A problem tab and window stay open at the end of a job — 2026-11-12
+
+Part C of ACL-2091. The robot no longer closes the tab that shows a checkpoint, a login page or a Meta block: it only stops driving it (`PageTab.leave_open`), so the buyer can solve it there. This holds on the warm path, the cold read and the cold publish; a frozen tab is still dropped, and a token-only logout (page still on Ads Manager) is not treated as a login page. The warm chip now says "Security check" for a checkpoint instead of "Logged out". A publish job that ends on such a problem keeps the profile window whatever `ACL_KEEP_PROFILES_OPEN` says, shows the reason line and next step (`profile_problem`) instead of "Nothing was written". Like a kept convenience window (ACL-2686), a window kept for a problem (publish or read) takes no slot and makes no other account wait; it is never closed by idle time, and a job that did not start the profile frees its slot as before. The next job on that profile (Retry) takes the window over. A profile closed on purpose by the automatic resume is not kept. Nothing closes a tab with a problem and nothing polls.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1549).
+
 ## ACL-2867 — Installer no longer asks for an Excel stats workbook — 2026-11-24
 
 The Windows setup wizard no longer shows a Stats workbook (Excel) picker, its help text or its validation, and the readiness check no longer needs a workbook. Without BI sign-in setup finishes with no accounts; they are connected to profiles later on the Accounts screen. `FB_STATS_EXCEL` is no longer written unless given. `acl_doctor.py` treats the workbook as informational: with BI connected it reports "Stats source: BI", without BI and without a workbook it warns clearly but does not fail. `docs/SETUP-NEW-PC.md` no longer asks for `cursor example.xlsx`.

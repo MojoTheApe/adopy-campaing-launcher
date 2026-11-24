@@ -49,14 +49,16 @@ def test_a_hold_that_appears_while_a_request_waits_drops_it_without_a_read(env, 
     assert HELD not in env.attempts
 
 
-def test_skipping_a_held_profile_leaves_the_stored_stop_in_place(env, held):
+def test_skipping_a_held_profile_leaves_its_saved_stop_in_place(env, held):
     env.stops = {HELD: ("checkpoint", _iso(NOW - 60))}
     q = _queue(env)
-    assert q._persisted_halt() is None      # ACL-2653: a checkpoint is the profile's hold, not a machine halt
+    assert q.state()["halt"] is None   # ACL-2668: стоп одного профиля очередь не держит
     q.request(HELD, "attention")
     q.request(HELD, "action", force=True)
+    q.request("OTHER", "attention")
     q._drain_once()
-    assert env.read == [] and env.stops == {HELD: ("checkpoint", _iso(NOW - 60))}
+    assert [a for a, _ in env.read] == ["OTHER"]
+    assert env.stops == {HELD: ("checkpoint", _iso(NOW - 60))}
 
 
 def test_a_sweep_skips_a_held_profile_and_still_completes(env, held):
@@ -82,8 +84,8 @@ def test_a_persons_retry_still_reaches_a_held_profile(env, held):
 def test_account_blocked_code_is_not_a_global_stop_even_if_the_text_says_checkpoint(error):
     snap = _failed("B97", error, code="account_blocked")
     assert ar._global_stop(snap) is None and ar.classify(snap) == "account"
-    # without the code the text fallback still works as before
-    assert ar._global_stop(_failed("B97", error))[0] == ar._GLOBAL_STOPS["checkpoint"][0]
+    # ACL-2668/ACL-2653: without the code the checkpoint text is its own profile's hold, never the machine
+    assert ar._global_stop(_failed("B97", error)) is None and ar.classify(_failed("B97", error)) == "person"
 
 
 def test_a_refused_read_does_not_raise_a_global_halt(env, held):
