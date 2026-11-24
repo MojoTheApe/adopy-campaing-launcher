@@ -21,11 +21,14 @@ INSTALLER = b"MZ" + b"\x00" * 4096
 
 @pytest.fixture(autouse=True)
 def reset_update_reservations(monkeypatch):
-    from src.web import publish_jobs as jobs
+    from src.web import publish_jobs as jobs, update_queue
     from src.fb_ads_rpa.operations import browser_operation
     monkeypatch.setattr(jobs, "_update_reserved", False)
     monkeypatch.setattr(jobs, "_jobs", {})
+    monkeypatch.setattr(update_queue, "POLL_SECONDS", 0.01)
+    update_queue.reset()
     yield
+    update_queue.reset()
     browser_operation.release()
     jobs.release_update()
     if ru.apply_lock.locked():
@@ -109,10 +112,10 @@ def test_a_newer_release_is_offered_with_what_it_fixes(github):
     assert github.storage_saw_token == [False], "the token must not travel to asset storage"
 
 
-def test_github_is_asked_at_most_every_fifteen_minutes(github):
+def test_github_is_asked_at_most_every_minute(github):
     ru.check(now=1000.0)
     calls = github.api_calls
-    ru.check(now=1000.0 + 600)
+    ru.check(now=1000.0 + 30)
     assert github.api_calls == calls
     ru.check(now=1000.0 + 25 * 3600)
     assert github.api_calls > calls
@@ -187,16 +190,59 @@ def test_installed_build_update_route(github, monkeypatch):
     started, exited = [], []
     monkeypatch.setattr(ru, "start_helper", lambda setup, manifest: started.append((setup.name, manifest["version"])))
     monkeypatch.setattr(acl_update, "schedule_exit", lambda *a, **k: exited.append(True))
-    import src.web.publish_jobs as jobs
-
-    monkeypatch.setattr(jobs, "active_job_count", lambda: 1)
-    busy = asyncio.run(web.acl_update_apply())
-    assert busy.status_code == 409 and not started
-
-    monkeypatch.setattr(jobs, "active_job_count", lambda: 0)
     ok = asyncio.run(web.acl_update_apply())
     assert json.loads(ok.body) == {"ok": True, "target": "2026-09-20"}
     assert started == [(github.name(), "2026-09-20")] and exited == [True]
+
+
+def test_installed_build_update_waits_for_publishing(github, monkeypatch):
+    """ACL-2668 №11: no refusal while a campaign job runs — the update queues,
+    survives a page reload (server state) and starts by itself after the job."""
+    from src.web import app as web, acl_update, update_queue
+    import src.web.publish_jobs as jobs
+
+    monkeypatch.setattr(web.sys, "frozen", True, raising=False)
+    started, exited = [], threading.Event()
+    monkeypatch.setattr(ru, "start_helper", lambda setup, manifest: started.append(manifest["version"]))
+    monkeypatch.setattr(acl_update, "schedule_exit", lambda *a, **k: exited.set())
+    jobs._jobs["run"] = {"status": "running"}
+
+    queued = json.loads(asyncio.run(web.acl_update_apply()).body)
+    assert queued["ok"] and queued["queued"] and queued["target"] == "2026-09-20"
+    assert queued["message"] == update_queue.WAITING_TEXT
+    assert not exited.wait(0.2) and started == []
+    # Second click: still the same queued update, no second download or helper.
+    assert json.loads(asyncio.run(web.acl_update_apply()).body)["queued"]
+
+    class _Req:
+        query_params = {"fetch": "0"}
+    seen = json.loads(asyncio.run(web.acl_update_check(_Req())).body)
+    assert seen["queued"]["state"] == "waiting"
+
+    jobs._jobs["run"]["status"] = "done"
+    assert exited.wait(5)
+    assert started == ["2026-09-20"]
+    assert jobs._update_reserved and ru.apply_lock.locked()
+    assert update_queue.status()["state"] == "starting"
+
+
+def test_queued_update_that_fails_to_start_frees_everything(github, monkeypatch):
+    from src.web import app as web, update_queue
+    import src.web.publish_jobs as jobs
+
+    monkeypatch.setattr(web.sys, "frozen", True, raising=False)
+    def fail(*args): raise ru.UpdateError("helper did not start")
+    monkeypatch.setattr(ru, "start_helper", fail)
+    jobs._jobs["run"] = {"status": "running"}
+    assert json.loads(asyncio.run(web.acl_update_apply()).body)["queued"]
+    jobs._jobs["run"]["status"] = "done"
+    for _ in range(500):
+        if update_queue.status()["state"] == "failed":
+            break
+        threading.Event().wait(0.01)
+    state = update_queue.status()
+    assert state["state"] == "failed" and state["error"] == "helper did not start"
+    assert not ru.apply_lock.locked() and not jobs._update_reserved
 
 
 def test_health_names_the_running_version(monkeypatch):
@@ -261,10 +307,14 @@ def test_failed_helper_releases_reservations(github, monkeypatch):
     assert jobs.reserve_update()
 
 
-def test_browser_read_is_not_interrupted(github, monkeypatch):
-    from src.web import app as web
+def test_running_account_read_does_not_block_the_update(github, monkeypatch):
+    """ACL-2668 №11: the restart interrupts the read; the read queue runs it again."""
+    from src.web import app as web, acl_update
     from src.fb_ads_rpa.operations import browser_operation
     monkeypatch.setattr(web.sys, "frozen", True, raising=False)
+    started = []
+    monkeypatch.setattr(ru, "start_helper", lambda *args: started.append(1))
+    monkeypatch.setattr(acl_update, "schedule_exit", lambda *a, **k: None)
     ready, finish = threading.Event(), threading.Event()
     def reader():
         with browser_operation.reading():
@@ -274,7 +324,9 @@ def test_browser_read_is_not_interrupted(github, monkeypatch):
     thread.start()
     try:
         assert ready.wait(5)
-        assert asyncio.run(web.acl_update_apply()).status_code == 409
+        response = asyncio.run(web.acl_update_apply())
+        assert response.status_code == 200 and not json.loads(response.body).get("queued")
+        assert started == [1]
     finally:
         finish.set()
         thread.join(5)

@@ -32,6 +32,13 @@ MAP_CSV = ("account_name,ad_account_id,page_id,multilogin_instance,folder_id,pro
 BEFORE = {"Colombia": [(ACC, 117.0, None, "", 0), (NOPROF, 5.0, None, "", 0)]}
 AFTER = {"Colombia": [(ACC, 0, "restricted", "Ad account not in BM", 0), (NOPROF, 5.0, None, "", 0)]}
 OK_STATE = {"available": True, "actions": True, "accounts": {ACC: {"state": "closed", "text": "Closed"}}}
+# ACL-2870: второй аккаунт с профилем — для параллельных Open (rig с param "two")
+ACC2 = "Facebook_DQ-215"
+MAP_CSV2 = MAP_CSV + f"{ACC2},act_3,3,A,f,prof-215,,,,,\n"
+BEFORE2 = {"Colombia": BEFORE["Colombia"] + [(ACC2, 80.0, None, "", 0)]}
+AFTER2 = {"Colombia": AFTER["Colombia"] + [(ACC2, 80.0, None, "", 0)]}
+OK_STATE2 = {"available": True, "actions": True, "accounts": {
+    ACC: {"state": "closed", "text": "Closed"}, ACC2: {"state": "closed", "text": "Closed"}}}
 
 
 class Server:
@@ -43,27 +50,31 @@ class Server:
         self.queue = [{"running": False, "queued": []}]   # ответы /account-refresh/state по очереди
         self.map_body = ""
         self.map_gets = 0
+        self.jobs_by_acc = {}     # ACL-2870: аккаунт -> свои ответы опроса задания; job_id = "j-<аккаунт>"
 
     def pop(self, seq):
         return seq.pop(0) if len(seq) > 1 else seq[0]
 
 
 @pytest.fixture
-def rig(monkeypatch, tmp_path):
+def rig(request, monkeypatch, tmp_path):
+    two = getattr(request, "param", None) == "two"
     from src.web import app as web
     from src.web.app import templates
 
     csv = tmp_path / "map.csv"
-    csv.write_text(MAP_CSV, encoding="utf-8")
+    csv.write_text(MAP_CSV2 if two else MAP_CSV, encoding="utf-8")
     monkeypatch.setattr(links, "get_local_config_dir", lambda: str(tmp_path))
     monkeypatch.setattr(links, "get_ad_account_map_path", lambda: str(csv))
     monkeypatch.setattr("src.web.app.get_ad_account_map_path", lambda: str(csv))
     srv = Server()
-    first = site.build_amap(web, links, monkeypatch, BEFORE)
+    if two:
+        srv.state = OK_STATE2
+    first = site.build_amap(web, links, monkeypatch, BEFORE2 if two else BEFORE)
     page = site.page_html(first)
     page = page.replace("</body>", "<script>window.aclConfirm = function () { return Promise.resolve(true); };</script>"
                                    "<script src='/static/warm_sessions.js'></script></body>")
-    after = site.build_amap(web, links, monkeypatch, AFTER)
+    after = site.build_amap(web, links, monkeypatch, AFTER2 if two else AFTER)
     srv.map_body = templates.env.get_template("_account_map.html").render(
         amap=after, compare=None, compare_fragment_note="", mlx={})
 
@@ -82,10 +93,14 @@ def rig(monkeypatch, tmp_path):
             return send(srv.state)
         if path == "/warm/open":
             srv.posts.append(json.loads(req.post_data or "{}"))
+            if srv.jobs_by_acc:
+                return send({"job_id": "j-" + srv.posts[-1]["accounts"][0], "state": "running"}, 202)
             if srv.post_reply:
                 return send(srv.post_reply[1], srv.post_reply[0])
             return send({"job_id": "j1", "state": "running"}, 202)
         if path.startswith("/warm/job/"):
+            if srv.jobs_by_acc:
+                return send(srv.pop(srv.jobs_by_acc[path.split("/warm/job/j-", 1)[1]]))
             return send(srv.pop(srv.jobs))
         if path.startswith("/account-refresh/state"):
             return send(srv.pop(srv.queue))
@@ -206,3 +221,55 @@ def test_compact_popup_button_opens_too(rig):
     pg.locator(f'#aov-pop [data-aov-open="{ACC}"]').click()
     pg.wait_for_function("() => document.querySelector('#aov-pop .aov-open-msg').textContent.includes('busy')", timeout=10000)
     assert srv.posts == [{"accounts": [ACC], "confirm_reopen": False}]
+
+
+def _open_btn(pg, acc):
+    return pg.locator(f'[data-aov-open="{acc}"]')
+
+
+def _msg(pg, acc):
+    return pg.evaluate("(a) => { const b = document.querySelector('[data-aov-open=\"' + a + '\"]');"
+                       " const m = b.parentNode.querySelector('.aov-open-msg'); return m ? m.textContent : ''; }", acc)
+
+
+@pytest.mark.parametrize("rig", ["two"], indirect=True)
+def test_two_opens_run_in_parallel_without_disabling_each_other(rig):
+    srv, make = rig
+    running = {"state": "running", "results": {}}
+    srv.jobs_by_acc = {
+        ACC: [running, running, {"state": "done", "results": {ACC: {"state": "ok", "ok": True, "status_read": "skipped", "status_reason": "x"}}}],
+        ACC2: [running],
+    }
+    pg = make()
+    _open_btn(pg, ACC).wait_for(state="visible")
+    _open_btn(pg, ACC).click()
+    assert _open_btn(pg, ACC).inner_text() == "Opening…" and _open_btn(pg, ACC).is_disabled()
+    assert _open_btn(pg, ACC2).is_enabled()                   # B не заблокирована, пока A открывается
+    _open_btn(pg, ACC2).click()                               # и стартует сразу своим заданием
+    assert [p["accounts"] for p in srv.posts] == [[ACC], [ACC2]]
+    pg.evaluate("document.querySelector('[data-aov-open]').click()")   # второй щелчок по A: ничего
+    assert len(srv.posts) == 2
+    pg.wait_for_function("(a) => document.querySelector('[data-aov-open=\"' + a + '\"]').textContent === 'Open profile'", arg=ACC, timeout=15000)
+    assert _open_btn(pg, ACC2).inner_text() == "Opening…" and _open_btn(pg, ACC2).is_disabled()   # B идёт своим ходом
+    assert "Opened" in _msg(pg, ACC) and _msg(pg, ACC2) == ""
+    assert not pg.errors
+
+
+@pytest.mark.parametrize("rig", ["two"], indirect=True)
+def test_failure_on_one_account_stays_on_its_row_and_warm_bar_is_not_disabled(rig):
+    srv, make = rig
+    bad = {"state": "done", "results": {ACC: {"state": "failed", "ok": False, "code": "refused", "message": "Not enough free memory."}}}
+    srv.jobs_by_acc = {ACC: [bad], ACC2: [{"state": "running", "results": {}}]}
+    pg = make()
+    _open_btn(pg, ACC2).wait_for(state="visible")
+    # на тестовой Home нет настоящей полосы — ставим такую же по классам, как у warm-bar
+    pg.evaluate("document.body.appendChild(Object.assign(document.createElement('div'), {className: 'warm-bar', innerHTML: '<button type=button>Open profiles for today</button>'}))")
+    _open_btn(pg, ACC2).click()
+    bar_buttons = pg.locator(".warm-bar button")
+    assert bar_buttons.count() == 1
+    assert all(bar_buttons.nth(i).is_enabled() for i in range(bar_buttons.count()))   # warm-bar живёт при одиночном Open
+    _open_btn(pg, ACC).click()
+    pg.wait_for_function("(a) => document.querySelector('[data-aov-open=\"' + a + '\"]').parentNode.textContent.includes('Not enough free memory')", arg=ACC, timeout=15000)
+    assert _open_btn(pg, ACC).is_enabled()
+    assert _msg(pg, ACC2) == "" and _open_btn(pg, ACC2).is_disabled() and _open_btn(pg, ACC2).inner_text() == "Opening…"
+    assert not pg.errors

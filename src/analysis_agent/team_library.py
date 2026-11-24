@@ -15,9 +15,12 @@
   кто-то другой, GitHub откажет, и правка повторится на новой версии — с
   повторной проверкой повторов. Нет связи — ошибка, и ничего не сохранено:
   «сохранено только у меня» не бывает.
-* На машине лежит копия для чтения. Её обновляет каждое открытие раздела и
-  подготовка публикации; если GitHub моргнул посреди публикации, робот
-  работает по копии и говорит, от какого она времени.
+* На машине лежит копия для чтения. Её обновляют только события (ACL-2668,
+  решение владельца 17.11 — без таймера): загрузка страницы и её Refresh,
+  открытие раздела библиотеки / форм / выбора в билдере, своя запись (она сама
+  читает свежий файл перед записью) и подготовка публикации. Если GitHub
+  моргнул посреди публикации, робот работает по копии и говорит, от какого она
+  времени.
 
 Не настроено (нет ACL_LIBRARY_REPO / ACL_LIBRARY_TOKEN) — реестры работают
 на машине, как до ACL-1241. Так живут тесты и машины до выдачи токена.
@@ -57,9 +60,6 @@ _AUTO_CREATE = {"form_templates"}
 
 #: Сколько раз повторить запись, если файл поменяли между чтением и записью.
 _CONFLICT_RETRIES = 5
-#: Чаще этого копию для чтения не перечитываем — публикация спрашивает
-#: библиотеку на каждое объявление.
-PULL_EVERY_SECONDS = 15.0
 
 
 class LibraryError(RuntimeError):
@@ -212,7 +212,6 @@ def use_backend(backend: Backend | None) -> None:
     """Подменить хранилище (тесты) или вернуть настройку из окружения (None)."""
     global _backend_override
     _backend_override = backend
-    _pulled.clear()
 
 
 def backend() -> Backend | None:
@@ -402,7 +401,6 @@ def _transact(kind: str, change: Callable[[dict], object], message: str, *,
         except Exception:
             # The remote commit is already confirmed. Never claim 'nothing
             # saved' merely because the local read copy could not be updated.
-            _pulled.pop(kind, None)
             _status[kind] = {"connected": True, "ok": False,
                              "error": "Saved to the team library, but the local copy could not be updated. Refresh it.",
                              "synced_at": _status.get(kind, {}).get("synced_at", "")}
@@ -412,7 +410,6 @@ def _transact(kind: str, change: Callable[[dict], object], message: str, *,
 
 # ── копия для чтения на машине ────────────────────────────────────────────
 
-_pulled: dict[str, float] = {}
 _pull_lock = threading.RLock()
 _status: dict[str, dict] = {}
 _listeners: dict[str, Callable[[dict], None]] = {}
@@ -445,27 +442,60 @@ def _remember(kind: str, data: dict) -> None:
         local = copy.deepcopy(data)
         local["library_synced_at"] = stamp
         apply(local)
-    _pulled[kind] = time.monotonic()
     _status[kind] = {"connected": True, "ok": True, "error": "", "synced_at": stamp}
 
 
 def pull(kind: str, *, force: bool = False) -> dict:
-    """Обновить копию на машине. Ошибка связи не бросается — она в статусе."""
-    if not configured():
+    """Обновить копию на машине. Ошибка связи не бросается — она в статусе.
+
+    ACL-2668: в сеть идёт только ``force=True`` — это и есть событие
+    (загрузка страницы, Refresh, открытие раздела, запуск публикации). Без
+    force — состояние копии без похода в GitHub: чтения по ходу публикации
+    (шаблон формы на каждое объявление) и отрисовки больше не тянут
+    библиотеку по 15-секундному порогу.
+    """
+    if not configured() or not force:
         return status(kind)
     with _sync_transaction(kind):
-        fresh = time.monotonic() - _pulled.get(kind, -1e9) < PULL_EVERY_SECONDS
-        if force or not fresh:
-            try:
-                _remember(kind, fetch(kind))
-            except (LibraryError, OSError) as exc:
-                # A failed refresh is also an attempt. Otherwise each ad waits
-                # for another network timeout instead of using the read copy.
-                _pulled[kind] = time.monotonic()
-                was = status(kind)
-                _status[kind] = {"connected": True, "ok": False, "error": str(exc),
-                                 "synced_at": was.get("synced_at", "")}
+        try:
+            _remember(kind, fetch(kind))
+        except (LibraryError, OSError) as exc:
+            was = status(kind)
+            _status[kind] = {"connected": True, "ok": False, "error": str(exc),
+                             "synced_at": was.get("synced_at", "")}
     return status(kind)
+
+
+_bg_lock = threading.Lock()
+_bg_running: set[str] = set()
+
+
+def pull_in_background(kind: str, pull_fn: Callable[[], object] | None = None) -> bool:
+    """Событийное обновление копии в своём потоке: запрос страницы не ждёт GitHub.
+
+    Пока прошлое обновление этого вида ещё ждёт ответа, второе не запускается.
+    ``pull_fn`` — обёртка реестра (``targeting_registry.pull(force=True)`` и
+    т. п.): импорт реестра подписывает его на свежие данные (`on_update`).
+    Возвращает, запущен ли поток.
+    """
+    if not configured():
+        return False
+    with _bg_lock:
+        if kind in _bg_running:
+            return False
+        _bg_running.add(kind)
+
+    def run() -> None:
+        try:
+            (pull_fn or (lambda: pull(kind, force=True)))()
+        except Exception:
+            pass
+        finally:
+            with _bg_lock:
+                _bg_running.discard(kind)
+
+    threading.Thread(target=run, daemon=True, name=f"acl-library-sync-{kind}").start()
+    return True
 
 
 def status(kind: str) -> dict:

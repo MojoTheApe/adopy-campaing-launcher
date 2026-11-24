@@ -178,6 +178,7 @@ def test_a_template_edited_on_another_machine_keeps_the_hash_but_has_no_file(tea
     on("Anna")
     saved = save_with_picture()
     on("Boris")                                    # another computer: its own config folder, no picture file
+    ft.pull(force=True)                            # ACL-2668: its copy refreshes on an event
     got = ft.get(saved["id"])
     assert got["cover_local_sha256"] == SHA
     assert not store.exists(saved["id"], SHA) and store.read(saved["id"], SHA) is None

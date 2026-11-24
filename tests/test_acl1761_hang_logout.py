@@ -183,7 +183,8 @@ def test_open_stops_as_checkpoint(monkeypatch, tmp_path):
 
 def test_page_unresponsive_cools_the_profile_for_ten_minutes(monkeypatch, tmp_path):
     opened: list = []
-    pa = _publisher_with(monkeypatch, HangTab(ADSMANAGER), opened, tmp_path)
+    hang = HangTab(ADSMANAGER)
+    pa = _publisher_with(monkeypatch, hang, opened, tmp_path)
     with pytest.raises(pa.ApiPublishError) as ei:
         pa.ApiPublisher().open("Acc")
     assert ei.value.code == "page_unresponsive"
@@ -192,17 +193,38 @@ def test_page_unresponsive_cools_the_profile_for_ten_minutes(monkeypatch, tmp_pa
     assert len(opened) == 1
     # ACL-2262: the next action gets exactly ONE tab replacement for this freeze episode (the profile
     # is already open, so it is not started again). The replacement hangs too: the full pause is armed.
+    per_tab = hang.evals
     with pytest.raises(pa.ApiPublishError) as ei2:
         pa.ApiPublisher().open("Acc")
     assert ei2.value.code == "page_unresponsive" and len(opened) == 1
+    per_tab = hang.evals - per_tab            # probes one fresh tab costs
     # ACL-2091 (D4): the replacement froze too, so the account is HELD until Retry (no timer).
     from src.fb_api import account_blocks
     assert pa._cooldown("Acc")[0] == float("inf")      # held: no timer, but the marker is readable
     assert account_blocks.hold_of(pa._frozen_api("Acc")[1])["kind"] == "page_unresponsive"
-    with pytest.raises(pa.ApiPublishError) as ei3:     # third action: the profile is not touched at all
+    # ACL-2652: the third action (a person's Check plan / Publish) tries exactly ONE fresh tab on the open profile
+    # (the profile itself is not started again). The tab is still frozen: the hold stays, the code is the tab's own.
+    evals_before, profile_opens = hang.evals, len(opened)
+    with pytest.raises(pa.ApiPublishError) as ei3:
         pa.ApiPublisher().open("Acc")
-    assert ei3.value.code == "account_blocked" and len(opened) == 1
-    assert "Nothing was created" in str(ei3.value)
+    assert ei3.value.code == "page_unresponsive" and ei3.value.code != "account_blocked"
+    assert len(opened) == profile_opens == 1
+    assert hang.evals - evals_before == per_tab > 0, "exactly one fresh tab, the same cost as the one replacement"
+    assert account_blocks.hold_of(pa._frozen_api("Acc")[1])["kind"] == "page_unresponsive"
+    assert "nothing more was sent" in str(ei3.value)      # the fresh tab's own stop text: nothing was written
+
+
+def test_acl2668_publish_is_not_refused_by_the_timed_pause(monkeypatch, tmp_path):
+    """ACL-2668 decision 7: a rate-limit pause holds background reads only; Publish opens the profile at once."""
+    from src.analysis_agent import account_spend_api as api
+
+    opened: list = []
+    pa = _publisher_with(monkeypatch, HangTab(ADSMANAGER), opened, tmp_path)
+    api._start_cooldown(pa._frozen_api("Acc")[1], g.RateLimited("slow down"), "Acc")
+    assert pa._cooldown("Acc")[1] == "rate_limited" and pa._cooldown("Acc")[0] > 0
+    with pytest.raises(pa.ApiPublishError) as ei:      # the hung tab of this rig, not a refusal
+        pa.ApiPublisher().open("Acc")
+    assert ei.value.code == "page_unresponsive" and len(opened) == 1
 
 
 # ───────────────────────── F2: телеметрия на исключении ─────────────────────────

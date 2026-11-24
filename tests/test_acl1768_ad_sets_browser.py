@@ -121,13 +121,31 @@ def test_removing_an_ad_set_removes_its_ads_and_renumbers_the_next(page):
         page.locator("[data-act='add-adset']").click()
     _fill_set(page, 2, age="50")
     _sets(page).nth(1).click()
-    page.on("dialog", lambda d: d.accept())
+    native = []
+    page.on("dialog", lambda d: (native.append(d.message), d.dismiss()))
     page.locator("[data-act='remove-adset']").click()
+    dlg = page.get_by_role("dialog", name="Remove this ad set and its ads from the campaign?")
+    dlg.get_by_role("button", name="Remove").click()   # ACL-2668 #37: свой диалог дашборда, не window.confirm
+    assert native == [], "window.confirm больше не используется"
+    page.wait_for_function("document.querySelectorAll('.cbd-sets .cbd-set').length === 2")
     assert _sets(page).count() == 2
     e = dict(_entries(page))
     assert e["camp_0_adset_count"] == "2" and e["camp_0_adset_1_age"] == "50"
     assert "camp_0_adset_2_age" not in e
     assert _ad_sets(page) == ["0", "1"]
+
+
+def test_cancelling_the_remove_ad_set_dialog_removes_nothing(page):
+    _open(page)
+    for _ in range(2):
+        page.locator("[data-act='add-adset']").click()
+    _sets(page).nth(1).click()
+    page.locator("[data-act='remove-adset']").click()
+    dlg = page.get_by_role("dialog", name="Remove this ad set and its ads from the campaign?")
+    dlg.get_by_role("button", name="Cancel").click()
+    assert page.get_by_role("dialog").count() == 0
+    assert _sets(page).count() == 3
+    assert dict(_entries(page))["camp_0_adset_count"] == "3"
 
 
 def test_the_server_reads_what_the_page_sends(page):

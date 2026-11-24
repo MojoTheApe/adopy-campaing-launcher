@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import threading
 from itertools import count
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -111,20 +110,32 @@ def report_ready(my_cm: Optional[str] = None) -> bool:
     return peek_cached_report(my_cm) is not None
 
 
-def rebuild_deferred() -> bool:
-    """ACL-2260: a publish job or a kept profile window is active.
+def _read_memory():
+    """Память машины для `rebuild_deferred` (тесты подменяют здесь, не трогая profile_slots)."""
+    # Ленивый импорт: cache грузится раньше всего веба, profile_slots лёгкий.
+    from src.web import profile_slots
 
-    A rebuild of the report parses a 70k-row workbook and takes memory the
-    profiles need ("not enough free memory for another profile"), so nothing
-    starts one by itself while this is true. Refresh (force_rebuild) is the
-    person's own choice and is never deferred. If the publish module was never
-    loaded there cannot be a job: no import, no side effects.
+    return profile_slots.read_memory()
+
+
+def rebuild_deferred() -> bool:
+    """ACL-2668 (#24): the computer is short of memory - the same 92 % gate that
+    holds a new profile back (`ACL_MEMORY_MAX_USED_PCT`, ACL-2400).
+
+    A rebuild of the report parses a 70k-row workbook and takes memory, so it
+    does not start by itself while memory is short. A running publish or a kept
+    profile window no longer defers it (ACL-2260 did): the rebuild reads BI /
+    the workbook, not Meta. Refresh (force_rebuild) is the person's own choice
+    and is never deferred. Memory that cannot be read does not block the page.
     """
-    module = sys.modules.get("src.web.publish_jobs")
-    if module is None:
-        return False
     try:
-        return bool(module.publishing_busy())
+        from src.web import profile_slots
+
+        memory = _read_memory()
+        if memory is None:
+            return False
+        keep = profile_slots.keep_free_mb(memory.total_mb, profile_slots.load_settings())
+        return memory.available_mb < keep
     except Exception:  # noqa: BLE001 - an unreadable state must not block the page
         return False
 
@@ -150,11 +161,11 @@ def get_cached_report(
     """
     excel_path = _resolve_excel_path(None)
     if bi_stats.bi_enabled():
-        # Сеть — только когда ревизии ещё нет или нажат Refresh. Иначе её
-        # обновляет фоновый поток: запрос страницы не ждёт BI (ACL-1399).
+        # Сеть — только когда ревизии ещё нет или нажат Refresh. Смену
+        # периода проверяет recheck_bi_revision; фонового опроса нет
+        # (ACL-2668 #21): запрос страницы не ждёт BI (ACL-1399).
         if force_rebuild or bi_stats.known_revision() is None:
             bi_stats.refresh_revision(force=True)
-        bi_stats.ensure_revision_watcher()
     expected_key = _current_key(excel_path)
     cm_key = _cm_key(my_cm)
 
@@ -162,9 +173,9 @@ def get_cached_report(
         hit = _warm_hit(expected_key, cm_key)
         if hit is not None:
             return hit
-        # ACL-2260: the source moved (new BI revision / workbook), but a publish
-        # is running: keep serving the report already in memory. Only when there
-        # is none at all the build must run - there is nothing to show instead.
+        # ACL-2260 / ACL-2668: the source moved (new BI revision / workbook), but
+        # memory is short: keep serving the report already in memory. Only when
+        # there is none at all the build must run - there is nothing to show instead.
         if rebuild_deferred() and has_entry(cm_key):
             entry = _CACHE["entry"]
             return entry[1][cm_key], entry[2], entry[3]
@@ -331,6 +342,25 @@ def entry_source_key():
     """Source key of the report now in memory (what the last build was made from)."""
     entry = _CACHE["entry"]
     return entry[0] if entry is not None else None
+
+
+def recheck_bi_revision(timeout: float = 4.0) -> None:
+    """Спросить BI о новой ревизии по событию страницы (ACL-2668 #21).
+
+    Вызывается при смене периода или сравнения: новые данные в BI видны
+    тогда, когда байер что-то делает, а не опросом раз в пять минут. Вопрос
+    идёт в отдельном потоке, страница ждёт не дольше `timeout` секунд; если
+    BI отвечает дольше, ответ всё равно обновит ревизию, и новый ключ
+    пересоберёт отчёт при следующем запросе. Не вызывать из цикла событий.
+    """
+    if not bi_stats.bi_enabled():
+        return
+    worker = threading.Thread(
+        target=bi_stats.refresh_revision, kwargs={"force": True},
+        name="acl-bi-revision-event", daemon=True,
+    )
+    worker.start()
+    worker.join(timeout)
 
 
 def verified_source_key(timeout: float = 4.0):

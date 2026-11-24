@@ -1,13 +1,13 @@
 """Run limits of this computer, changed in Settings without a restart (ACL-2293).
 
-Three machine settings live in the machine `.env` and are applied to the running
+Two machine settings live in the machine `.env` and are applied to the running
 process at once (`update_machine_env` also sets `os.environ`):
 
 * `ACL_MAX_PROFILES`        - how many Multilogin profiles run at once (the ceiling);
-* `ACL_WARM_MAX_HEAVY`      - how many heavy account actions run at once;
+                              unset - by machine memory (ACL-2668, `profile_slots.ceiling_for_memory`);
 * `ACL_MEMORY_MAX_USED_PCT` - the share of memory in use above which no new profile starts.
 
-`ProfileSlots` and `HeavyGate` re-read the environment on every decision, so a change
+`ProfileSlots` re-reads the environment on every decision, so a change
 applies to the next start decision; running jobs are never stopped.
 """
 from __future__ import annotations
@@ -21,40 +21,30 @@ from config.paths import update_machine_env
 log = logging.getLogger(__name__)
 
 CEILING_KEY = "ACL_MAX_PROFILES"
-HEAVY_KEY = "ACL_WARM_MAX_HEAVY"
 SHARE_KEY = "ACL_MEMORY_MAX_USED_PCT"
 
-# Границы — решение владельца 09.11: потолок 1–8, тяжёлых 1–3, доля памяти 50–95 (как в ACL-2400).
+# Границы — решение владельца 09.11: потолок 1–8; доля памяти 0–95 — ACL-2668, решение владельца
+# 16.11 «Убрать минимум, разрешить 0–95 %». Поля «Heavy actions at once» больше нет (ACL-2735).
 CEILING_BOUNDS = (1, 8)
-HEAVY_BOUNDS = (1, 3)
-SHARE_BOUNDS = (50.0, 95.0)
+SHARE_BOUNDS = (0.0, 95.0)
 
-#: Выше этих значений страница просит подтверждение (один диалог на всё сохранение).
-CONFIRM_CEILING_ABOVE = 3
-CONFIRM_SHARE_ABOVE = 80.0
-#: Мягкое предупреждение: потолок выше 3 на машине с памятью меньше этого (МБ).
-WARN_SMALL_MACHINE_MB = 32 * 1024
+# ACL-2668 (решение владельца 16.11): подтверждения «выше 3 профилей / выше 80 % памяти» больше нет —
+# любое значение в границах сохраняется сразу, без диалога и без предупреждений.
 
-FIELDS = ("ceiling", "warm_heavy", "memory_max_used_pct")
+FIELDS = ("ceiling", "memory_max_used_pct")
 
 
 class RunLimitError(ValueError):
     """A value the manager can correct: out of range, not a number."""
 
 
-class NeedsConfirm(RunLimitError):
-    """Raising the ceiling above 3 or the memory share above 80 needs an explicit `confirm`."""
-
-
 def defaults() -> dict[str, float | int]:
     from src.web import profile_slots as ps
-    return {"ceiling": ps.DEFAULT_CEILING, "warm_heavy": 1,
-            "memory_max_used_pct": ps.DEFAULT_MAX_USED_PCT}
+    return {"ceiling": ps.default_ceiling(), "memory_max_used_pct": ps.DEFAULT_MAX_USED_PCT}
 
 
 def bounds() -> dict[str, list]:
-    return {"ceiling": list(CEILING_BOUNDS), "warm_heavy": list(HEAVY_BOUNDS),
-            "memory_max_used_pct": list(SHARE_BOUNDS)}
+    return {"ceiling": list(CEILING_BOUNDS), "memory_max_used_pct": list(SHARE_BOUNDS)}
 
 
 def _number(raw: Any, label: str) -> float:
@@ -87,10 +77,6 @@ def check_ceiling(raw: Any) -> int:
     return _whole(raw, "Profiles at once", *CEILING_BOUNDS)
 
 
-def check_heavy(raw: Any) -> int:
-    return _whole(raw, "Heavy actions at once", *HEAVY_BOUNDS)
-
-
 def check_share(raw: Any) -> float:
     lo, hi = SHARE_BOUNDS
     value = _number(raw, "Memory in use")
@@ -104,12 +90,10 @@ def _fmt(value: float | int) -> str:
 
 
 def effective() -> dict[str, float | int]:
-    """The values the engine uses right now (the same readers as ProfileSlots / HeavyGate)."""
-    from src.fb_api.warm import max_heavy
+    """The values the engine uses right now (the same reader as ProfileSlots)."""
     from src.web.profile_slots import load_settings
     settings = load_settings()
-    return {"ceiling": settings.ceiling, "warm_heavy": max_heavy(),
-            "memory_max_used_pct": settings.max_used_pct}
+    return {"ceiling": settings.ceiling, "memory_max_used_pct": settings.max_used_pct}
 
 
 def _context() -> dict[str, Any]:
@@ -131,27 +115,15 @@ def _context() -> dict[str, Any]:
             "ceiling_reached": nxt.get("reason") == "ceiling"}
 
 
-def warnings_for(values: dict, total_mb: int | None) -> list[str]:
-    out = []
-    if values["ceiling"] > CONFIRM_CEILING_ABOVE and (total_mb is None or total_mb < WARN_SMALL_MACHINE_MB):
-        out.append("Each profile takes about 2-3.5 GB. More than 3 profiles at once on a computer "
-                   "with less than 32 GB can overload it.")
-    if values["memory_max_used_pct"] > CONFIRM_SHARE_ABOVE:
-        out.append("A high memory share leaves little room for the system and can freeze tabs.")
-    return out
-
-
 def current() -> dict[str, Any]:
     values = effective()
     ctx = _context()
     return {**values, "defaults": defaults(), "bounds": bounds(),
-            "confirm_above": {"ceiling": CONFIRM_CEILING_ABOVE, "memory_max_used_pct": CONFIRM_SHARE_ABOVE},
-            "memory_readable": ctx["total_mb"] is not None, **ctx,
-            "warnings": warnings_for(values, ctx["total_mb"])}
+            "memory_readable": ctx["total_mb"] is not None, **ctx}
 
 
-def save(ceiling: Any = None, warm_heavy: Any = None, memory_max_used_pct: Any = None,
-         *, reset: bool = False, confirm: bool = False) -> dict[str, Any]:
+def save(ceiling: Any = None, memory_max_used_pct: Any = None,
+         *, reset: bool = False) -> dict[str, Any]:
     """Validate everything first, then write all values in one update.
 
     `reset` writes the defaults explicitly - never blank keys: a blank ceiling would fall
@@ -161,25 +133,12 @@ def save(ceiling: Any = None, warm_heavy: Any = None, memory_max_used_pct: Any =
     values: dict[str, str] = {}
     if reset:
         d = defaults()
-        values = {CEILING_KEY: _fmt(d["ceiling"]), HEAVY_KEY: _fmt(d["warm_heavy"]),
-                  SHARE_KEY: _fmt(d["memory_max_used_pct"])}
+        values = {CEILING_KEY: _fmt(d["ceiling"]), SHARE_KEY: _fmt(d["memory_max_used_pct"])}
     else:
         if ceiling is not None:
             values[CEILING_KEY] = _fmt(check_ceiling(ceiling))
-        if warm_heavy is not None:
-            values[HEAVY_KEY] = _fmt(check_heavy(warm_heavy))
         if memory_max_used_pct is not None:
             values[SHARE_KEY] = _fmt(check_share(memory_max_used_pct))
-    if not confirm and not reset:
-        # Диалог страницы - только удобство: сервер сам не принимает рискованное повышение без confirm.
-        risky = []
-        if CEILING_KEY in values and int(values[CEILING_KEY]) > CONFIRM_CEILING_ABOVE                 and int(values[CEILING_KEY]) > old["ceiling"]:
-            risky.append("more than %d profiles at once" % CONFIRM_CEILING_ABOVE)
-        if SHARE_KEY in values and float(values[SHARE_KEY]) > CONFIRM_SHARE_ABOVE                 and float(values[SHARE_KEY]) > old["memory_max_used_pct"]:
-            risky.append("more than %g%% memory in use" % CONFIRM_SHARE_ABOVE)
-        if risky:
-            raise NeedsConfirm("Confirmation required: " + " and ".join(risky)
-                               + " can overload this computer. Send confirm: true to save anyway.")
     if values:
         try:
             update_machine_env(values)

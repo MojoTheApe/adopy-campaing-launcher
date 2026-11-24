@@ -157,7 +157,7 @@ def _record_flag_in_session(monkeypatch):
     seen = []
 
     @contextmanager
-    def fake_session(account, *, commands=False):
+    def fake_session(account, *, commands=False, **_kw):
         seen.append(connection.may_start_closed_profile())
         raise _Recorded()
         yield  # pragma: no cover
