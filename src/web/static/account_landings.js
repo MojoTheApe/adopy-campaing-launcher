@@ -96,8 +96,10 @@
     function showPreview(item, anchor) {
       if (!/^https?:\/\//i.test(item.url || '')) return;
       var frame = document.createElement('iframe');
-      // Скрипты страницы разрешены (лендинг рендерится на JS), но без доступа к ACL: другой origin.
-      frame.setAttribute('sandbox', 'allow-scripts');
+      // Скрипты страницы разрешены (лендинг рендерится на JS). allow-same-origin оставляет лендингу его
+      // собственный origin (без него его запросы и хранилище падают, и он показывает страницу ошибки);
+      // к ACL доступа нет: origin другой. Переходы верхнего окна, формы и всплывающие окна запрещены.
+      frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
       frame.setAttribute('referrerpolicy', 'no-referrer');
       frame.setAttribute('loading', 'lazy');
       frame.src = item.url;
