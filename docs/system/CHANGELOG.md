@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2867 — Installer no longer asks for an Excel stats workbook — 2026-11-24
+
+The Windows setup wizard no longer shows a Stats workbook (Excel) picker, its help text or its validation, and the readiness check no longer needs a workbook. Without BI sign-in setup finishes with no accounts; they are connected to profiles later on the Accounts screen. `FB_STATS_EXCEL` is no longer written unless given. `acl_doctor.py` treats the workbook as informational: with BI connected it reports "Stats source: BI", without BI and without a workbook it warns clearly but does not fail. `docs/SETUP-NEW-PC.md` no longer asks for `cursor example.xlsx`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1867).
+
 ## ACL-2883 — Landing preview shows the real page as a thumbnail — 2026-11-23
 
 The hover preview of a landing in the builder now loads the landing with its own origin, so landings that depend on their own scripts show the real page instead of their error page. The page is laid out at phone size and scaled down into the preview box, so the whole first screen is visible instead of a cropped piece. The frame still cannot reach the dashboard.

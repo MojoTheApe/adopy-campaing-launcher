@@ -24,6 +24,8 @@ from src.meta_campaign_agent.multilogin_launcher import StartedProfile
 @pytest.fixture(autouse=True)
 def _quiet(monkeypatch):
     # Журнал пилота и остановок — не на диск машины; холодные отметки — свои.
+    # ACL-2668: паузу после остановки (по умолчанию 0) включаем аварийным рычагом — 180 с.
+    monkeypatch.setenv(stop_log.RESTART_COOLDOWN_ENV, "180")
     monkeypatch.setattr(launch, "_record", lambda event: None)
     monkeypatch.setattr(stop_log, "refusal", lambda pid, log_=None: "")
     monkeypatch.setattr(launch, "_PACER", launch.StartPacer(limit=lambda: 0))
