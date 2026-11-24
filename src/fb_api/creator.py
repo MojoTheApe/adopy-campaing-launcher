@@ -2339,7 +2339,7 @@ class CampaignCreator:
             if not settled:
                 self._step(out, f"{what}: result of the earlier write is unknown, reading it back once more")
                 self._pause(sum(TRANSIENT_READ_WAITS_S))
-                if hasattr(self.client, "max_calls"):
+                if isinstance(getattr(self.client, "max_calls", None), int):   # None: без потолка (ACL-2668)
                     self.client.max_calls += 1
                 found = find()
                 if found:
@@ -2440,7 +2440,7 @@ class CampaignCreator:
             except GraphError as exc:
                 if _object_gone(exc) or attempt == len(waits):
                     raise
-                if hasattr(self.client, "max_calls"):
+                if isinstance(getattr(self.client, "max_calls", None), int):   # None: без потолка (ACL-2668)
                     self.client.max_calls += 1          # the retry read is part of this run's call budget
                 self._pause(float(waits[attempt]))
         raise AssertionError("unreachable")  # pragma: no cover
@@ -2560,7 +2560,8 @@ class CampaignCreator:
         acct = normalize_act(plan.act).removeprefix("act_")
         # The reads of this check come out of the budget of the run: the allowance follows the confirmed objects
         # (one read each, the ad set listing and one ad listing per ad set), not a flat number (ACL-1856).
-        self.client.max_calls += resume_verify_calls(stages)
+        if isinstance(getattr(self.client, "max_calls", None), int):       # None: без потолка (ACL-2668)
+            self.client.max_calls += resume_verify_calls(stages)
 
         def mismatch(name: str, text: str = MSG_MISMATCH) -> CreationStopped:
             self._snapshot_operation(out)
@@ -5487,7 +5488,7 @@ class CampaignCreator:
         self._large_pending = large
         self._upload_writes = 0
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
-        # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
+        # задаёт вызывающий; публикация с ACL-2668 идёт без потолка (`None`), и эти проверки молчат).
         # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
         # и запуск (раньше - фиксированные 40, и проверка принимала то, что запуск потом отказывал).
         # Здесь куски без запаса на повторы: это страховка, размер после сжатия может отличаться.
@@ -5558,7 +5559,8 @@ class CampaignCreator:
     def _require_remaining_budget(self, plan: CampaignPlan, chunk_calls: int, calls_at_start: int = 0) -> None:
         """ACL-2244: stop before the first write when preparation ate into the calls the writes were sized with.
 
-        The run budget is sized as writes + targeting reads + chunks (`publish_api.create_call_budget`), and
+        Only when the caller set a run budget (publish runs have none since ACL-2668: `max_calls is None`).
+        Such a budget is sized as writes + targeting reads + chunks, and
         `estimate_create_calls` is a deliberately generous upper bound of the writes. So the remaining calls are
         compared with that bound only when preparation spent MORE than the budget reserved for it (targeting
         reads, the page and form reads); ordinary preparation reads never refuse a campaign that publishes fine.

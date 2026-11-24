@@ -87,6 +87,36 @@ export async function handleMyAccounts(request, env) {
   return new Response(body, { headers: { "content-type": "application/json", etag } });
 }
 
+export const SEED_MAX_ROWS = 2000;
+
+// POST /v1/my-accounts/seed {rows} (ACL-2901): первый вход юзера переносит его текущую карту с машины.
+// Принимается, только пока у юзера нет ни одной строки назначений (в т.ч. снятых): после этого
+// аккаунтами управляет админ. Поля — те же ROW_FIELDS, proxy_*/tracking_link дают 400.
+export async function handleSeed(request, env) {
+  const user = await userFromRequest(request, env);
+  if (!user) return json({ error: "unauthorized" }, 401);
+  let body = null;
+  try { body = await request.json(); } catch (_) { return json({ error: "bad json" }, 400); }
+  const v = validRows(body?.rows);
+  if (v.error) return json({ error: v.error }, 400);
+  if (v.rows.length > SEED_MAX_ROWS) return json({ error: "too many rows" }, 400);
+  const has = await env.DB.prepare("SELECT 1 AS x FROM account_assignments WHERE user_email = ? LIMIT 1")
+    .bind(user.email).first();
+  if (has) return json({ error: "already has assignments" }, 409);
+  const nowIso = new Date().toISOString();
+  // Условие в каждой вставке: если админ успел назначить что-то между проверкой и вставкой,
+  // сид не смешивается с его строками. Повтор того же сида (две машины разом) — DO NOTHING.
+  const res = await env.DB.batch(v.rows.map((r) => env.DB.prepare(
+    "INSERT INTO account_assignments (user_email, account_name, ad_account_id, page_id, page_name, country, "
+    + "multilogin_instance, folder_id, profile_id, assigned_by, assigned_at, removed_at) "
+    + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?, NULL "
+    + "WHERE NOT EXISTS (SELECT 1 FROM account_assignments WHERE user_email = ? AND assigned_by <> 'seed') "
+    + "ON CONFLICT (user_email, account_name) DO NOTHING",
+  ).bind(user.email, r.account_name, r.ad_account_id, r.page_id, r.page_name, r.country, r.multilogin_instance,
+    r.folder_id, r.profile_id, nowIso, user.email)));
+  return json({ ok: true, seeded: res.reduce((s, r) => s + r.meta.changes, 0) });
+}
+
 // GET /api/users
 export async function listUsers(env) {
   const { results } = await env.DB.prepare(
