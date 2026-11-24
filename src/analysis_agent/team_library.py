@@ -31,6 +31,9 @@ import base64
 import copy
 import json
 import os
+import re
+import socket
+import ssl
 import threading
 import tempfile
 import time
@@ -105,6 +108,30 @@ def empty(kind: str) -> dict:
 
 # ── GitHub ────────────────────────────────────────────────────────────────
 
+def _network_reason(exc: BaseException, token: str = "") -> str:
+    """Короткая понятная причина сетевого сбоя (ACL-2907). Без токена, URL и заголовков.
+
+    TLS-доверие то же, что у обновлений (src/web/release_updates.py): обычный
+    urllib с системным хранилищем, без своего SSLContext — расходиться нечему.
+    """
+    reason = getattr(exc, "reason", exc)
+    text = str(reason)
+    if isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in text:
+        return "certificate verification failed"
+    if isinstance(reason, (socket.timeout, TimeoutError)) or "timed out" in text.lower():
+        return "timed out"
+    if isinstance(reason, socket.gaierror) or "getaddrinfo failed" in text:
+        return "DNS lookup failed"
+    if "Tunnel connection failed" in text or isinstance(reason, ConnectionRefusedError):
+        proxied = bool(urllib.request.getproxies().get("https"))
+        return "proxy refused" if proxied or "Tunnel" in text else "connection refused"
+    text = re.sub(r"https?://\S+", "[url]", text)
+    if token:
+        text = text.replace(token, "[redacted]")
+    text = " ".join(text.split())[:120] or type(reason).__name__
+    return f"other: {text}"
+
+
 class GitHubBackend:
     """Contents API. Токен — только на репозиторий библиотеки, в логи не попадает."""
 
@@ -128,7 +155,9 @@ class GitHubBackend:
             if method == "PUT":
                 raise WriteUncertain("The save response was lost. GitHub may have saved the change; "
                                      "refresh the library before retrying.") from exc
-            raise LibraryError("GitHub is unreachable. Try again when the connection is restored.") from exc
+            reason = _network_reason(exc, self.token)
+            raise LibraryError(f"GitHub is unreachable: {reason}. "
+                               "Try again when the connection is restored.") from exc
 
     def _fail(self, status: int, raw: bytes, what: str) -> LibraryError:
         try:
