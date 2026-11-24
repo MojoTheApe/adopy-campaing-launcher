@@ -201,14 +201,6 @@ def test_cut_or_refused_answer_drops_nothing(store, facts, cut):
         assert sum(YOGA in (p.get("interest_fbid_list") or []) for p in meta.log) == 1
 
 
-def test_spent_budget_drops_nothing(store, facts):
-    warm(facts, "Yoga", YOGA)
-    r = tr.TermResolver(Meta(), store, facts=facts, job_cap=0)
-    r.prefetch(["Yoga"])
-    assert r.resolve("Yoga")["state"] == "unknown"
-    assert warm_id(facts, "Yoga") == YOGA
-
-
 def test_refused_batch_with_only_warm_ids_gives_no_confirmed_warning(store, facts):
     warm(facts, "Yoga", YOGA)
     meta = Meta(search={"Yoga": [{"id": YOGA, "name": "Yoga"}]})
@@ -234,7 +226,6 @@ def test_rejected_warm_term_has_budget_for_the_search(store, facts):
     meta = Meta(search={t: [{"id": f"6003000002{i:03d}", "name": t}] for i, t in enumerate(names)})
     r, res = run(meta, store, facts, *names)
     assert {x["state"] for x in res.values()} == {"exact"}
-    assert r.job_cap >= tr.JOB_READ_BASE + tr.JOB_READ_PER_TERM * len(names)
     assert meta.types().count("adinterest") == len(names)
 
 

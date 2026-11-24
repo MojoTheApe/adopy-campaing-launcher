@@ -294,8 +294,8 @@ CALLS_PREPARE_EXTRA_READS = 4   # ACL-2244: page / profile-page checks and simil
 def estimate_targeting_reads(plan: "CampaignPlan") -> int:
     """Запас на чтения таргетинга (ACL-1771) по ВСЕМ наборам: они идут из того же бюджета, что и записи.
 
-    Как потолок задания у резолвера: база + шаг на каждую различную строку (целую и каждую её часть),
-    но не выше `JOB_READ_ABS_CAP`. Без интересов - 0.
+    Оценка для бюджета публикации, не потолок поиска (у резолвера потолка нет, ACL-2668 #36): база + шаг на
+    каждую различную строку (целую и каждую её часть), но не выше `PUBLISH_READS_ALLOWANCE`. Без интересов - 0.
     """
     seen: set[str] = set()
     for ad_set in plan.ad_sets:
@@ -306,7 +306,7 @@ def estimate_targeting_reads(plan: "CampaignPlan") -> int:
     seen.discard("")
     if not seen:
         return 0
-    return min(_tr.JOB_READ_ABS_CAP, _tr.JOB_READ_BASE + _tr.JOB_READ_PER_TERM * len(seen))
+    return min(_tr.PUBLISH_READS_ALLOWANCE, _tr.JOB_READ_BASE + _tr.JOB_READ_PER_TERM * len(seen))
 
 
 def estimate_create_calls(plan: "CampaignPlan") -> int:
