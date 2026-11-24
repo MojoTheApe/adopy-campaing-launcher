@@ -8,8 +8,14 @@
   window.__aclUserAccountsSync = true;
   var busy = false;
 
+  // Ревью ACL-2899: сравнение периодов (compare= в адресе) — режим только для просмотра,
+  // синхронизация пишет в карту, поэтому там не запускается. Обычное открытие догонит.
+  function readOnlyView() {
+    try { return new URLSearchParams(location.search).has('compare'); } catch (e) { return false; }
+  }
+
   function sync() {
-    if (busy) return;
+    if (busy || readOnlyView()) return;
     busy = true;
     fetch('/api/user-accounts/sync', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' }, body: '{}' })
