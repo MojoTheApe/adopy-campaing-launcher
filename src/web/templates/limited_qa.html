@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LP duplication · Adopy</title>
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+  <style>
+    :root { color-scheme: light dark; --bg:#f4f6f8; --card:#fff; --text:#162033; --muted:#64748b; --line:#d9e0e8; --blue:#1769e0; --red:#b42318; --green:#067647; --amber:#a15c00; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#101319; --card:#191e27; --text:#edf2f7; --muted:#9ca9ba; --line:#303846; --blue:#75a7ff; --red:#ff8b80; --green:#6ce9a6; --amber:#fdbb66; } }
+    * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    header { display:flex; align-items:center; gap:12px; padding:16px clamp(18px,4vw,48px); background:var(--card); border-bottom:1px solid var(--line); }
+    header img { width:30px; height:30px; } header strong { font-size:17px; } header a { margin-left:auto; color:var(--blue); text-decoration:none; }
+    main { max-width:1040px; margin:0 auto; padding:28px 18px 60px; } h1 { font-size:28px; margin:0 0 6px; } h2 { font-size:19px; margin:0 0 16px; } p { color:var(--muted); }
+    .grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,.8fr); gap:20px; align-items:start; } @media(max-width:800px){.grid{grid-template-columns:1fr;}}
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; box-shadow:0 2px 8px rgb(15 23 42 / .05); }
+    label { display:block; font-weight:650; margin:14px 0 6px; } label:first-child { margin-top:0; } .optional { color:var(--muted); font-weight:400; }
+    input, textarea { width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 11px; background:var(--card); color:var(--text); font:inherit; } textarea { min-height:112px; resize:vertical; }
+    input:focus, textarea:focus { outline:3px solid color-mix(in srgb,var(--blue) 25%,transparent); border-color:var(--blue); }
+    .help { margin:5px 0 0; font-size:13px; } button { border:0; border-radius:8px; background:var(--blue); color:white; padding:10px 15px; font:650 14px/1 system-ui; cursor:pointer; margin-top:18px; } button[disabled] { opacity:.55; cursor:not-allowed; }
+    .notice { border-left:4px solid var(--amber); padding:10px 12px; background:color-mix(in srgb,var(--amber) 9%,var(--card)); color:var(--text); border-radius:6px; }
+    .error { color:var(--red); min-height:22px; } .empty { color:var(--muted); }
+    .request { border:1px solid var(--line); border-radius:9px; padding:13px; margin-top:10px; } .request:first-child{margin-top:0;} .request-head { display:flex; align-items:center; gap:8px; }
+    .badge { border-radius:999px; padding:3px 8px; font-size:12px; font-weight:700; background:color-mix(in srgb,var(--blue) 12%,var(--card)); color:var(--blue); } .badge.succeeded{color:var(--green)} .badge.failed,.badge.mixed{color:var(--red)} .badge.paused,.badge.unknown{color:var(--amber)}
+    .request small { color:var(--muted); } .request ul { padding-left:20px; margin:8px 0 0; } .request a { color:var(--blue); overflow-wrap:anywhere; } .request button { margin:9px 0 0; padding:8px 10px; }
+    .dev { display:inline-block; margin-left:8px; color:var(--amber); font-size:12px; letter-spacing:.06em; }
+  </style>
+</head>
+<body data-enabled="{{ 'true' if integration.enabled else 'false' }}">
+  <header><img src="/static/logo.svg" alt=""><strong>Adopy Campaign Manager <span class="dev">DEV</span></strong><a href="/">Back to dashboard</a></header>
+  <main>
+    <h1>Duplicate landing pages</h1>
+    <p>Create unchanged copies on a root domain and follow the result here. Jira stays behind the scenes.</p>
+    {% if not integration.enabled %}<p class="notice" role="alert">{{ integration.reason }}</p>{% endif %}
+    <div class="grid">
+      <section class="card">
+        <h2>New request</h2>
+        <form id="limited-qa-form">
+          <label for="lp-urls">LP / LPs to duplicate</label>
+          <textarea id="lp-urls" name="source_urls" required placeholder="One URL per line, up to 3" aria-describedby="lp-help"></textarea>
+          <p class="help" id="lp-help">1–3 complete HTTP(S) URLs.</p>
+          <label for="target-domain">Target root domain</label>
+          <input id="target-domain" name="target_domain" required placeholder="domain.com" autocomplete="off">
+          <p class="help">Copies are created as domain.com/page. Legacy lpa. and lpr. targets are canonicalized to the root.</p>
+          <label for="country">Target country</label>
+          <input id="country" name="country" required placeholder="Mexico" autocomplete="country-name">
+          <label for="facebook-account">Facebook account <span class="optional">optional</span></label>
+          <input id="facebook-account" name="facebook_account" placeholder="MKTO1234" autocomplete="off">
+          <p class="help">Leave this blank when no account applies. ACM will send <code>null</code>; no default is assigned.</p>
+          <p id="form-error" class="error" role="alert" aria-live="polite"></p>
+          <button id="submit-request" type="submit" {% if not integration.enabled %}disabled{% endif %}>Start duplication</button>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Requests</h2>
+        <div id="request-list" aria-live="polite"><p class="empty">Loading…</p></div>
+      </section>
+    </div>
+  </main>
+  <script src="/static/limited_qa.js" defer></script>
+</body>
+</html>

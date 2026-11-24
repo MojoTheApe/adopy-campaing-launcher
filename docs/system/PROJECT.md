@@ -29,6 +29,17 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+  ACL-2894 adds the DEV-only `/limited-qa` page and same-origin request APIs.
+  Managers can submit one to three source LPs, an exact root target, country,
+  and an optional Facebook account, then see Jira correlation, execution state,
+  and per-LP result URLs without opening Jira. The server keeps one stable
+  request/idempotency identity across retry and stores only bounded machine-local
+  display history with the existing atomic config-path helpers. The n8n token is
+  sent only from the backend and is never rendered or persisted in that history.
+  The feature stays disabled unless `ACL_LIMITED_QA_ENV=dev`, a trusted HTTPS
+  `acm-dev-` webhook on the allowlisted n8n host, and a non-placeholder token are
+  all configured. Missing Facebook account serializes as `null`; targets are
+  canonicalized to root domains and arbitrary subdomains are rejected.
   ACL-141 uses queued, labelled page dialogs in place of browser alert/confirm/prompt;
   Escape/Cancel refuse, destructive actions initially focus Cancel, and focus returns
   to the initiating control. Recoverable control errors stay inline. Forms deletion

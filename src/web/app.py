@@ -25,6 +25,7 @@ import sys
 import tempfile
 import threading
 import weakref
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
@@ -35,6 +36,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.web import account_notes as _account_notes
 from src.web import builder_drafts as _builder_drafts
+from src.web import limited_qa as _limited_qa
 
 # Make project root importable when invoked via `uvicorn src.web.app:app`
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
@@ -1633,6 +1635,118 @@ app.add_middleware(RequestBodyLimit, default_max_body=DEFAULT_MAX_BODY, route_ma
 # SafeStaticFiles не пускает UNC, буквы дисков и абсолютные пути к файловой
 # системе (CVE-2026-48818: исходящий SMB/NTLM на Windows).
 app.mount("/static", SafeStaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+def _limited_qa_public(record: dict) -> dict:
+    """Browser-safe view: no webhook token, idempotency key, or replay payload."""
+    hidden = {"payload", "idempotency_key", "token"}
+    return {key: value for key, value in record.items() if key not in hidden}
+
+
+def _limited_qa_client() -> _limited_qa.LimitedQaClient:
+    return _limited_qa.LimitedQaClient(_limited_qa.load_config())
+
+
+@app.get("/limited-qa", response_class=HTMLResponse)
+async def limited_qa_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "limited_qa.html",
+        {"request": request, "integration": _limited_qa.availability()},
+    )
+
+
+@app.get("/api/limited-qa/requests")
+async def limited_qa_requests() -> JSONResponse:
+    state = _limited_qa.availability()
+    if not state["enabled"]:
+        return JSONResponse({"error": state["reason"]}, status_code=503)
+    return JSONResponse({"requests": [_limited_qa_public(row) for row in _limited_qa.list_requests()]})
+
+
+@app.post("/api/limited-qa/requests")
+async def limited_qa_submit(request: Request) -> JSONResponse:
+    try:
+        raw = await request.json()
+        payload = _limited_qa.normalize_submission(raw)
+        now = datetime.now(timezone.utc).isoformat()
+        record = {
+            **payload,
+            "payload": payload,
+            "status": "accepted",
+            "dispatch_state": "pending",
+            "result_urls": [],
+            "result_items": [],
+            "error": None,
+            "created_at": now,
+            "updated_at": now,
+            "completed_at": None,
+        }
+        _limited_qa.save_request(record)
+        upstream = await asyncio.to_thread(_limited_qa_client().submit, payload)
+        record = _limited_qa.merge_status(record, upstream)
+        record["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _limited_qa.save_request(record)
+        return JSONResponse(_limited_qa_public(record), status_code=202)
+    except _limited_qa.LimitedQaValidationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except _limited_qa.LimitedQaConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except _limited_qa.LimitedQaUpstreamError as exc:
+        if "record" in locals():
+            record["status"] = "unknown" if exc.ambiguous else "failed"
+            record["error"] = str(exc)
+            record["updated_at"] = datetime.now(timezone.utc).isoformat()
+            _limited_qa.save_request(record)
+            if exc.ambiguous:
+                return JSONResponse(_limited_qa_public(record), status_code=202)
+        return JSONResponse({"error": str(exc)}, status_code=exc.status_code)
+
+
+@app.get("/api/limited-qa/requests/{request_id}")
+async def limited_qa_status(request_id: str) -> JSONResponse:
+    try:
+        local = _limited_qa.get_request(request_id)
+        if local is None:
+            return JSONResponse({"error": "Request not found."}, status_code=404)
+        upstream = await asyncio.to_thread(_limited_qa_client().status, request_id)
+        record = _limited_qa.merge_status(local, upstream)
+        _limited_qa.save_request(record)
+        return JSONResponse(_limited_qa_public(record))
+    except _limited_qa.LimitedQaValidationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except _limited_qa.LimitedQaConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except _limited_qa.LimitedQaUpstreamError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=exc.status_code)
+
+
+@app.post("/api/limited-qa/requests/{request_id}/retry")
+async def limited_qa_retry(request_id: str) -> JSONResponse:
+    try:
+        local = _limited_qa.get_request(request_id)
+        if local is None:
+            return JSONResponse({"error": "Request not found."}, status_code=404)
+        if local.get("status") != "unknown":
+            return JSONResponse({"error": "Only an unknown request can be retried."}, status_code=409)
+        payload = _limited_qa.normalize_submission(
+            local.get("payload") or local,
+            request_id=local["request_id"],
+            idempotency_key=local.get("idempotency_key"),
+        )
+        upstream = await asyncio.to_thread(_limited_qa_client().submit, payload)
+        record = _limited_qa.merge_status(local, upstream)
+        record["payload"] = payload
+        record["idempotency_key"] = payload["idempotency_key"]
+        record["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _limited_qa.save_request(record)
+        return JSONResponse(_limited_qa_public(record), status_code=202)
+    except _limited_qa.LimitedQaValidationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except _limited_qa.LimitedQaConfigError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except _limited_qa.LimitedQaUpstreamError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=exc.status_code)
 
 
 # ── Отчёт — не в цикле событий (ACL-1399) ───────────────────────────────
