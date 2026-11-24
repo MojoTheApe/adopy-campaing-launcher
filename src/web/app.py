@@ -4159,7 +4159,23 @@ async def api_connections_sign_in() -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Could not sign in. Try again."}, status_code=500)
     checks = await asyncio.to_thread(cs.check_all)
     await asyncio.to_thread(_after_connections_change)
+    # ACL-2899: новый вход = новый ключ юзера и свежие аккаунты; тихо, ошибки наружу не идут
+    try:
+        from src.web import user_accounts
+
+        await asyncio.to_thread(user_accounts.sync)
+    except Exception:  # noqa: BLE001
+        pass
     return JSONResponse({"ok": True, "updated": applied["updated"], "checks": checks})
+
+
+@app.post("/api/user-accounts/sync")
+async def api_user_accounts_sync() -> JSONResponse:
+    """ACL-2899: аккаунты юзера с хаба в локальную карту. Зовёт страница при открытии и когда
+    вкладка снова видна; без таймеров. Всегда 200 с тихим статусом, ключ и токен наружу не идут."""
+    from src.web import user_accounts
+
+    return JSONResponse(await asyncio.to_thread(user_accounts.sync))
 
 
 @app.post("/api/connections/check")
