@@ -120,12 +120,23 @@ def load_state() -> dict:
     """{'names': [...], 'etag': '...'}: какие аккаунты пришли с сервера и последний ETag."""
     state = _load_json(_local(_STATE_FILE))
     names = state.get("names")
+    hidden = state.get("sync_hidden")
     return {"names": [n for n in names if isinstance(n, str)] if isinstance(names, list) else [],
-            "etag": str(state.get("etag") or "")}
+            "etag": str(state.get("etag") or ""),
+            # Скрытые самой синхронизацией: вернуть можно только их, ручные скрытия юзера не трогаем
+            "sync_hidden": [n for n in hidden if isinstance(n, str)] if isinstance(hidden, list) else [],
+            # Предложение войти заново уже показано на этой машине (один раз, не на каждую вкладку)
+            "signin_prompted": bool(state.get("signin_prompted"))}
 
 
-def _save_state(names: list[str], etag: str) -> None:
-    _write_json(_local(_STATE_FILE), {"names": sorted(set(names), key=str.casefold), "etag": etag})
+def _save_state(names: list[str], etag: str, sync_hidden: list[str] | None = None,
+                signin_prompted: bool | None = None) -> None:
+    old = load_state()
+    _write_json(_local(_STATE_FILE), {
+        "names": sorted(set(names), key=str.casefold), "etag": etag,
+        "sync_hidden": sorted(set(old["sync_hidden"] if sync_hidden is None else sync_hidden), key=str.casefold),
+        "signin_prompted": old["signin_prompted"] if signin_prompted is None else signin_prompted,
+    })
 
 
 # -- токен Google ------------------------------------------------------------
@@ -194,7 +205,8 @@ def _name_key(name: str) -> str:
     return " ".join(str(name or "").split()).casefold()
 
 
-def merge_into_map(accounts: list[dict], state_names: list[str], *, map_path: Path | None = None) -> dict:
+def merge_into_map(accounts: list[dict], state_names: list[str], *, map_path: Path | None = None,
+                   sync_hidden: list[str] | None = None) -> dict:
     """Слить строки сервера в локальную карту и скрыть/вернуть снятые.
 
     Сервер выигрывает по непустым полям; локальные (proxy_*, tracking_link…) не трогаем.
@@ -255,20 +267,26 @@ def merge_into_map(accounts: list[dict], state_names: list[str], *, map_path: Pa
     if changed:
         write_csv_atomic(path, columns, rows)
     hidden_now = hidden_accounts.load()
+    # Ревью ACL-2899: возвращаем только то, что скрыла сама синхронизация. Аккаунт, который
+    # юзер скрыл руками, остаётся скрытым, даже если он назначен на сервере.
+    ours = {_name_key(n): n for n in (sync_hidden or [])}
     hidden_done = []
     for label in to_hide:
         if hidden_accounts._key(label) not in hidden_now:
             hidden_accounts.set_hidden(label, True)
             hidden_done.append(label)
+            ours[_name_key(label)] = label
     shown_done = []
     for label in to_show:
-        if hidden_accounts._key(label) in hidden_now:
-            hidden_accounts.set_hidden(label, False)
-            shown_done.append(label)
+        if _name_key(label) in ours:
+            if hidden_accounts._key(label) in hidden_now:
+                hidden_accounts.set_hidden(label, False)
+                shown_done.append(label)
+            ours.pop(_name_key(label), None)
     for label in to_hide:
         names.setdefault(_name_key(label), label)
     return {"changed": changed or bool(hidden_done) or bool(shown_done), "names": list(names.values()),
-            "hidden": hidden_done, "shown": shown_done}
+            "hidden": hidden_done, "shown": shown_done, "sync_hidden": list(ours.values())}
 
 
 # -- главный вход ------------------------------------------------------------
@@ -294,7 +312,12 @@ def sync(http: Http | None = None, token_provider: Callable[[], str] | None = No
 def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
     scope = token_status()
     if scope == "old_scopes":
-        return {"ok": True, "status": "signin_required", "changed": False,
+        # Ревью ACL-2899: предложение войти заново — ровно один раз на машину, флаг в server_accounts.json
+        state = load_state()
+        prompt = not state["signin_prompted"]
+        if prompt:
+            _save_state(state["names"], state["etag"], signin_prompted=True)
+        return {"ok": True, "status": "signin_required", "changed": False, "prompt": prompt,
                 "message": "Sign in with Google again to get your accounts."}
     if scope == "none":
         return {"ok": True, "status": "not_signed_in", "changed": False}
@@ -326,7 +349,8 @@ def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
         log.info("User accounts: hub answered %s.", status)
         return {"ok": True, "status": "offline" if status >= 500 or status == 0 else "no_session", "changed": False}
 
-    result = merge_into_map([a for a in data["accounts"] if isinstance(a, dict)], state["names"])
-    _save_state(result["names"], str(hdrs.get("etag") or ""))
+    result = merge_into_map([a for a in data["accounts"] if isinstance(a, dict)], state["names"],
+                            sync_hidden=state["sync_hidden"])
+    _save_state(result["names"], str(hdrs.get("etag") or ""), sync_hidden=result["sync_hidden"])
     return {"ok": True, "status": "updated", "changed": result["changed"],
             "hidden": len(result["hidden"]), "shown": len(result["shown"])}

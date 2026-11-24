@@ -104,6 +104,15 @@ def test_removed_hides_and_keeps_row_then_reassign_unhides(env):
     assert not hidden_accounts.is_hidden("acc")
 
 
+def test_manual_hide_survives_sync(env):
+    # Ревью: юзер сам скрыл назначенный аккаунт — синхронизация его не возвращает
+    write_map(env, [{"account_name": "Acc"}])
+    run(Hub([acc("Acc", ad_account_id="1")], etag='"e1"'))
+    hidden_accounts.set_hidden("Acc", True)
+    run(Hub([acc("Acc", ad_account_id="2")], etag='"e2"'))
+    assert hidden_accounts.is_hidden("acc")
+
+
 def test_removed_local_only_account_is_not_hidden(env):
     write_map(env, [{"account_name": "Mine"}])
     run(Hub([acc("Mine", removed_at="2026-11-24T10:00:00Z")]))
@@ -179,6 +188,15 @@ def test_old_scopes_ask_for_sign_in_without_calling_hub(env, monkeypatch):
     hub = Hub()
     r = ua.sync(http=hub, token_provider=lambda: GOOGLE)
     assert r["status"] == "signin_required" and not hub.calls
+
+
+def test_sign_in_prompt_only_once_per_machine(env, monkeypatch):
+    # Ревью: предложение войти заново — один раз на машину, не на каждую вкладку
+    monkeypatch.setattr(ua, "token_status", lambda: "old_scopes")
+    first = ua.sync(http=Hub(), token_provider=lambda: GOOGLE)
+    second = ua.sync(http=Hub(), token_provider=lambda: GOOGLE)
+    assert first["prompt"] is True and second["prompt"] is False
+    assert second["status"] == "signin_required"
 
 
 def test_token_status_detects_old_token(tmp_path, monkeypatch):

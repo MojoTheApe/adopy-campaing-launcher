@@ -1,16 +1,12 @@
 /* ACL-2899: аккаунты юзера с хаба. Только по событиям: открытие страницы и возврат вкладки.
-   Без таймеров. Ответ тихий; единственное, что видит человек, это один раз за вкладку
-   предложение войти в Google заново (старый токен без прав на email). */
+   Без таймеров. Ответ тихий; единственное, что видит человек, это один раз на машину
+   предложение войти в Google заново (старый токен без прав на email). «Один раз» помнит
+   сервер дешборда (j.prompt), а не вкладка. */
 (function () {
   'use strict';
   if (window.__aclUserAccountsSync) return;  // сохранённая страница и свежая оба подключают файл
   window.__aclUserAccountsSync = true;
-  var busy = false, prompted = false;
-
-  function once() {
-    try { if (sessionStorage.getItem('acl_user_signin_prompted')) return false; sessionStorage.setItem('acl_user_signin_prompted', '1'); } catch (e) { if (prompted) return false; prompted = true; }
-    return true;
-  }
+  var busy = false;
 
   function sync() {
     if (busy) return;
@@ -20,7 +16,7 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j) return;
-        if (j.status === 'signin_required' && window.aclConnections && once()) window.aclConnections.open();
+        if (j.status === 'signin_required' && j.prompt && window.aclConnections) window.aclConnections.open();
         // Карта изменилась: если открыта вкладка Accounts, пусть перечитает себя на месте, без перезагрузки страницы
         if (j.changed && location.hash === '#accounts') {
           document.dispatchEvent(new CustomEvent('acl:viewchange', { detail: { view: 'accounts' } }));
