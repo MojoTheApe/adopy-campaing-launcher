@@ -548,33 +548,22 @@ def test_a_read_makes_few_calls_and_never_polls(world):
     assert world.journal[-1]["calls"] == 7
 
 
-def test_call_cap_per_read_is_our_own_budget_not_a_meta_rate_limit(world, monkeypatch):
-    monkeypatch.setenv(api.MAX_CALLS_ENV, "4")
+def test_a_read_has_no_call_cap_of_its_own(world, monkeypatch):
+    """ACL-2668 (решение 8): своего потолка вызовов у чтения нет; старый env больше не читается."""
+    monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "4")
     r = api.read_via_api(ACCOUNT, D, D)
-    assert len(world.page.specs) == 4
-    assert r.state == "ok" and r.spend == 113.87
-    assert "call budget" in r.objects_error and "Meta rate limit" not in r.objects_error
-    assert "Read stopped: call budget reached" in r.objects_error
-    assert world.stops == [], "our own cap is not reported as a Meta stop"
-    assert api._cooldown_left(sp._profile_key(ACCOUNT)) == 0, "and starts no cooldown"
-    assert world.journal[-1].get("stop") == "call_budget"
-    # Следующее чтение не отказывает без вызова.
-    monkeypatch.delenv(api.MAX_CALLS_ENV)
-    assert api.read_via_api(ACCOUNT, D, D).state == "ok"
+    assert r.state == "ok" and not r.objects_error
+    assert world.journal[-1]["calls"] == 7 and not world.journal[-1].get("stop")
+    assert not hasattr(api, "MAX_CALLS_ENV") and not hasattr(api, "DEFAULT_MAX_CALLS")
+    assert api.DEFAULT_MIN_INTERVAL_S == 1.0, "the 1 s pause between read calls stays"
 
 
-def test_call_budget_alone_reports_a_distinct_code_and_text():
+def test_a_command_allowance_stop_in_a_read_session_has_no_read_halt_code():
+    """Потолок остался только у команд в той же сессии: это не код `call_budget` и не лимит Meta."""
     exc = g.CallBudget("call budget of 4 reached")
-    assert isinstance(exc, g.RateLimited) and exc.kind == "call_budget"
     text, code = api._failure(ACCOUNT, exc)
-    assert code == "call_budget" and text.startswith("Read stopped: call budget reached")
-    assert "rate limit" not in text.lower()
-
-
-def test_call_cap_env_is_clamped(monkeypatch):
-    for raw, expected in [("999", 60), ("1", 4), ("abc", api.DEFAULT_MAX_CALLS), ("", api.DEFAULT_MAX_CALLS)]:
-        monkeypatch.setenv(api.MAX_CALLS_ENV, raw)
-        assert int(api._env_number(api.MAX_CALLS_ENV, api.DEFAULT_MAX_CALLS, 4, 60)) == expected
+    assert code == "" and "rate limit" not in text.lower()
+    assert "ACL_FB_API_MAX_CALLS" not in text
 
 
 # ───────────────────────── профиль и очередь по памяти (ACL-1580) ─────────────────────────

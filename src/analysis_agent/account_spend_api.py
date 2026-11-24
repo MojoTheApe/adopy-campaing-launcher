@@ -23,9 +23,9 @@ RPA, поэтому экран не меняется; отличается то�
   очереди (как `attach_existing_only` у RPA); окно, открытое руками, не
   трогаем — отказ с кодом `open_by_hand`.
 
-Лимиты: потолок вызовов на одно чтение (`ACL_FB_API_MAX_CALLS`) и пауза между
-ними (`ACL_FB_API_MIN_INTERVAL_S`). Заголовков лимитов из страницы не видно,
-поэтому опора — коды 4/17/32/613/80000–80014: после такого кода профиль на
+Лимиты: пауза между вызовами (`ACL_FB_API_MIN_INTERVAL_S`); своего потолка
+вызовов на чтение нет (решение владельца, ACL-2668: «надо безлимитно»).
+Заголовков лимитов из страницы не видно, поэтому опора — коды 4/17/32/613/80000–80014: после такого кода профиль на
 время «остывает», новое чтение отказывает без единого вызова.
 
 Токен сессии остаётся во вкладке: сюда приходят только JSON-ответы.
@@ -66,19 +66,13 @@ from src.fb_api.graph import (
 log = logging.getLogger(__name__)
 
 BACKEND_ENV = "ACL_FB_BACKEND"
-MAX_CALLS_ENV = "ACL_FB_API_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
 
-#: Сколько вызовов Graph одно чтение делает самое большее: кабинет, итог,
-#: кампании, объявления, итоги по кампаниям и по объявлениям — с запасом на
-#: страницы и одну пересъёмку токена.
-DEFAULT_MAX_CALLS = 24
 DEFAULT_MIN_INTERVAL_S = 1.0
 #: Сколько ждать токен Ads Manager в своей вкладке.
 READY_TIMEOUT_S = 90.0
 
 #: Сколько секунд профиль «остывает» после остановки, чтобы не стучать снова.
-#: Исчерпанный свой потолок вызовов (`call_budget`) сюда не входит: Meta молчала.
 COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0,
               "logged_out": 60.0, "page_unresponsive": 600.0}
 
@@ -668,8 +662,8 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
                        preview: bool = False):
     """Сессия поверх тёплой вкладки: замок профиля, ворота, проверка живости, клиент.
 
-    Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения,
-    потолок вызовов и причины остановки — те же, что у обычного пути, и
+    Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения
+    и причины остановки — те же, что у обычного пути, и
     считаются на каждое действие.
     """
     from src.fb_api import warm as _warm
@@ -708,7 +702,7 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
             lease.graph,
             allow_writes=bool(commands),
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
-            max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
+            max_calls=None,      # ACL-2668: без своего потолка; лимиты Meta - состояние аккаунта
         )
         sess = _Session(client=client, act=act, account=account, profile_id=profile_id)
         try:
@@ -902,7 +896,7 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False, 
             graph,
             allow_writes=bool(commands),
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
-            max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
+            max_calls=None,      # ACL-2668: без своего потолка; лимиты Meta - состояние аккаунта
         )
         sess = _Session(client=client, act=act, account=account, profile_id=profile_id)
         try:
@@ -957,8 +951,8 @@ def _failure(account: str, exc: BaseException) -> tuple[str, str]:
         return (f"The {account} profile is on a Facebook checkpoint — solve it inside Multilogin, "
                 "then Read again"), ""
     if isinstance(exc, CallBudget):
-        return ("Read stopped: call budget reached. Meta did not limit us; "
-                f"raise {MAX_CALLS_ENV} or read again. ({exc})"), "call_budget"
+        # Чтение потолка не имеет (ACL-2668); сюда доходит только потолок команды в той же сессии.
+        return f"Stopped: this action used up its call allowance. Meta did not limit us; try again. ({exc})", ""
     if isinstance(exc, RateLimited):
         wait = f" Try again in about {int(exc.retry_after_s // 60) + 1} min." if exc.retry_after_s else ""
         return f"Meta rate limit reached; the read was stopped.{wait} ({exc})", ""

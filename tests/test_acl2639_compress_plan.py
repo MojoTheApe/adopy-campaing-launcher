@@ -44,41 +44,18 @@ def test_by_default_a_large_video_goes_straight_to_chunks_without_touching_the_f
 
 # ───────────────────────── the plan and the budget ─────────────────────────
 
-def _budget_parts(plan):
-    need = cr.estimate_create_calls(plan)
-    reads = cr.estimate_targeting_reads(plan)
-    hard_max = publish_api.DEFAULT_CREATE_MAX_CALLS + publish_api._tr_cap.PUBLISH_READS_ALLOWANCE
-    return need, reads, hard_max
-
-
-def test_several_medium_videos_with_stories_files_fit_one_run_uncompressed(tmp_path, monkeypatch):
+def test_publish_without_a_call_budget_uploads_the_originals_uncompressed(tmp_path, monkeypatch):
+    """ACL-2668 (решение 8): у публикации нет своего бюджета вызовов, значит и сжатия «чтобы влезло» нет:
+    в плане - оригиналы (запас неизвестен -> `plan_upload_sizes` ничего не сжимает). Видео до порога ACL-2644
+    (500 МБ): сжатие «выше 500 МБ» - отдельное правило владельца, оно не меняется."""
     monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
-    # 3 ads, each 160 MB (main) + 70 MB (Stories / Reels): ~200 chunked calls at 5 MB windows
-    plan = B._plan(tmp_path, [160, 160, 160], monkeypatch, vertical={0: 70, 1: 70, 2: 70})
-    budget, refusal = publish_api.create_call_budget(plan)
-    need, reads, hard_max = _budget_parts(plan)
-    assert refusal == "", refusal
-    chunks = cr.estimate_upload_calls(plan, spare=hard_max - need - reads)
-    assert chunks > 150                                                         # a lot of calls ...
-    assert not any(q for _s, q in cr.plan_upload_sizes(plan, spare=hard_max - need - reads).values())   # ... that all fit
-    assert budget >= need + reads + chunks - 1 or budget == hard_max
-
-
-def test_videos_that_would_not_fit_one_run_are_budgeted_at_their_compressed_size(tmp_path, monkeypatch):
-    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
-    monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
-    plan = B._plan(tmp_path, [900, 900, 900], monkeypatch, vertical={0: 400, 1: 400, 2: 400})
-    need, reads, hard_max = _budget_parts(plan)
-    assert cr.estimate_upload_calls(plan) > hard_max                           # the originals would never fit
-    budget, refusal = publish_api.create_call_budget(plan)
-    assert refusal == "", refusal                                              # ... but the compressed plan does
-    planned = cr.plan_upload_sizes(plan, spare=hard_max - need - reads)
-    assert any(q for _s, q in planned.values())
-    assert all(size <= cr.COMPRESS_FALLBACK_CAP_MB * MB for size, _ in planned.values())
-    assert need + reads < budget <= hard_max
-    monkeypatch.setenv("ACL_VIDEO_COMPRESS_FALLBACK", "0")                     # without the fallback: the old refusal
-    assert publish_api.create_call_budget(plan)[1] != ""
+    monkeypatch.delenv("ACL_VIDEO_COMPRESS_OVER_MB", raising=False)
+    plan = B._plan(tmp_path, [480, 480, 480], monkeypatch, vertical={0: 400, 1: 400, 2: 400})
+    assert not hasattr(publish_api, "create_call_budget")
+    planned = cr.plan_upload_sizes(plan)
+    assert not any(q for _s, q in planned.values())
+    assert sorted(size for size, _ in planned.values()) == sorted([480 * MB] * 3 + [400 * MB] * 3)
 
 
 def test_videos_that_fit_chunked_are_never_planned_compressed(tmp_path, monkeypatch):

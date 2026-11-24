@@ -121,21 +121,25 @@ def load_state() -> dict:
     state = _load_json(_local(_STATE_FILE))
     names = state.get("names")
     hidden = state.get("sync_hidden")
+    seeded = state.get("seeded_for")
     return {"names": [n for n in names if isinstance(n, str)] if isinstance(names, list) else [],
             "etag": str(state.get("etag") or ""),
             # Скрытые самой синхронизацией: вернуть можно только их, ручные скрытия юзера не трогаем
             "sync_hidden": [n for n in hidden if isinstance(n, str)] if isinstance(hidden, list) else [],
             # Предложение войти заново уже показано на этой машине (один раз, не на каждую вкладку)
-            "signin_prompted": bool(state.get("signin_prompted"))}
+            "signin_prompted": bool(state.get("signin_prompted")),
+            # ACL-2901: для каких юзеров карта машины уже перенесена на хаб (один раз на юзера)
+            "seeded_for": [n for n in seeded if isinstance(n, str)] if isinstance(seeded, list) else []}
 
 
 def _save_state(names: list[str], etag: str, sync_hidden: list[str] | None = None,
-                signin_prompted: bool | None = None) -> None:
+                signin_prompted: bool | None = None, seeded_for: list[str] | None = None) -> None:
     old = load_state()
     _write_json(_local(_STATE_FILE), {
         "names": sorted(set(names), key=str.casefold), "etag": etag,
         "sync_hidden": sorted(set(old["sync_hidden"] if sync_hidden is None else sync_hidden), key=str.casefold),
         "signin_prompted": old["signin_prompted"] if signin_prompted is None else signin_prompted,
+        "seeded_for": sorted(set(old["seeded_for"] if seeded_for is None else seeded_for)),
     })
 
 
@@ -328,11 +332,8 @@ def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
 
     state = load_state()
     for attempt in (0, 1):
-        headers = {"Authorization": f"Bearer {key}", "User-Agent": "acl-dashboard"}
-        if state["etag"]:
-            headers["If-None-Match"] = state["etag"]
         try:
-            status, hdrs, data = http("GET", hub_url() + "/v1/my-accounts", headers, None)
+            status, hdrs, data = _get_my_accounts(http, key, state["etag"])
         except Exception:  # noqa: BLE001
             log.info("User accounts: hub is unreachable.")
             return {"ok": True, "status": "offline", "changed": False}
@@ -349,8 +350,101 @@ def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
         log.info("User accounts: hub answered %s.", status)
         return {"ok": True, "status": "offline" if status >= 500 or status == 0 else "no_session", "changed": False}
 
+    seeded = 0
+    email = _email_of(key)
+    if not data["accounts"] and email and email not in state["seeded_for"]:
+        # ACL-2901: у юзера на хабе пусто — один раз переносим текущую карту машины.
+        outcome = _seed(http, key)
+        if outcome is None:
+            hdrs = {}  # перенос не удался: без ETag следующая синхронизация не упрётся в 304 и повторит его
+        else:
+            seeded = outcome
+            _save_state(state["names"], state["etag"], seeded_for=[*state["seeded_for"], email])
+            try:
+                status, hdrs, fresh = _get_my_accounts(http, key, "")
+            except Exception:  # noqa: BLE001
+                status = 0
+            if status == 200 and isinstance(fresh, dict) and isinstance(fresh.get("accounts"), list):
+                data = fresh
+            else:
+                hdrs = {}  # без ETag: следующая синхронизация заберёт свежий список
+
     result = merge_into_map([a for a in data["accounts"] if isinstance(a, dict)], state["names"],
                             sync_hidden=state["sync_hidden"])
     _save_state(result["names"], str(hdrs.get("etag") or ""), sync_hidden=result["sync_hidden"])
-    return {"ok": True, "status": "updated", "changed": result["changed"],
-            "hidden": len(result["hidden"]), "shown": len(result["shown"])}
+    out = {"ok": True, "status": "updated", "changed": result["changed"],
+           "hidden": len(result["hidden"]), "shown": len(result["shown"])}
+    if seeded:
+        out["seeded"] = seeded
+    return out
+
+
+def _get_my_accounts(http: Http, key: str, etag: str) -> tuple:
+    headers = {"Authorization": f"Bearer {key}", "User-Agent": "acl-dashboard"}
+    if etag:
+        headers["If-None-Match"] = etag
+    return http("GET", hub_url() + "/v1/my-accounts", headers, None)
+
+
+def _email_of(key: str) -> str:
+    """Email из ключа юзера <email>.<exp>.<hmac>; пусто, если ключ не такого вида."""
+    parts = key.rsplit(".", 2)
+    return parts[0].lower() if len(parts) == 3 and "@" in parts[0] else ""
+
+
+# -- первый перенос карты (ACL-2901) ----------------------------------------
+
+#: Поля строки сида: ровно то, что принимает хаб. proxy_*, tracking_link и прочие локальные колонки не уходят.
+SEED_FIELDS = ("account_name", *SERVER_FIELDS)
+SEED_MAX_ROWS = 2000
+
+
+def seed_rows(map_path: Path | None = None) -> list[dict]:
+    """Строки локальной карты для сида: без скрытых на этой машине, без дублей имён, только SEED_FIELDS."""
+    from config.paths import get_ad_account_map_path
+    from src.web import hidden_accounts
+
+    path = map_path or Path(get_ad_account_map_path())
+    if not path.is_file():
+        return []
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    hidden = hidden_accounts.load()
+    out, seen = [], set()
+    for row in rows:
+        name = " ".join(str(row.get("account_name") or "").split())
+        key = _name_key(name)
+        if not key or key in seen or hidden_accounts._key(name) in hidden:
+            continue
+        seen.add(key)
+        item = {"account_name": name}
+        for field in SERVER_FIELDS:
+            val = str(row.get(field) or "").strip()
+            if val:
+                item[field] = val
+        out.append(item)
+    return out[:SEED_MAX_ROWS]
+
+
+def _seed(http: Http, key: str) -> "int | None":
+    """POST /v1/my-accounts/seed. Число перенесённых строк, если перенос состоялся или больше не нужен
+    (0 — пустая карта или хаб отказал 409: у юзера уже есть назначения). None — не вышло, повторим позже."""
+    rows = seed_rows()
+    if not rows:
+        return 0
+    body = json.dumps({"rows": rows}).encode("utf-8")
+    try:
+        status, _h, data = http("POST", hub_url() + "/v1/my-accounts/seed",
+                                {"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                                 "User-Agent": "acl-dashboard"}, body)
+    except Exception:  # noqa: BLE001
+        log.info("User accounts seed: hub is unreachable.")
+        return None
+    if status == 200:
+        n = int((data or {}).get("seeded") or 0) if isinstance(data, dict) else 0
+        log.info("User accounts seed: %s accounts moved to the hub.", n)
+        return n
+    if status == 409:
+        return 0
+    log.info("User accounts seed: hub answered %s.", status)
+    return None
