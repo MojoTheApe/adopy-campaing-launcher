@@ -91,8 +91,7 @@ class SetupGuideMatchesTheProductTests(unittest.TestCase):
 
     def test_every_setup_refusal_is_explained(self):
         messages = _messages(PACKAGING_DIR / "setup_wizard.py", {"WizardValidationError"})
-        messages += _messages(REPO_ROOT / "src" / "analysis_agent" / "stats_workbook.py", {"StatsWorkbookError"})
-        self.assertGreaterEqual(len(messages), 14, messages)
+        self.assertGreaterEqual(len(messages), 8, messages)
         for message in messages:
             # Длинный отказ в таблице приведён первой фразой.
             first_sentence = message.split(". ")[0].strip().lstrip("”").strip()
@@ -110,9 +109,14 @@ class SetupGuideMatchesTheProductTests(unittest.TestCase):
         block = block[:block.index("def _period_owner")]
         refusals = re.findall(r'"error": (?:message if|"([^"]+)")', block)
         refusals = [text for text in refusals if text]
-        self.assertGreaterEqual(len(refusals), 4, refusals)
+        # ACL-2668 №11: публикация и чтение больше не отказ — обновление ждёт
+        # конца публикации; остался отказ «уже идёт» и сбой подготовки.
+        self.assertGreaterEqual(len(refusals), 1, refusals)
         for text in refusals:
             self.assertIn(text.split(". ")[0].rstrip("."), GUIDE, text)
+        queue_source = (REPO_ROOT / "src" / "web" / "update_queue.py").read_text(encoding="utf-8")
+        waiting = re.search(r'WAITING_TEXT = "([^"]+)"', queue_source).group(1)
+        self.assertIn(waiting, GUIDE, waiting)
         page = (REPO_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
         for phrase in (
             "Update not started",

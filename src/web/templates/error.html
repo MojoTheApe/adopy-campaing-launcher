@@ -32,9 +32,49 @@
   </style>
 </head>
 <body>
+{% if onboarding %}
+  <h1 style="color:var(--adopy-text)">{{ title }}</h1>
+  <p>Sign in with your Adopy Google account to load your statistics. It takes a moment and is needed once on this computer.</p>
+  <p><button type="button" id="nd-signin" class="amap-btn primary">Sign in with Google</button></p>
+  <p id="nd-msg" role="status" style="min-height:1.4em"></p>
+  <script>
+    (function () {
+      var msg = document.getElementById('nd-msg');
+      var btn = document.getElementById('nd-signin');
+      var busy = false;
+      function say(t, bad) { msg.style.color = bad ? 'var(--adopy-danger)' : 'var(--adopy-text-muted)'; msg.textContent = t || ''; }
+      function open() { location.replace('/'); }
+      function signIn() {
+        if (busy) { return; }
+        busy = true; btn.disabled = true;
+        say('Waiting for Google sign-in in your browser…');
+        fetch('/api/connections/sign-in', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+          .then(function (j) {
+            var bi = ((j && j.checks) || []).filter(function (c) { return c.name === 'BI'; })[0];
+            if (j && j.ok && !(bi && !bi.ok)) { say('Connected. Loading the dashboard…'); open(); return; }
+            busy = false; btn.disabled = false;
+            say((bi && bi.line) || (j && j.error) || 'Could not sign in. Try again.', true);
+          })
+          .catch(function () { busy = false; btn.disabled = false; say('Could not reach the dashboard.', true); });
+      }
+      btn.onclick = signIn;
+      // The connection can also appear another way (sign-in finished in a second tab): open on our own.
+      setInterval(function () {
+        fetch('/api/connections', { cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) { if (j && j.bi && j.bi.configured) { open(); } })
+          .catch(function () {});
+      }, 3000);
+      {% if auto_sign_in %}signIn();{% endif %}
+    })();
+  </script>
+{% else %}
   <h1>{{ title }}</h1>
   <pre>{{ message }}</pre>
-{% if connect %}
+{% endif %}
+{% if connect and not onboarding %}
   <p class="hint">
     This computer gets its stats connection from your team's connection file. Sign in with
     your Adopy Google account, then check again. Nothing is shown or pasted.
@@ -44,10 +84,6 @@
     <button type="button" id="nd-check" class="amap-btn">Check again</button>
   </p>
   <p id="nd-msg" role="status" style="min-height:1.4em"></p>
-  <p class="hint">
-    No team connection file? Set <code>FB_STATS_EXCEL</code> in your shell or <code>.env</code>,
-    place the Stats workbook at that path, and reload.
-  </p>
   <script>
     (function () {
       var msg = document.getElementById('nd-msg');
@@ -71,7 +107,7 @@
       document.getElementById('nd-check').onclick = function () { run('/api/connections/check', 'Checking…'); };
     })();
   </script>
-{% else %}
+{% elif not onboarding %}
   <p class="hint">
     Set <code>FB_STATS_EXCEL</code> in your shell or <code>.env</code>, place the file at
     that path, and reload.

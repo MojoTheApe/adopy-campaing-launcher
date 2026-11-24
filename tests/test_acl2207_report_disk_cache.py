@@ -180,6 +180,25 @@ def test_old_entries_are_not_served_and_are_removed(monkeypatch):
     assert not entry_file().exists()
 
 
+def test_page_younger_than_a_day_is_served(monkeypatch):
+    # ACL-2668: свежая копия (до суток) по-прежнему показывается сразу.
+    monkeypatch.delenv("ACL_REPORT_CACHE_DAYS", raising=False)
+    report_store.save(INPUTS, KEY, PAGE)
+    now = time.time()
+    monkeypatch.setattr(report_store.time, "time", lambda: now + 23 * 3600)
+    assert report_store.load(INPUTS, KEY) is not None
+
+
+def test_page_older_than_a_day_is_not_served_and_is_removed(monkeypatch):
+    # ACL-2668: копия старше суток не показывается — байер ждёт сборку.
+    monkeypatch.delenv("ACL_REPORT_CACHE_DAYS", raising=False)
+    report_store.save(INPUTS, KEY, PAGE)
+    now = time.time()
+    monkeypatch.setattr(report_store.time, "time", lambda: now + 25 * 3600)
+    assert report_store.load(INPUTS, KEY) is None
+    assert not entry_file().exists()
+
+
 def test_age_cap_is_configurable(monkeypatch):
     report_store.save(INPUTS, KEY, PAGE)
     monkeypatch.setenv("ACL_REPORT_CACHE_DAYS", "30")
@@ -192,7 +211,7 @@ def test_expired_neighbours_are_pruned_on_save():
     other = {**INPUTS, "cm": "Old"}
     report_store.save(other, KEY, PAGE)
     old = report_store.cache_dir() / report_store.entry_name(other)
-    long_ago = time.time() - 30 * 86400
+    long_ago = time.time() - 2 * 86400  # ACL-2668: старше суток уже удаляется
     os.utime(old, (long_ago, long_ago))
     report_store.save(INPUTS, KEY, PAGE)
     assert not old.exists() and entry_file().exists()

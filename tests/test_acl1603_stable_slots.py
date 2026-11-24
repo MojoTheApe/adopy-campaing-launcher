@@ -660,3 +660,9 @@ def test_the_production_queue_reads_the_real_host_memory():
     # conftest подменяет умолчание на время теста; настоящее — в исходнике модуля.
     assert "memory: Callable[[], MemoryReading | None] = read_memory" in inspect.getsource(ps.ProfileSlots.__init__)
     assert default is not None and importlib.import_module("src.web.profile_slots").read_memory is ps.read_memory
+
+
+@pytest.fixture(autouse=True)
+def _rpa_backend_explicit(monkeypatch):
+    """ACL-2785: по умолчанию теперь api; эти тесты проверяют ветку RPA, поэтому выбирают её явно."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")

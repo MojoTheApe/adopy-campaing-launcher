@@ -181,7 +181,8 @@ class FakeMeta:
             camp = self.objs.get(obj.get("campaign_id", ""))
             if camp:
                 row["campaign"] = {k: camp.get(k) for k in
-                                   ("id", "name", "status", "effective_status", "daily_budget", "bid_strategy")
+                                   ("id", "name", "status", "effective_status", "daily_budget", "lifetime_budget",
+                                    "bid_strategy")
                                    if camp.get(k) is not None}
         if kind == "ad":
             ads = self.objs.get(obj.get("adset_id", ""))
@@ -342,10 +343,85 @@ def test_budget_skips_objects_that_do_not_own_one(world):
     assert reasons[CAMP_A] == "No daily budget on this object"
 
 
-def test_budget_lifetime_is_not_edited(world):
-    world.meta.objs[SET_BID]["lifetime_budget"] = "90000"
+def _lifetime_world(world):
+    """Кампания и ад-сет (не CBO) с lifetime-бюджетом, плюс CBO-кампания и её ад-сет."""
+    world.meta.objs[CAMP_A]["lifetime_budget"] = "90000"
+    world.meta.objs[SET_BID].pop("daily_budget")
+    world.meta.objs[SET_BID]["lifetime_budget"] = "60000"
+    world.meta.objs[CAMP_CBO].pop("daily_budget")
+    world.meta.objs[CAMP_CBO]["lifetime_budget"] = "80000"
+
+
+def test_budget_lifetime_campaign_and_adset_are_listed_with_lifetime_wording(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "10", [t("campaign", CAMP_A), t("adset", SET_BID)])
+    assert pv["skipped"] == []
+    rows = {a["id"]: a for a in pv["affected"]}
+    assert rows[CAMP_A]["field"] == "lifetime_budget"
+    assert rows[CAMP_A]["before_display"] == "900.00 USD lifetime" and rows[CAMP_A]["after_display"] == "10.00 USD lifetime"
+    assert rows[SET_BID]["before_display"] == "600.00 USD lifetime"
+
+
+def test_budget_daily_wording_is_unchanged(world):
     pv = world.preview("set_budget", "10", [t("adset", SET_BID)])
-    assert pv["affected"] == [] and "Lifetime" in pv["skipped"][0]["reason"]
+    assert pv["affected"][0]["field"] == "daily_budget"
+    assert "lifetime" not in pv["affected"][0]["before_display"] + pv["affected"][0]["after_display"]
+
+
+def test_budget_adset_under_cbo_lifetime_campaign_is_skipped(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "10", [t("adset", SET_CBO)])
+    assert pv["affected"] == [] and pv["skipped"][0]["reason"] == "Budget is set on the campaign"
+
+
+def test_budget_lifetime_execute_writes_lifetime_and_reads_it_back(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "25.50", [t("campaign", CAMP_A), t("adset", SET_BID)])
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == "Succeeded"
+    assert sorted(world.meta.posts) == sorted([(f"/{CAMP_A}", {"lifetime_budget": "2550"}),
+                                               (f"/{SET_BID}", {"lifetime_budget": "2550"})])
+    assert all(a["result"] == "saved" and a["saved"] == 2550 for a in done["affected"])
+    assert world.meta.objs[CAMP_A]["lifetime_budget"] == "2550"
+
+
+def test_budget_lifetime_revision_id_follows_the_field(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "10", [t("campaign", CAMP_A)])
+    other = {**pv, "affected": [{**pv["affected"][0], "field": "daily_budget"}]}
+    assert cmd._revision_id(other) != pv["revision_id"]
+
+
+def test_budget_lifetime_readback_mismatch_is_failed(world):
+    _lifetime_world(world)
+    world.meta.fail_next[CAMP_A] = "drop"
+    pv = world.preview("set_budget", "20", [t("campaign", CAMP_A)])
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["affected"][0]["result"] == "mismatch" and done["affected"][0]["saved"] == 1
+
+
+def test_budget_lifetime_meta_refusal_stays_on_its_row_and_others_proceed(world):
+    _lifetime_world(world)
+    world.meta.fail_next[CAMP_A] = "refuse"
+    pv = world.preview("set_budget", "20", [t("campaign", CAMP_A), t("adset", SET_BID)])
+    world.execute(pv)
+    done = world.final(pv)
+    rows = {a["id"]: a for a in done["affected"]}
+    assert rows[CAMP_A]["result"] == "refused" and "Meta refused" in rows[CAMP_A]["note"]
+    assert rows[SET_BID]["result"] == "saved" and rows[SET_BID]["note"] == ""
+    assert world.meta.objs[CAMP_A]["lifetime_budget"] == "90000"
+    assert world.meta.objs[SET_BID]["lifetime_budget"] == "2000"
+
+
+def test_budget_lifetime_changed_since_preview_writes_nothing(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "20", [t("campaign", CAMP_A)])
+    world.meta.objs[CAMP_A]["lifetime_budget"] = "95000"        # кто-то поменял в Ads Manager
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == "Failed" and world.meta.posts == []
 
 
 @pytest.mark.parametrize("value", ["0", "0.00", "-5", "abc", "", "1.234", "1e3", "10,5", "  "])
@@ -580,8 +656,7 @@ def test_status_values_other_than_active_paused_are_refused(world, value):
 @pytest.mark.parametrize("targets", [None, [], "x", [{"level": "account", "id": "1000001"}],
                                      [{"level": "campaign", "id": "12"}],
                                      [{"level": "campaign", "id": "../1000001"}],
-                                     [{"level": "campaign", "id": f"{ACT}"}], ["1000001"],
-                                     [t("campaign", str(1000001 + i)) for i in range(cmd.MAX_TARGETS + 1)]])
+                                     [{"level": "campaign", "id": f"{ACT}"}], ["1000001"]])
 def test_bad_targets_are_refused(world, targets):
     with pytest.raises(cmd.CommandRefused):
         world.preview("set_status", "ACTIVE", targets)
@@ -672,21 +747,72 @@ def test_trailing_newline_in_paths_is_refused():
                                                       "status": "PAUSED"})
 
 
-def test_session_budget_is_capped_by_the_operator_ceiling(world, monkeypatch):
+def test_session_budget_is_capped_by_the_operator_ceiling_per_chunk(world, monkeypatch):
     monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "10")
     assert cmd.call_ceiling() == 10 and cmd.call_budget(20) == 10
-    assert cmd.max_targets_for_ceiling() == 3
+    assert cmd.chunk_size() == 3
     targets = [t("campaign", CAMP_A), t("campaign", CAMP_CBO), t("adset", SET_BID), t("adset", SET_AUTO)]
-    with pytest.raises(cmd.CommandRefused) as ei:
-        world.preview("set_status", "ACTIVE", targets)
-    assert "At most 3 objects" in str(ei.value) and world.sessions == []
-    pv = world.preview("set_status", "ACTIVE", targets[:3])
+    pv = world.preview("set_status", "ACTIVE", targets)          # ACL-2668: больше куска — не отказ
     world.execute(pv)
-    assert world.clients[-1].max_calls == 10 and world.final(pv)["state"] == "Succeeded"
+    assert world.clients[-1].max_calls <= 10 and world.final(pv)["state"] == "Succeeded"
     monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "999")
     assert cmd.call_ceiling() == 60
     monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "junk")
     assert cmd.call_ceiling() == 24
+
+
+def _many_campaigns(world, n):
+    """`n` выключенных кампаний в кабинете (копии Camp A)."""
+    ids = [str(3000001 + i) for i in range(n)]
+    for i, oid in enumerate(ids):
+        world.meta.objs[oid] = {**world.meta.objs[CAMP_A], "id": oid, "name": f"Bulk {i}"}
+    return ids
+
+
+def test_any_number_of_objects_runs_in_chunks_without_asking(world, monkeypatch):
+    """ACL-2668, решение 30: потолков 20 объектов и 24 вызовов на команду нет — ACL идёт кусками."""
+    monkeypatch.delenv("ACL_FB_API_MAX_CALLS", raising=False)
+    ids = _many_campaigns(world, 45)
+    budgets = []
+    real_reset = g.GraphClient.reset_budget
+
+    def spy(self, max_calls):
+        budgets.append(int(max_calls))
+        real_reset(self, max_calls)
+    monkeypatch.setattr(g.GraphClient, "reset_budget", spy)
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", oid) for oid in ids])
+    assert len(pv["affected"]) == 45 and pv["skipped"] == []
+    assert max(budgets) <= cmd.call_ceiling() == 24             # потолок оператора — на кусок
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == cmd.SUCCEEDED, done["message"]
+    assert [a["result"] for a in done["affected"]] == ["saved"] * 45
+    assert all(world.meta.objs[oid]["status"] == "ACTIVE" for oid in ids)
+    assert len(world.meta.posts) == 45                           # одна запись на объект, без повторов
+    assert max(budgets) <= 24
+    assert all(c.calls <= c.max_calls for c in world.clients)
+
+
+def test_chunks_keep_the_reread_before_any_write(world, monkeypatch):
+    """Изменился объект из последнего куска — не пишем ничего, и в первых кусках тоже."""
+    monkeypatch.delenv("ACL_FB_API_MAX_CALLS", raising=False)
+    ids = _many_campaigns(world, 30)
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", oid) for oid in ids])
+    world.meta.objs[ids[-1]]["status"] = "ACTIVE"
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == cmd.FAILED and done["stale"] is True and world.meta.posts == []
+
+
+def test_a_refused_write_in_a_later_chunk_stops_the_rest_and_reports_per_object(world, monkeypatch):
+    monkeypatch.delenv("ACL_FB_API_MAX_CALLS", raising=False)
+    ids = _many_campaigns(world, 20)
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", oid) for oid in ids])
+    world.meta.fail_next[ids[12]] = "refuse"
+    world.execute(pv)
+    results = [a["result"] for a in world.final(pv)["affected"]]
+    assert results[:12] == ["saved"] * 12 and results[12] == "refused"
+    assert results[13:] == ["not_attempted"] * 7
 
 
 def test_get_store_is_created_once_under_concurrency(monkeypatch, tmp_path):
@@ -838,7 +964,7 @@ def web(monkeypatch, tmp_path):
     cmd._STORES.clear()
 
 
-@pytest.mark.parametrize("backend", [None, "rpa", "", "graph"])
+@pytest.mark.parametrize("backend", ["rpa"])
 def test_rpa_backend_refuses_every_endpoint(web, monkeypatch, backend):
     cc, w = web
     if backend is None:
@@ -886,7 +1012,7 @@ def test_routes_are_registered_and_refuse_under_rpa(monkeypatch):
 
     from src.web import app as web
 
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     paths = {(r.path, tuple(sorted(r.methods))) for r in web.app.routes if hasattr(r, "methods")}
     assert ("/campaign-commands/preview", ("POST",)) in paths
     assert ("/campaign-commands/execute", ("POST",)) in paths

@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import date, datetime, time as dtime
 
 from src.analysis_agent.status_resolve import (
-    STATUS_FRESH_HOURS,  # noqa: F401 — порог здесь же, чтобы владелец менял его в одном месте
+    STATUS_FRESH_HOURS,
+    parse_stamp,
     read_label,
     resolve_status,
 )
@@ -23,8 +24,8 @@ STATE_LABELS = {
 #: Статусы кабинета, которые считаются проблемой (остальное, кроме disabled/clear, — тоже).
 ISSUE_STATUSES = frozenset({"restricted", "blocked", "review"})
 DEAD_STATUSES = frozenset({"disabled"})
-#: Чтение старше стольких суток приглушается и получает «· Nd».
-STATE_STALE_DAYS = 3
+# ACL-2668 (решение 25): одно правило свежести статуса — STATUS_FRESH_HOURS (24 ч)
+# из status_resolve; своего порога в сутках здесь больше нет.
 #: Строк в блоке страны до «Show N more» (Expanded).
 AOV_ROWS_COLLAPSED = 15
 
@@ -118,10 +119,53 @@ def _status_tip(code: str, res: dict, st: dict, label: str, by_spend: bool = Fal
     return ""
 
 
-def stale_clear_too_old(at: str, today: date) -> bool:
-    """Удачное чтение `clear` старше STATE_STALE_DAYS (или без даты) не считается фактом."""
-    day = _parse_day(at)
-    return day is None or (today - day).days > STATE_STALE_DAYS
+def _person_lock(hold) -> dict | None:
+    """ACL-2653: words of a Facebook user lock from a profile hold (`account_blocks.view`), else None.
+
+    The Facebook user lock (a person checkpoint) is not an ad account restriction: different words, both red."""
+    if not isinstance(hold, dict) or not hold.get("person_lock"):
+        return None
+    try:
+        since = datetime.fromtimestamp(float(hold.get("at"))).strftime("%d.%m")
+    except (TypeError, ValueError, OverflowError, OSError):
+        since = ""
+    try:
+        seen = datetime.fromtimestamp(float(hold.get("seen") or hold.get("at"))).strftime("%d.%m %H:%M")
+    except (TypeError, ValueError, OverflowError, OSError):
+        seen = ""
+    login = hold.get("page") == "login"
+    word = "Logged out of Facebook" if login else "Facebook locked"
+    title = " ".join(str(hold.get("title") or "").split())
+    if title:
+        # ACL-2841: Meta's own text from the tab title; without a readable title the fixed wording stays.
+        head = f'Facebook says: "{title}".'
+    elif login:
+        head = "The profile is logged out of Facebook."
+    else:
+        head = "The Facebook user of this profile is locked (for example: log in with another device to unlock it)."
+    return {
+        "word": word,
+        "line": word + (f" · since {since}" if since else "") + (f" · read {seen}" if seen else ""),
+        "tip": (head + " " + str(hold.get("next") or "Solve it in the open profile window, then press Retry.")).strip(),
+    }
+
+
+def stale_clear_too_old(at: str, now: datetime) -> bool:
+    """Удачное чтение `clear` старше STATUS_FRESH_HOURS (или без времени) не считается фактом."""
+    stamp = parse_stamp(at)
+    return stamp is None or (now - stamp).total_seconds() / 3600 > STATUS_FRESH_HOURS
+
+
+def read_ago(age_hours: float | None) -> str:
+    """Возраст чтения рядом с зелёным статусом: `12m ago`, `3h ago` (ACL-2668, решение 25)."""
+    if age_hours is None:
+        return ""
+    minutes = max(0, int(age_hours * 60))
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return f"{minutes}m ago"
+    return f"{minutes // 60}h ago"
 
 
 def account_state(row: dict, today: date | None = None) -> dict:
@@ -147,9 +191,13 @@ def account_state(row: dict, today: date | None = None) -> dict:
     # Не распознанный API-код (`unknown` со словами Meta) — тоже незнание, не «нет статуса».
     has_status = bool(code)
 
+    lock = _person_lock(row.get("hold"))
     by_spend = False
     if code in DEAD_STATUSES:
         key = "dead"
+    elif lock:
+        # ACL-2653: the person's Facebook user is locked. A saved `clear`, however fresh, says nothing about it.
+        key = "issue"
     elif code in ISSUE_STATUSES:
         key = "issue"
     elif res["known"] and code == "clear":
@@ -159,7 +207,7 @@ def account_state(row: dict, today: date | None = None) -> dict:
         # аккаунт, который тратит; тяжёлые статусы выше уже выиграли.
         key = "active"
         by_spend = True
-    elif code == "clear" and not stale_clear_too_old(at, today):
+    elif code == "clear" and not stale_clear_too_old(at, now):
         # Последнее удачное чтение было active/clear не старше порога, новое упало.
         key = "active"
         by_spend = True
@@ -172,12 +220,15 @@ def account_state(row: dict, today: date | None = None) -> dict:
 
     read_day = _parse_day(at)
     age_days = (today - read_day).days if read_day else None
-    stale = bool(st.get("stale")) or (age_days is not None and age_days > STATE_STALE_DAYS)
+    age_hours = res["age_hours"]
+    stale = bool(st.get("stale")) or (age_hours is not None and age_hours > STATUS_FRESH_HOURS)
 
     elsewhere = row.get("elsewhere") or {}
     label = read_label(at, now)
     tried_label = read_label(st.get("tried_at") or "", now) if (st.get("tried_at") or st.get("tried_error")) else ""
-    if key in ("issue", "dead"):
+    if lock and key == "issue" and code not in ISSUE_STATUSES:
+        reason = lock["word"]
+    elif key in ("issue", "dead"):
         reason = text or short_reason(code, text)
     elif key == "unknown":
         tried = _short_date(st.get("tried_at") or "")
@@ -197,6 +248,11 @@ def account_state(row: dict, today: date | None = None) -> dict:
     if key in ("unknown", "new") and elsewhere and not reason.startswith("spend filed"):
         reason = f"{reason} · spend filed under " + ", ".join(str(k) for k in elsewhere)
 
+    status_line = _status_line(code, text, res, st, label, tried_label,
+                               bool(row.get("act_id") or row.get("profile_id")), key, by_spend)
+    status_tip = _status_tip(code, res, st, label, by_spend, tried_label)
+    if lock and key == "issue" and code not in ISSUE_STATUSES:
+        status_line, status_tip = lock["line"], lock["tip"]
     return {
         "key": key,
         "label": STATE_LABELS[key],
@@ -210,10 +266,12 @@ def account_state(row: dict, today: date | None = None) -> dict:
         # ACL-2419: слово статуса из Meta и время чтения для ячейки состояния.
         "status_word": res["shown"],
         "status_read": label,
-        "status_line": _status_line(code, text, res, st, label, tried_label,
-                                    bool(row.get("act_id") or row.get("profile_id")), key, by_spend),
-        "status_tip": _status_tip(code, res, st, label, by_spend, tried_label),
+        "status_line": status_line,
+        "status_tip": status_tip,
+        "person_lock": bool(lock),
         "by_spend": by_spend,
+        # Зелёный статус из свежего чтения показывает возраст: «Active · 3h ago».
+        "read_ago": read_ago(age_hours) if key == "active" and not by_spend and res["known"] else "",
     }
 
 

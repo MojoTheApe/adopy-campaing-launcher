@@ -24,9 +24,11 @@ from src.meta_campaign_agent.multilogin_launcher import StartedProfile
 @pytest.fixture(autouse=True)
 def _quiet(monkeypatch):
     # Журнал пилота и остановок — не на диск машины; холодные отметки — свои.
+    # ACL-2668: паузу после остановки (по умолчанию 0) включаем аварийным рычагом — 180 с.
+    monkeypatch.setenv(stop_log.RESTART_COOLDOWN_ENV, "180")
     monkeypatch.setattr(launch, "_record", lambda event: None)
     monkeypatch.setattr(stop_log, "refusal", lambda pid, log_=None: "")
-    monkeypatch.setattr(launch, "_PACER", launch.StartPacer(gap=lambda: 0.0))
+    monkeypatch.setattr(launch, "_PACER", launch.StartPacer(limit=lambda: 0))
     from src.fb_api import mlx_session
     monkeypatch.setattr(mlx_session, "note_failure", lambda *a, **k: None)
     launch._COLD.clear()
@@ -123,18 +125,20 @@ def test_timeouts_and_proxy_auth_on_mlx_start_are_never_retried(not_running, err
 
 # ───────────────────────── темп стартов MLX ─────────────────────────
 
-def test_mlx_starts_go_one_at_a_time_and_a_queued_start_waits_the_gap():
-    slept = []
-    pacer = launch.StartPacer(limit=lambda: 1, gap=lambda: 3.0, sleep=slept.append)
+def _peak_of_three_starts(pacer):
     inside, peak = [0], [0]
     lock = threading.Lock()
+    both_in = threading.Barrier(3, timeout=0.5)
 
     def start():
         with pacer.slot():
             with lock:
                 inside[0] += 1
                 peak[0] = max(peak[0], inside[0])
-            time.sleep(0.05)
+            try:
+                both_in.wait()   # без потолка все три окажутся внутри разом
+            except threading.BrokenBarrierError:
+                pass
             with lock:
                 inside[0] -= 1
 
@@ -143,24 +147,42 @@ def test_mlx_starts_go_one_at_a_time_and_a_queued_start_waits_the_gap():
         t.start()
     for t in threads:
         t.join(5)
-    assert peak[0] == 1
-    assert len(slept) == 2 and all(0 < s <= 3.0 for s in slept)   # ждавшие — с паузой
+    return peak[0]
 
 
-def test_a_lone_start_never_sleeps():
-    slept = []
-    pacer = launch.StartPacer(limit=lambda: 1, gap=lambda: 3.0, sleep=slept.append)
+def test_mlx_starts_have_no_separate_limit_by_default(monkeypatch):
+    # ACL-2668 п. 12: разом стартует столько, сколько пустило место «Profiles at once».
+    monkeypatch.delenv(launch.PARALLEL_STARTS_ENV, raising=False)
+    assert launch.parallel_starts() == 0
+    assert _peak_of_three_starts(launch.StartPacer()) == 3
+
+
+def test_emergency_cap_still_limits_starts_without_any_gap():
+    pacer = launch.StartPacer(limit=lambda: 1)
+    assert _peak_of_three_starts(pacer) == 1
+
+
+def test_there_is_no_gap_between_starts():
+    assert not hasattr(launch, "START_GAP_ENV")
+    assert not hasattr(launch, "start_gap_s")
+    pacer = launch.StartPacer(limit=lambda: 1)
+    began = time.monotonic()
     for _ in range(3):
-        with pacer.slot():
-            pass
-    assert slept == []
+        with pacer.slot() as info:
+            assert info["waited_s"] == 0.0
+    assert time.monotonic() - began < 0.5
 
 
-def test_parallel_starts_setting_is_bounded(monkeypatch):
-    monkeypatch.setenv(launch.PARALLEL_STARTS_ENV, "9")
-    assert launch.parallel_starts() == 4
-    monkeypatch.setenv(launch.PARALLEL_STARTS_ENV, "x")
-    assert launch.parallel_starts() == launch.DEFAULT_PARALLEL_STARTS
+def test_parallel_starts_setting_is_an_emergency_cap_only(monkeypatch):
+    monkeypatch.setenv(launch.PARALLEL_STARTS_ENV, "2")
+    assert launch.parallel_starts() == 2
+    for raw in ("", "0", "x"):
+        monkeypatch.setenv(launch.PARALLEL_STARTS_ENV, raw)
+        assert launch.parallel_starts() == 0
+
+
+def test_single_retry_after_mlx_drop_is_kept():
+    assert launch.START_RETRY_DELAY_S > 0
 
 
 # ───────────────────────── холодный бюджет CDP ─────────────────────────
@@ -276,7 +298,8 @@ def test_mlx_listing_a_profile_we_just_stopped_is_not_attached(monkeypatch):
     assert err.value.code == "restart_cooldown"
 
 
-def test_recent_stop_is_only_reported_during_the_cooldown(tmp_path):
+def test_recent_stop_is_only_reported_during_the_cooldown(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_PROFILE_RESTART_COOLDOWN_S", "180")     # ACL-2818: the code default is now 0 s
     now = [1000.0]
     log = stop_log.StopLog(tmp_path / "stops.json", wall=lambda: now[0])
     log.record("P1")
@@ -422,14 +445,22 @@ def test_proxy_auth_race_on_the_probe_is_retried_once_and_facebook_is_never_hit_
     tab, cdp, slept = _nav_tab([AUTH, ""])
     tab.navigate(FB)
     assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL, launch.DEFAULT_PROXY_PROBE_URL, FB]
-    assert slept == [launch.PROXY_RETRY_S]
+    assert slept == [launch.PROXY_PROBE_POLL_S]      # ACL-2792: быстрая проба, не 12 с
 
 
-def test_proxy_auth_error_on_the_retry_is_final():
-    tab, cdp, slept = _nav_tab([AUTH, AUTH])
+def test_proxy_that_answers_two_seconds_after_the_first_failure_is_accepted_fast():
+    tab, cdp, slept = _nav_tab([AUTH, AUTH, ""])
+    tab.navigate(FB)
+    assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL] * 3 + [FB]
+    assert sum(slept) <= 2.0
+
+
+def test_dead_proxy_fails_with_the_same_message_after_the_same_total_budget():
+    tab, cdp, slept = _nav_tab([AUTH] * 50)
     with pytest.raises(cdp_mod.PageError, match="ERR_INVALID_AUTH_CREDENTIALS"):
         tab.navigate(FB)
-    assert FB not in cdp.urls and len(slept) == 1
+    assert sum(slept) == launch.PROXY_RETRY_S
+    assert set(cdp.urls) == {launch.DEFAULT_PROXY_PROBE_URL}    # только нейтральный хост, не Meta
 
 
 def test_proxy_auth_error_on_a_warm_profile_is_final():

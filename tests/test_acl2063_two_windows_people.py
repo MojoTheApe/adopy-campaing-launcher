@@ -341,7 +341,7 @@ def test_two_standard_windows_users_share_machine_union_results_stop_and_recover
             report.write("\n### ACL-2063: two real standard Windows users — passed\n\n"
                          "Distinct native SIDs, profiles and private configs joined one logical window. "
                          "Union A/B + B/C read three targets once, maximum one actual reader; both local caches "
-                         "received their complete lists. Shared checkpoint survived restart and cleared only "
+                         "received their complete lists. Shared Multilogin stop survived restart and cleared only "
                          "after explicit successful recovery. Private sentinel bytes stayed unchanged. "
                          "Actual new ProgramData coordination permissions supported cross-user atomic replacement; "
                          "unsupported existing permissions refused. Synthetic transport only: no Meta/MLX calls. "

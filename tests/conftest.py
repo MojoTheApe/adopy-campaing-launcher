@@ -102,6 +102,19 @@ def _heavy_tab_fakes_pin_light_tab_off(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _profile_ceiling_not_from_the_test_machine(monkeypatch):
+    # ACL-2668: потолок профилей по умолчанию зависит от памяти машины. Тесты не должны
+    # зависеть от памяти ноутбука/CI: память «не прочиталась» → потолок DEFAULT_CEILING (2).
+    # Тесты ступеней подменяют `machine_total_mb` сами.
+    from src.web import profile_slots
+    def unknown_memory():
+        return None
+    unknown_memory.__wrapped__ = profile_slots.machine_total_mb   # настоящая — для теста кэша
+    monkeypatch.setattr(profile_slots, "machine_total_mb", unknown_memory)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _machine_config_off_the_live_folder(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path_factory.mktemp("acl_config")))
     yield
@@ -251,6 +264,11 @@ def _slot_queue_never_reads_the_host_memory(monkeypatch):
     # Свежая очередь на каждый тест: окна, оставленные прошлым тестом
     # (`keep`), не должны занимать места следующему.
     monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(memory=plenty))
+    # ACL-2668: отчёт откладывает сборку, пока память занята (порог 92 %) — на
+    # занятой машине разработчика тесты отчёта иначе видели бы «отложено».
+    from src.web import cache as _report_cache
+
+    monkeypatch.setattr(_report_cache, "_read_memory", plenty)
     yield
 
 

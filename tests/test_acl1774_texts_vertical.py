@@ -681,7 +681,7 @@ def test_reused_pair_cannot_pass_readback_without_its_media_labels(tmp_path):
 def test_changed_feed_after_a_partial_run_gets_a_new_creative_without_duplicate_upload(tmp_path):
     meta = FakeMeta()
     draft = _ad_with(tmp_path, vertical=None, texts=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.stop_kind == "unknown"
     assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 1
@@ -773,7 +773,7 @@ def test_partial_video_retry_ignores_an_expiring_thumbnail_url_in_creative_ident
     monkeypatch.setattr(cr.CampaignCreator, "_wait_video", wait)
     meta = ChunkMeta()
     meta.next_id = 100000
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.stop_kind == "unknown"
     second, _ = _run(meta, draft)
