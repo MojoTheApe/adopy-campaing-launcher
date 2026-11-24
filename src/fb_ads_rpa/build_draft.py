@@ -187,6 +187,7 @@ def slots_to_campaign_drafts(
             language_provided=first_campaign.get("language_provided", "language" in first_campaign),
             page_id=str(first_campaign.get("page_id") or "").strip() or None,
             page_provided="page_id" in first_campaign,
+            pixel_id=str(first_campaign.get("campaign_pixel_id") or "").strip(),
             ad_sets=ad_sets,
             warnings=warnings,
         )
@@ -199,6 +200,8 @@ def slots_to_campaign_drafts(
                                     else f"No ads in ad set {ad_set.name!r}")
         if any(str(s.get("page_id") or "").strip() != str(first_campaign.get("page_id") or "").strip() for s in group):
             draft.errors.append("Campaigns with the same name have different Facebook Page choices. Give each campaign a distinct name.")
+        if any(str(s.get("campaign_pixel_id") or "").strip() != str(first_campaign.get("campaign_pixel_id") or "").strip() for s in group):
+            draft.errors.append("Campaigns with the same name have different Pixel choices. Give each campaign a distinct name.")
         if budget is None:
             draft.errors.append("Daily budget missing")
         drafts.append(draft)

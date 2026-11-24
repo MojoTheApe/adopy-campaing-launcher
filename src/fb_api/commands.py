@@ -64,7 +64,7 @@ AUTOMATIC_BID_TEXT = "Automatic · no manual bid"
 READ_FIELDS = {
     "campaign": "name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_strategy",
     "adset": ("name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_amount,"
-              "bid_strategy,campaign_id,campaign{id,name,status,effective_status,daily_budget,bid_strategy}"),
+              "bid_strategy,campaign_id,campaign{id,name,status,effective_status,daily_budget,lifetime_budget,bid_strategy}"),
     "ad": ("name,account_id,status,effective_status,adset_id,campaign_id,"
            "adset{id,name,status,effective_status},campaign{id,name,status,effective_status}"),
 }
@@ -225,6 +225,12 @@ class OperationStore:
                     return op
         return None
 
+    def others_running(self, account: str, op_id: str) -> bool:
+        """ACL-2789: есть ли другая принятая, ещё не завершённая команда этого аккаунта."""
+        with self._lock:
+            return any(o.get("account") == account and o.get("op_id") != op_id
+                       and o.get("state") in (RUNNING, VERIFYING) for o in self._ops.values())
+
     def save(self, op: dict) -> None:
         """Обязательное сохранение: перед любой записью в Meta. Бросает `HistoryUnavailable`."""
         with self._lock:
@@ -351,6 +357,7 @@ def read_object(client: Any, act: str, level: str, oid: str) -> dict:
                             "status": str(p.get("status") or ""),
                             "effective_status": str(p.get("effective_status") or ""),
                             "daily_budget": _int(p.get("daily_budget")),
+                            "lifetime_budget": _int(p.get("lifetime_budget")),
                             "bid_strategy": str(p.get("bid_strategy") or "")})
     return {"id": oid, "level": level, "name": str(raw.get("name") or oid)[:160],
             "status": str(raw.get("status") or ""),
@@ -362,11 +369,11 @@ def read_object(client: Any, act: str, level: str, oid: str) -> dict:
             "parents": parents}
 
 
-def current_value(command: str, snap: dict) -> Any:
+def current_value(command: str, snap: dict, field: str = "daily_budget") -> Any:
     if command == "set_status":
         return snap["status"]
     if command == "set_budget":
-        return snap["daily_budget"]
+        return snap[field if field in ("daily_budget", "lifetime_budget") else "daily_budget"]
     return snap["bid_amount"]
 
 
@@ -402,18 +409,20 @@ def plan_one(command: str, snap: dict, new: Any, currency: str) -> tuple[dict | 
     if command == "set_budget":
         if level == "ad":
             return None, "Ads have no budget"
-        if snap["lifetime_budget"]:
-            return None, "Lifetime budget is not supported here"
-        before = snap["daily_budget"]
+        # Дневной бюджет приоритетнее; иначе объект владеет lifetime-бюджетом (как в bulk_edit).
+        field = "daily_budget" if snap["daily_budget"] else "lifetime_budget" if snap["lifetime_budget"] else ""
+        before = snap[field] if field else None
         if not before:
             camp = next((p for p in snap["parents"] if p["level"] == "campaign"), None)
-            if level == "adset" and camp and camp["daily_budget"]:
+            if level == "adset" and camp and (camp["daily_budget"] or camp.get("lifetime_budget")):
                 return None, "Budget is set on the campaign"
             return None, "No daily budget on this object"
         if before == new:
             return None, "Already at this budget"
-        entry = {**head, "field": "daily_budget", "before": before, "after": new,
-                 "before_display": fmt_minor(before, currency), "after_display": fmt_minor(new, currency),
+        kind = " lifetime" if field == "lifetime_budget" else ""
+        entry = {**head, "field": field, "before": before, "after": new,
+                 "before_display": fmt_minor(before, currency) + kind,
+                 "after_display": fmt_minor(new, currency) + kind,
                  "constraints": []}
         return entry, ""
     # set_bid
@@ -536,7 +545,7 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
                                           f"(Graph error {exc.code})"})
                 continue
             saved = (baseline or {}).get(t["level"] + ":" + t["id"], {})
-            for field in ("status", "daily_budget", "bid_amount", "bid_strategy"):
+            for field in ("status", "daily_budget", "lifetime_budget", "bid_amount", "bid_strategy"):
                 known = saved.get(field)
                 if known not in (None, "") and snap.get(field) != known:
                     raise CommandRefused(
@@ -580,7 +589,8 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
             idempotency_key: str, spawn: Callable[[Callable[[], None]], None] | None = None,
             sleep: Callable[[float], None] = time.sleep,
             after_write: Callable[[dict, Any], None] | None = None,
-            on_stale: Callable[[dict], None] | None = None) -> dict:
+            on_stale: Callable[[dict], None] | None = None,
+            after_release: Callable[[dict], None] | None = None) -> dict:
     """Принять подтверждение человека и запустить операцию. Возвращает её состояние.
 
     Тот же ключ — тот же ответ, записей больше нет. Превью исполняется один раз.
@@ -610,7 +620,7 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
         op["idempotency_key"] = key
         op["state"] = RUNNING
         op["message"] = "Re-reading current values"
-        if after_write is not None or on_stale is not None:
+        if after_write is not None or on_stale is not None or after_release is not None:
             op["refresh_pending"] = True
         for item in op["affected"]:
             item["result"] = "pending"
@@ -634,9 +644,17 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
                 callbacks["after_write"] = after_write
             if on_stale is not None:
                 callbacks["on_stale"] = on_stale
+            if after_release is not None:
+                callbacks["after_release"] = after_release
             run_op(store, op_id, open_session, sleep=sleep, **callbacks)
         except BaseException as exc:  # noqa: BLE001 — операция не должна остаться в Running
             _finish_after_crash(store, op_id, exc)
+            crashed = store.get(op_id)
+            if after_release is not None and crashed is not None:
+                try:
+                    after_release(crashed)   # ACL-2789: отложенное обновление списка не должно пропасть
+                except Exception:  # noqa: BLE001
+                    log.warning("The campaign list could not be queued for refresh after a command crash.")
 
     with store._lock:
         started = snapshot(op)  # ответ — состояние на момент принятия (Running), не итог
@@ -672,7 +690,8 @@ RUNNERS: dict[str, Callable[..., None]] = {}
 def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
            sleep: Callable[[float], None] = time.sleep,
            after_write: Callable[[dict, Any], None] | None = None,
-           on_stale: Callable[[dict], None] | None = None) -> None:
+           on_stale: Callable[[dict], None] | None = None,
+           after_release: Callable[[dict], None] | None = None) -> None:
     op = store.get(op_id)
     assert op is not None
     try:
@@ -704,9 +723,22 @@ def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
                 on_stale(op)
             except Exception:  # noqa: BLE001 — отказ записи остаётся отказом
                 log.warning("The stale campaign list could not be queued for refresh. Nothing was retried.")
+        if after_release is not None:
+            # ACL-2789: профиль уже отпущен (выход из `with open_session`); обновление списка
+            # идёт после этого и не держит следующую команду того же аккаунта. Зовётся при любом
+            # исходе: колбэк сам решает, нужно ли чтение (`wrote`) и не его ли очередь.
+            try:
+                after_release(op)
+            except Exception:  # noqa: BLE001 — результат записи не меняется
+                log.warning("The campaign list could not be queued for refresh after a command; its result is unchanged.")
         if op.get("refresh_pending"):
             op["refresh_pending"] = False
             store.try_save(op)
+
+
+def wrote(op: dict) -> bool:
+    """Хоть одна запись ушла (или могла уйти): список аккаунта мог измениться."""
+    return any(a.get("result") in ("saved", "mismatch", "unknown", "sent") for a in op.get("affected", []))
 
 
 def _stopped(op: dict, message: str) -> None:
@@ -741,7 +773,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         if (entry is None or entry["before"] != item["before"] or entry["after"] != item["after"]
                 or entry["constraints"] != item["constraints"]
                 or entry.get("strategy") != item.get("strategy")):
-            now_value = current_value(command, snap)
+            now_value = current_value(command, snap, item["field"])
             item["note"] = (f"was {item['before_display']}, now "
                             f"{why or _display(command, now_value, currency)}")
             _fail_all(op, f"{LEVEL_WORD[item['level']]} \"{item['name']}\" changed since the "
@@ -777,7 +809,8 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
             stop_rest = True
         except GraphError as exc:
             item["result"], item["note"] = "refused", f"Meta refused: {exc}"[:240]
-            stop_rest = True
+            # ACL-2806: отказ Meta по сумме lifetime-бюджета остаётся на строке объекта, остальные идут дальше.
+            stop_rest = item["field"] != "lifetime_budget"
         except (GraphStop, WritesBlocked, ValueError) as exc:
             item["result"], item["note"] = "not_sent", f"Not sent: {exc}"[:240]
             stop_rest = True
@@ -798,7 +831,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
             item["result"] = "unknown"
             item["note"] = f"Could not read it back: {exc}"[:240]
             continue
-        saved = current_value(command, snap)
+        saved = current_value(command, snap, item["field"])
         item["saved"] = saved
         if saved == item["after"]:
             item["result"] = "saved"

@@ -174,7 +174,7 @@ def test_a_busy_lock_means_not_done_and_nothing_changed(tmp_path, monkeypatch):
 
 def test_a_queued_job_waits_at_the_gate_under_low_memory_and_goes_when_it_frees(tmp_path):
     free = [1000]
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, free[0]))
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, free[0]))
     rig.warm_up()
     other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
@@ -204,7 +204,7 @@ def test_a_queued_job_waits_at_the_gate_under_low_memory_and_goes_when_it_frees(
 def test_the_gate_refusal_logs_its_numbers(tmp_path, caplog):
     import logging
 
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
     other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
@@ -227,7 +227,7 @@ def test_check_plan_on_an_open_profile_is_not_held_by_memory(tmp_path, monkeypat
     from tests.test_acl1761_plan_check import fake_profile
     from tests.test_acl1812_warm_sessions import ACT, PID
 
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
     other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
@@ -263,7 +263,7 @@ def test_check_plan_on_an_open_profile_is_not_held_by_memory(tmp_path, monkeypat
 
 def test_a_new_profile_is_still_gated_by_memory(tmp_path):
     """The memory gate still applies to a new profile (default gate use); an open profile skips it."""
-    gate = warm.HeavyGate(limit=lambda: 2, memory=lambda: ps.MemoryReading(16000, 1000),
+    gate = warm.HeavyGate(memory=lambda: ps.MemoryReading(16000, 1000),
                           settings=lambda: _s90(), usage=None, tick_s=0.01, grace_s=0.0)
     gate.acquire("p1")                                  # the first one always goes
     with pytest.raises(warm.WarmError) as cold:

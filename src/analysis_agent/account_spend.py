@@ -464,6 +464,26 @@ def _merge_status_locked(data: dict, account: str, rec: dict) -> bool:
     return True
 
 
+#: ACL-2811: those who must hear that a status of an account was stored (the publish rows show Meta's reason).
+#: Called after the store is saved but still under _STORE_LOCK (RLock held by _put's callers), so listeners run with
+#: the lock order store -> jobs: a listener must never take _STORE_LOCK-dependent locks in the other order.
+#: A listener's failure never touches the store.
+_STATUS_LISTENERS: list = []
+
+
+def add_status_listener(fn) -> None:
+    if fn not in _STATUS_LISTENERS:
+        _STATUS_LISTENERS.append(fn)
+
+
+def _notify_status(account: str, status: str, text: str) -> None:
+    for fn in list(_STATUS_LISTENERS):
+        try:
+            fn(account, status, text)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def put_status(account: str, status: str, status_text: str, *, source: str = "api", at: str = "",
                disable_reason: str = "", account_status: int | None = None) -> bool:
     """Записать статус кабинета отдельно от показаний спенда (ACL-2419).
@@ -482,6 +502,7 @@ def put_status(account: str, status: str, status_text: str, *, source: str = "ap
         if not _merge_status_locked(data, account, rec):
             return False
         _save_all(data)
+    _notify_status(account, status, status_text)
     return True
 
 
@@ -494,8 +515,9 @@ def _put(reading: SpendReading) -> None:
             # со своей датой, а не исчезает вместе с неудачей.
             reading.objects_prev = _last_good_tree(data, reading.account)
         data[key] = reading.to_dict()
+        merged = False
         if reading.status:
-            _merge_status_locked(data, reading.account, {
+            merged = _merge_status_locked(data, reading.account, {
                 "status": reading.status,
                 "status_text": reading.status_text,
                 "at": reading.finished_at or _now(),
@@ -507,6 +529,8 @@ def _put(reading: SpendReading) -> None:
             })
         _save_all(data)
         _UNSAVED.pop(key, None)
+    if merged:
+        _notify_status(reading.account, reading.status, reading.status_text)
 
 
 def _next_step(status: str, status_text: str) -> str:
@@ -803,17 +827,16 @@ def may_open_closed_profile() -> bool:
 #: кнопка «Open profiles for today», на `rpa` её нет — там кнопка «open profile» в строке.
 HAND_OPEN_MESSAGE_API = ("Opened in Multilogin by hand — close its window there, then run Check plan or "
                          "Publish and the dashboard opens it for automation")
-HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, "
                      "then use the open profile button on this row")
 HAND_WINDOW_MESSAGE = HAND_OPEN_MESSAGE
 
 
 def hand_message() -> str:
     """Текст отказа «открыто руками» для текущего бэкенда."""
-    import os
+    from src.fb_api import backend as _backend
 
-    return HAND_OPEN_MESSAGE_API if (os.environ.get("ACL_FB_BACKEND") or "").strip().lower() == "api" \
-        else HAND_OPEN_MESSAGE
+    return HAND_OPEN_MESSAGE_API if _backend.api_enabled() else HAND_OPEN_MESSAGE
 
 
 def _running_by_hand(direct, udd, profile_id: str) -> bool:
@@ -839,6 +862,8 @@ def _hand_refusal(exc: BaseException, account_label: str) -> bool:
 #: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
 _HAND_WAIT: dict[str, str] = {}
 _HAND_WAIT_LOCK = threading.Lock()
+#: ACL-2850: тот же замок + условие: экран, ждущий чтения, получает смену строки сразу, без опроса.
+_HAND_WAIT_CHANGED = threading.Condition(_HAND_WAIT_LOCK)
 
 
 def hand_wait_note(account: str) -> str:
@@ -921,6 +946,30 @@ def _set_wait_note(account: str, note: str) -> None:
             _HAND_WAIT[str(account or "")] = note
         else:
             _HAND_WAIT.pop(str(account or ""), None)
+        _HAND_WAIT_CHANGED.notify_all()
+
+
+def wait_note_changes(account: str, finished):
+    """ACL-2850: строки ожидания аккаунта по мере их смены, пока `finished()` не вернёт True.
+
+    Без таймеров и опроса: поток спит на условии, его будит `_set_wait_note` или `wake_wait_watchers`.
+    Читает только память сервера — ни MLX, ни Meta."""
+    key, last = str(account or ""), ""
+    while True:
+        with _HAND_WAIT_CHANGED:
+            _HAND_WAIT_CHANGED.wait_for(lambda: finished() or _HAND_WAIT.get(key, "") != last)
+            note, done = _HAND_WAIT.get(key, ""), finished()
+        if note != last:
+            last = note
+            if note:
+                yield note
+        if done:
+            return
+
+
+def wake_wait_watchers() -> None:
+    with _HAND_WAIT_CHANGED:
+        _HAND_WAIT_CHANGED.notify_all()
 
 
 def _slot_queue():
@@ -945,6 +994,8 @@ class _ReadOpen:
     keep_tab: bool = False
     #: Сколько мест очередь выдала профилю к моменту запуска (`grants`).
     grants_seen: int = 0
+    #: ACL-2790: окно подняло API-чтение/команда (не RPA) — его можно оставить «уступающим».
+    api: bool = False
 
 
 #: Чтение просит запускать закрытый профиль (`opening_closed_profile`). Флагом
@@ -954,6 +1005,85 @@ _READ_OPEN: ContextVar["_ReadOpen | None"] = ContextVar("acl_read_open", default
 #: Профиль → запуск чтения, ждущий закрытия по `CLOSE_GRACE_S`.
 _PENDING_CLOSE: dict[str, _ReadOpen] = {}
 _PENDING_LOCK = threading.Lock()
+
+#: ACL-2790: профиль → сколько действий (команда, Check plan, Publish) стоят или идут на его
+#: аккаунте. Пока счётчик не ноль, закрытие после чтения окно не останавливает: следующему
+#: действию не платить за повторный запуск (MLX + прокси + токен, в среднем 18 с).
+_QUEUED_ACTIONS: dict[str, int] = {}
+
+
+def _action_key(profile: str) -> str:
+    """Один ключ и для аккаунта действия, и для профиля чтения (физический UUID, иначе строка)."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError, physical_profile_key
+
+    try:
+        return physical_profile_key(profile)
+    except ProfileLeaseError:
+        return str(profile or "").strip().lower()
+
+
+@contextmanager
+def action_queued(account: str):
+    """Действие на аккаунте поставлено в очередь (или идёт): не закрывать его профиль после чтения.
+
+    Ставится ДО ожидания замка профиля, снимается, когда действие кончилось. Таймеров и опроса
+    Meta нет — только счётчик в памяти. Не нашли профиль аккаунта — действие просто не отмечается.
+    """
+    try:
+        key = _profile_key(account)
+    except Exception:  # noqa: BLE001 — отметка не должна ломать само действие
+        key = ""
+    if not key:
+        yield
+        return
+    with _PENDING_LOCK:
+        _QUEUED_ACTIONS[key] = _QUEUED_ACTIONS.get(key, 0) + 1
+    try:
+        yield
+    finally:
+        with _PENDING_LOCK:
+            left = _QUEUED_ACTIONS.get(key, 0) - 1
+            if left > 0:
+                _QUEUED_ACTIONS[key] = left
+            else:
+                _QUEUED_ACTIONS.pop(key, None)
+
+
+def action_pending(profile_id: str) -> bool:
+    """Ждёт ли или идёт действие на аккаунте этого профиля (ACL-2790)."""
+    if not profile_id:
+        return False
+    with _PENDING_LOCK:
+        return _QUEUED_ACTIONS.get(_action_key(profile_id), 0) > 0
+
+
+def _keep_preemptible(opened: _ReadOpen, why: str) -> bool:
+    """ACL-2790: окно остаётся открытым как «уступающее» kept-окно (`preemptible`).
+
+    Следующая команда на аккаунте берёт его без повторного запуска. Любое задание, которому нужно
+    место (чтение, команда, Check plan, Publish, открытие профиля) или память, закрывает такое окно
+    сразу — самое давнее первым (`ProfileSlots._idle_candidate`). Таймеров и настроек нет.
+    """
+    try:
+        _slot_queue().keep(opened.slot_id, opened.account, kind="convenience", preemptible=True)
+    except Exception:
+        # Очередь окна не видит — оставлять его нельзя (держало бы память мимо потолка): закрываем.
+        log.exception("Could not mark the kept window of %s", opened.account)
+        return False
+    _record(why, True, 0.0,
+            {"account": opened.account, "held_s": round(time.monotonic() - opened.started_mono, 1)})
+    opened.started = False
+    return True
+
+
+def _keep_open_for_action(opened: _ReadOpen) -> bool:
+    """ACL-2790: действие ждёт этот профиль — окно остаётся открытым как «уступающее» kept-окно.
+
+    Только путь API (`opened.api`); путь RPA закрывает, как раньше.
+    """
+    if not (opened.api and opened.slot_id) or not action_pending(opened.profile_id):
+        return False
+    return _keep_preemptible(opened, "spend_profile_kept_for_action")
 
 
 @contextmanager
@@ -1095,6 +1225,8 @@ def _close_started(opened: _ReadOpen) -> None:
     from src.fb_ads_rpa import browser as rpa_browser
 
     began = time.monotonic()
+    if _keep_open_for_action(opened):
+        return
     if _publish_touched(opened):
         # Ревью PR #583 (F1): профилем пользуется (или воспользовалось) другое
         # задание — окно его: Publish сам решает, закрывать ли (ACL-1444).
@@ -1188,8 +1320,12 @@ def _keep_for_problem(opened: _ReadOpen, problem: str, stop: Any = None) -> None
 
 def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
                     grace_s: float | None = None, convenience: bool = False,
-                    problem: Any = None) -> None:
+                    problem: Any = None, api: bool = False) -> None:
     """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
+
+    `api` (ACL-2790) — окно подняло API-чтение или команда. Если её начал сам покупатель и она
+    кончилась без ошибки, окно остаётся «уступающим» kept-окном (`_keep_preemptible`): команда,
+    нажатая следом, его переиспользует, а любому заданию, которому нужно место, оно уступает сразу.
 
     `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
     человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
@@ -1199,18 +1335,25 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
     """
     if not opened.started:
         return
+    if api and _api_backend():
+        opened.api = True
+    api = opened.api
     kind = keep_open_problem(problem)
     if kind:
         _keep_for_problem(opened, kind, problem)
         return
     if keep_for_next and convenience and opened.slot_id:
         # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
-        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
-        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        # окном: Publish берёт его место (`_reuse_kept`), а вытеснение решает очередь
+        # (LRU; ACL-2668 — место не занимает и уступает сразу при нехватке памяти). Своего таймера нет.
         try:
             _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
         except Exception:
             log.exception("Could not mark the kept window of %s", opened.account)
+        return
+    if (api and problem is None and not keep_for_next and opened.slot_id and may_open_closed_profile()
+            and _keep_profiles_open() and not _publish_touched(opened)
+            and _keep_preemptible(opened, "spend_profile_kept_preemptible")):
         return
     grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
     if keep_for_next and grace > 0 and opened.profile_id:
@@ -1228,6 +1371,29 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         timer.start()
         return
     _close_started(opened)
+
+
+def _api_backend() -> bool:
+    """ACL-2785: бэкенд API (по умолчанию) — единственный источник `src.fb_api.backend`.
+
+    При явном `ACL_FB_BACKEND=rpa` окна ACL-2790 не оставляются: путь RPA как раньше.
+    """
+    try:
+        from src.fb_api import backend as _backend
+
+        return bool(_backend.api_enabled())
+    except Exception:
+        return False
+
+
+def _keep_profiles_open() -> bool:
+    """Включено ли «держать профили открытыми» (по умолчанию да; ACL-2113)."""
+    try:
+        from src.fb_ads_rpa.rpa_publisher import keep_profiles_open
+
+        return bool(keep_profiles_open())
+    except Exception:
+        return True
 
 
 def _logged_out(page, *, deep: bool = False) -> bool:

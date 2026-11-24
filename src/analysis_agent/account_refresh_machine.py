@@ -400,6 +400,7 @@ class MachineStore:
             root = machine_root()
         self.root = Path(root)
         self.path = self.root / "state.json"
+        self.runs_path = self.root / "runs.json"
         self.marker = self.root / "initialized.json"
 
     def lease(self, name: str):
@@ -419,8 +420,42 @@ class MachineStore:
 
     @contextmanager
     def transaction(self):
+        with self._tx() as (state, _runs):
+            yield state
+
+    def _load_runs(self) -> dict:
+        """ACL-2668: идущие чтения по аккаунтам (binding -> владелец, триггер, токен).
+
+        Отдельный файл, а не поле state.json: прежние версии ACL на соседнем порту
+        строго проверяют набор ключей state.json и остановили бы свои чтения.
+        Старое единственное поле `running` эта версия больше не пишет.
+        """
+        try:
+            if self.runs_path.is_symlink() or self.runs_path.stat().st_size > 1024 * 1024:
+                raise CoordinationError("The shared account-read list is unsupported.")
+            runs = json.loads(self.runs_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as exc:
+            raise CoordinationError("The shared account-read list could not be read; automatic reads are stopped.") from exc
+        if not isinstance(runs, dict):
+            raise CoordinationError("The shared account-read list is unsupported.")
+        for key, run in runs.items():
+            if (not isinstance(key, str) or not re.fullmatch(r"[a-f0-9]{64}", key)
+                    or not isinstance(run, dict) or set(run) != {"owner", "trigger", "token"}
+                    or not isinstance(run["owner"], str) or len(run["owner"]) > 64
+                    or not isinstance(run["trigger"], str) or len(run["trigger"]) > 100
+                    or type(run["token"]) is not int or run["token"] < 0):
+                raise CoordinationError("The shared account-read list is unsupported.")
+        return runs
+
+    @contextmanager
+    def _tx(self):
+        """Транзакция state.json вместе со списком идущих чтений (под одним state.lock)."""
         prepare_lock(self.root / "state.lock")
         with machine_file_lock(self.root / "state.lock", timeout=10):
+            runs = self._load_runs()
+            runs_before = json.dumps(runs, sort_keys=True)
             existed = self.path.exists()
             if self.marker.exists():
                 try:
@@ -455,7 +490,7 @@ class MachineStore:
                     raise CoordinationError("The shared account revision is unsupported.")
             _validate_state(state)
             before = json.dumps(state, sort_keys=True)
-            yield state
+            yield state, runs
             _validate_state(state)
             data = json.dumps(state, ensure_ascii=False, sort_keys=True)
             if data != before or not existed:
@@ -464,6 +499,10 @@ class MachineStore:
                 _atomic_write(self.path, (data + "\n").encode())
                 if os.name == "nt":
                     _windows_object(self.path, directory=False, data=True)
+            if json.dumps(runs, sort_keys=True) != runs_before:
+                _atomic_write(self.runs_path, (json.dumps(runs, sort_keys=True) + "\n").encode())
+                if os.name == "nt":
+                    _windows_object(self.runs_path, directory=False, data=True)
             if not self.marker.exists():
                 _atomic_write(self.marker, b'{"schema":1,"kind":"account_refresh_machine"}\n')
             if os.name == "nt":
@@ -492,7 +531,8 @@ class MachineStore:
                         if key not in state["results"]:
                             state["results"][key] = _result_record({}, key, payload, state["revision"])
                         members[key] = {"owners": [owner], "done": state["revision"]}
-            if halt and not halt.get("machine_generation"):
+            if halt and not halt.get("machine_generation") and halt.get("kind") != "checkpoint":
+                # ACL-2653: a checkpoint belongs to its profile (a hold), never to the whole machine.
                 key = bindings.get(halt.get("account", ""))
                 if key and key not in state["stops"] and (halt.get("until") is None or halt["until"] > now):
                     state["revision"] += 1
@@ -518,6 +558,15 @@ class MachineStore:
         with self.transaction() as state:
             return bool(state["windows"].get(window, {}).get(key, {}).get("done"))
 
+    def fence(self, key: str):
+        """ACL-2668: OS-аренда идущего чтения ОДНОГО аккаунта (binding).
+
+        Держится всё чтение, от `begin` до записи результата. Свободная аренда при
+        записи в runs.json значит: процесс чтения умер, чтение прервано.
+        Других аккаунтов она не касается: чтения разных аккаунтов идут параллельно.
+        """
+        return self.lease(f"read-{key}.lock")
+
     @contextmanager
     def executing(self, token: int, key: str | None = None):
         previous = getattr(_ACTIVE, "execution", None)
@@ -530,37 +579,102 @@ class MachineStore:
             _ACTIVE.execution = previous
             _ACTIVE.binding = previous_binding
 
-    def recover_running(self, *, now: float | None = None) -> str | None:
-        """The caller holds the actual read lease; never recover its own live scope."""
-        with self.transaction() as state:
-            old = state.get("running")
-            if old and getattr(_ACTIVE, "execution", None) != (str(self.root.resolve()), old["token"]):
-                # The OS read lease is now ours, so this persisted execution has
-                # no surviving owner. Do not turn it into another automatic read.
-                state["revision"] += 1
-                stamp = datetime.fromtimestamp(time.time() if now is None else now, timezone.utc)
-                unknown = {"state": "failed", "finished_at": stamp.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
-                           "finished_at_utc": stamp.isoformat(),
-                           "currency": "", "steps": {}, "stop": "", "ok": False,
-                           "campaigns": [], "adsets": [], "ads": [],
-                           "error": "The account read was interrupted. Press Retry."}
-                previous = state["results"].get(old["key"], {})
-                state["results"][old["key"]] = _result_record(previous, old["key"], unknown, state["revision"])
-                for members in state["windows"].values():
-                    if old["key"] in members:
-                        members[old["key"]]["done"] = state["revision"]
-                state["running"] = None
-                return old["key"]
-            return None
+    @contextmanager
+    def run(self, key: str, owner: str, trigger: str):
+        """Одно чтение аккаунта: аренда аккаунта -> запись в runs.json -> токен.
+
+        Второе чтение того же аккаунта (другой поток/процесс/порт) получает отказ,
+        чтения других аккаунтов не ждут.
+        """
+        try:
+            hold = self.fence(key).holding(timeout=0)
+            hold.__enter__()
+        except TimeoutError:
+            raise CoordinationError("This account is already being read.") from None
+        try:
+            token = self.begin(key, owner, trigger)
+            with self.executing(token, key):
+                yield token
+        finally:
+            hold.__exit__(None, None, None)
+
+    def _interrupted(self, state: dict, key: str, now: float | None) -> None:
+        state["revision"] += 1
+        stamp = datetime.fromtimestamp(time.time() if now is None else now, timezone.utc)
+        unknown = {"state": "failed", "finished_at": stamp.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+                   "finished_at_utc": stamp.isoformat(),
+                   "currency": "", "steps": {}, "stop": "", "ok": False,
+                   "campaigns": [], "adsets": [], "ads": [],
+                   "error": "The account read was interrupted. Press Retry."}
+        previous = state["results"].get(key, {})
+        state["results"][key] = _result_record(previous, key, unknown, state["revision"])
+        for members in state["windows"].values():
+            if key in members:
+                members[key]["done"] = state["revision"]
+
+    def _own(self, token: int) -> bool:
+        return getattr(_ACTIVE, "execution", None) == (str(self.root.resolve()), token)
+
+    def recover_running(self, *, now: float | None = None) -> list[str]:
+        """Прерванные чтения (их аренда свободна) -> «interrupted». Живые не трогаются.
+
+        Своё чтение этого потока (и любое, чью аренду держит этот поток) не считается
+        прерванным. Возвращает ключи, отмеченные прерванными.
+        """
+        with self._tx() as (state, runs):
+            candidates = {k: r["token"] for k, r in runs.items() if not self._own(r["token"])}
+            legacy = state.get("running")
+        recovered = []
+        for key, token in candidates.items():
+            lease = self.fence(key)
+            if lease.owned():
+                continue
+            hold = lease.holding(timeout=0)
+            try:
+                hold.__enter__()
+            except TimeoutError:
+                continue          # чтение живо в другом потоке/процессе
+            try:
+                with self._tx() as (state, runs):
+                    if runs.get(key, {}).get("token") == token:
+                        runs.pop(key)
+                        self._interrupted(state, key, now)
+                        recovered.append(key)
+            finally:
+                hold.__exit__(None, None, None)
+        if legacy and not self._own(legacy["token"]):
+            # Запись прежней версии ACL (одно чтение на машину под общей арендой).
+            # Её же правило: аренда свободна -> чтение прервано.
+            hold = self.lease("account-structure-read.lock").holding(timeout=0)
+            try:
+                hold.__enter__()
+            except TimeoutError:
+                return recovered
+            try:
+                with self._tx() as (state, _runs):
+                    if state.get("running") == legacy:
+                        state["running"] = None
+                        self._interrupted(state, legacy["key"], now)
+                        recovered.append(legacy["key"])
+            finally:
+                hold.__exit__(None, None, None)
+        return recovered
+
+    def running_keys(self) -> set[str]:
+        with self._tx() as (state, runs):
+            keys = set(runs)
+            if state.get("running"):
+                keys.add(state["running"]["key"])
+            return keys
 
     def begin(self, key: str, owner: str, trigger: str) -> int:
-        """Called only while holding the actual OS read fence, before any open."""
-        with self.transaction() as state:
-            if state.get("running"):
-                raise CoordinationError("Another account read still owns its machine reservation.")
+        """Called only while holding this account's `fence`, before any open."""
+        with self._tx() as (state, runs):
+            if key in runs or (state.get("running") or {}).get("key") == key:
+                raise CoordinationError("This account is already being read.")
             state["revision"] += 1
             token = state["revision"]
-            state["running"] = {"key": key, "owner": owner, "trigger": trigger, "token": token}
+            runs[key] = {"owner": owner, "trigger": trigger, "token": token}
             return token
 
     def request(self, key: str, owner: str, priority: int, trigger: str, force: bool) -> None:
@@ -579,8 +693,11 @@ class MachineStore:
 
     def may_dispatch(self, key: str) -> bool:
         # Never wait on an OS ownership lease while holding the state transaction.
-        with self.transaction() as state:
+        with self._tx() as (state, runs):
             pending = json.loads(json.dumps(state["requests"]))
+            # ACL-2668: заявка уже читаемого аккаунта не задерживает чтения остальных.
+            busy = set(runs) | ({state["running"]["key"]} if state.get("running") else set())
+        pending = {k: v for k, v in pending.items() if k == key or k not in busy}
         own = pending.get(key)
         if not own:
             return True
@@ -637,6 +754,35 @@ class MachineStore:
             stop = state["stops"].get(key)
             return stop["generation"] if stop else None
 
+    def drop_stops(self, keys) -> list[dict]:
+        """ACL-2653: remove the machine stops of these bindings (an account was removed). Returns what was dropped."""
+        wanted = set(keys)
+        if not wanted:
+            return []
+        with self.transaction() as state:
+            dropped = [dict(v) for k, v in state["stops"].items() if k in wanted]
+            for item in dropped:
+                state["stops"].pop(item["key"], None)
+            if dropped:
+                state["halt"] = self._selected_stop(state)
+            return dropped
+
+    def prune_stops(self) -> list[dict]:
+        """ACL-2653: drop every `checkpoint` stop, of any key (owner decision: a checkpoint never stops the queue;
+        it holds only its own profile, see `account_holds.json`).
+
+        `state.json` is shared by all dashboards of the machine, so "removed" is never inferred from one config's
+        map: stops of other kinds go only through the explicit removal path (`drop_stops`).
+        The caller holds the machine read lease; the state transaction keeps the schema validation.
+        """
+        with self.transaction() as state:
+            dropped = [dict(v) for v in state["stops"].values() if v["kind"] == "checkpoint"]
+            for item in dropped:
+                state["stops"].pop(item["key"], None)
+            if dropped:
+                state["halt"] = self._selected_stop(state)
+            return dropped
+
     def result(self, key: str) -> dict | None:
         with self.transaction() as state:
             value = state["results"].get(key)
@@ -651,12 +797,12 @@ class MachineStore:
         from src.analysis_agent.account_refresh import _global_stop, _halt_kind, classify
         now = time.time() if now is None else now
         payload = envelope(snap)
-        with self.transaction() as state:
+        with self._tx() as (state, runs):
             if token is not None:
-                running = state.get("running")
-                if not running or running["token"] != token or running["key"] != key:
+                running = runs.get(key)
+                if not running or running["token"] != token:
                     raise CoordinationError("This account-read result no longer owns its machine reservation.")
-                state["running"] = None
+                runs.pop(key)
             state["revision"] += 1
             revision = state["revision"]
             previous = state["results"].get(key, {})
