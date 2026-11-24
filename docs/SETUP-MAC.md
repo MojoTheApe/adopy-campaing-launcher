@@ -90,6 +90,12 @@ MY_CM_NAME=Your Name Exactly As In The Workbook
 
 > The **Multilogin token** is pasted into the dashboard (Multilogin panel), not into this file.
 
+**D. First start with no numbers.** A new Mac has no BI connection yet, so the first time the
+dashboard may open on a **No data file** page saying *BI is not connected on this computer*.
+That is expected. Click **Sign in with Google** on that page, sign in with your Adopy account,
+and the dashboard loads by itself (no restart). If it says the connection failed, press
+**Check again**; a red line gives the reason.
+
 ---
 
 ## Step 3 — Check the machine (only if something looks wrong)

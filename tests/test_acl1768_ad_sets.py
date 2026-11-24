@@ -163,8 +163,9 @@ def test_the_same_ad_name_in_two_ad_sets_is_fine_inside_one_set_it_is_not(tmp_pa
     assert plan.ad_sets[0].ads[0].name == plan.ad_sets[1].ads[0].name
     d.ad_sets[0].ads[1].copy_name, d.ad_sets[0].ads[1].creative_id = same.copy_name, same.creative_id
     d.ad_sets[0].ads[1].creative_filename = same.creative_filename
-    with pytest.raises(cr.PlanError, match="would all be named"):
-        cr.plan_from_draft(d)
+    plan = cr.plan_from_draft(d)                       # ACL-2538: no refusal, the later ad gets " 2"
+    names = [a.name for a in plan.ad_sets[0].ads]
+    assert names[1] == names[0] + " 2"
 
 
 def test_an_ad_set_without_ads_is_refused_not_dropped(tmp_path):

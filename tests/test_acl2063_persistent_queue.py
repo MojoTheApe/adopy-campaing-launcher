@@ -280,30 +280,64 @@ _READ_CHILD = r'''
 import json,sys,time
 from pathlib import Path
 from src.fb_ads_rpa import profile_lease
-from src.analysis_agent.account_refresh_state import read_session
-root=Path(sys.argv[1]);label=sys.argv[2]
+root=Path(sys.argv[1]);label=sys.argv[2];other='B' if label=='A' else 'A'
 profile_lease._lease_root=lambda:root/'leases'
 from src.analysis_agent import account_refresh_state as ars
 ars.machine_root=lambda:root/'machine'
-with profile_lease.profile_lock('11111111-1111-1111-1111-'+('111111111111' if label=='A' else '222222222222')):
- with read_session(priority=label=='B'):
-  with (root/'events.jsonl').open('a') as f:f.write(json.dumps(['start',label])+'\n')
-  time.sleep(.1)
-  with (root/'events.jsonl').open('a') as f:f.write(json.dumps(['end',label])+'\n')
+from src.analysis_agent.account_refresh_machine import MachineStore
+profile='11111111-1111-1111-1111-'+('111111111111' if label=='A' else '222222222222')
+key=('a' if label=='A' else 'b')*64
+with profile_lease.profile_lock(profile), ars.target_activity(profile), MachineStore().run(key,label,'schedule'):
+ (root/('start-'+label)).write_text('1')
+ # ACL-2668: the other account's read starts while this one is still running.
+ deadline=time.monotonic()+90
+ while not (root/('start-'+other)).exists():
+  assert time.monotonic()<deadline,'the other account read never started while this one ran'
+  time.sleep(.02)
+ (root/('overlap-'+label)).write_text('1')  # own file: concurrent appends to one file may lose a line
 '''
 
 
-def test_command_and_schedule_read_sessions_share_one_machine_lease(tmp_path):
+def test_reads_of_two_accounts_in_two_processes_run_at_the_same_time(tmp_path):
     procs=[subprocess.Popen([sys.executable,'-c',_READ_CHILD,str(tmp_path),a],
         cwd=Path(__file__).resolve().parents[1],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
         env={**os.environ,'ACL_CONFIG_DIR':str(tmp_path/a)}) for a in ['A','B']]
     try:
         for proc in procs:
-            out,err=proc.communicate(timeout=20)
+            out,err=proc.communicate(timeout=180)
             assert proc.returncode==0,out+err
     finally:
         for proc in procs:
             if proc.poll() is None:proc.kill();proc.wait()
-    events=[json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
-    first=events[0][1]; second='B' if first=='A' else 'A'
-    assert events==[['start',first],['end',first],['start',second],['end',second]]
+    assert sorted(p.name for p in tmp_path.glob('overlap-*'))==['overlap-A','overlap-B']
+
+
+@pytest.mark.parametrize("trigger, again", [("retry", "retry"), ("action", "action"),
+                                            ("schedule:2026-11-16/08:00", "attention"), ("", "attention")])
+def test_read_cut_by_a_restart_runs_again_by_itself(tmp_path, trigger, again):
+    """ACL-2668 №11: an ACM update no longer waits for reads; the restart cuts the
+    read and the queue reads that account again, no Retry needed."""
+    seen = []
+
+    def read(account, trigger):
+        seen.append((account, trigger))
+        return ci.Snapshot(account=account, state="empty", finished_at="08:01")
+
+    store = RefreshStore(tmp_path)
+    with store.transaction() as state:      # the dead process was reading A
+        state["running"], state["running_trigger"] = "A", trigger
+    q = ar.RefreshQueue(reader=read, store=store, accounts=lambda: ["A"])
+    assert q._drain_once() == 1
+    assert seen == [("A", again)]
+    assert q.state()["rows"]["A"]["state"] == "empty"
+    assert q.state()["running"] is None
+
+
+def test_read_cut_by_a_restart_for_a_removed_account_is_not_replayed(tmp_path):
+    seen = []
+    store = RefreshStore(tmp_path)
+    with store.transaction() as state:
+        state["running"], state["running_trigger"] = "A", "retry"
+    q = ar.RefreshQueue(reader=lambda a, t: seen.append(a), store=store, accounts=lambda: ["B"])
+    assert q._drain_once() == 0
+    assert seen == []

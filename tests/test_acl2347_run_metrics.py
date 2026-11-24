@@ -43,9 +43,9 @@ def _video_rows(rows):
 
 def test_gate_view_keeps_the_real_reason_behind_the_hold_label(tmp_path):
     rig = Rig(tmp_path)
-    view = rig.reg.gate.wait_view("limit")
-    assert view["hold"] == "heavy_limit", "ACL-2293: the limit is named, not 'another account'"
-    assert view["why"] == "limit"
+    view = rig.reg.gate.wait_view("memory_unknown")
+    assert view["hold"] == "account_busy"
+    assert view["why"] == "memory_unknown", "the real reason stays next to the label"
 
 
 def test_wait_writes_its_start_at_once_and_each_reason_with_seconds(job, monkeypatch):

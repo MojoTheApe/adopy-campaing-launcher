@@ -62,6 +62,7 @@ from src.web.cache import (
     rebuild_deferred,
     has_entry as report_has_entry,
     peek_cached_report,
+    recheck_bi_revision,
     start_background_build,
     verified_source_key,
 )
@@ -525,8 +526,13 @@ def _build_account_map_view(
     date_from: str = "",
     date_to: str = "",
     span: str = "",
+    compare_only: bool = False,
 ) -> dict:
     """The account map on Home: every country, its accounts, and what they did.
+
+    ``compare_only`` (ACL-2808): карта прошлого периода для PeriodCompare. Сравнение
+    читает только страны, их строки и итоги; источник статистики по каждому
+    аккаунту из списка Available на странице не рисуется, и его не считаем.
 
     Countries come from the links store, not from the workbook, because the two
     answer different questions. The workbook says where money was spent; the
@@ -605,8 +611,16 @@ def _build_account_map_view(
 
     map_path = get_ad_account_map_path()
     map_entries = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
-    known = list(map_entries)
-    all_known = sorted(set(known) | labels_in_report, key=str.casefold)
+    # Per-buyer map: only the selected buyer's accounts are listed. The entries
+    # stay whole (profiles, ids) for lookups; only the lists below are narrowed.
+    from src.web import account_buyer as _ab
+
+    from src.web.buyer import get_selected_cm as _selected_cm
+
+    _tags = _ab.tags()
+    _mine = lambda label: _ab.is_visible(label, tag_map=_tags)  # noqa: E731
+    known = [k for k in map_entries if _mine(k)]
+    all_known = sorted({a for a in (set(known) | labels_in_report) if _mine(a)}, key=str.casefold)
 
     # Названия стран и имена аккаунтов берём из самой книги, а не только из
     # отчёта. Отчёт строится за сегодня: 8 сентября книга заканчивалась 7-м, в
@@ -690,7 +704,16 @@ def _build_account_map_view(
         country_name = display_name.get(key) or wb_country.get(key, stored)
         todo = todo_by_country.get(key, {})
         rows = []
-        for label in account_links.accounts_for("country", stored):
+        _placed = account_links.accounts_for("country", stored)
+        _own = [a for a in _placed if _mine(a)]
+        if _placed and not _own and not account_links.country_marked_for(stored, _selected_cm()):
+            # The country holds only other buyers' accounts: not this buyer's map,
+            # unless this buyer added the country themselves (ACL-2853).
+            continue
+        if not _placed and not account_links.empty_country_visible_to(stored, _selected_cm()):
+            # ACL-2853: пустую страну с меткой другого байера этот байер не видит.
+            continue
+        for label in _own:
             excel = _numbers(country_name, label) or stats.get(label) or {}
             # Имя из Multilogin (`KLD_BFL_X84`) с книжным (`FacebookMKTOBFLX84`)
             # не сходится ничем, кроме хвоста — того самого, которым аккаунт и
@@ -885,8 +908,12 @@ def _build_account_map_view(
     from src.web import account_state as _astate
 
     seen_accounts: dict[str, dict] = {}
+    # ACL-2653: a profile held by a Facebook lock is shown from its hold (local file, no Meta call).
+    _row_holds = _lock_holds(sorted({r["account"] for mc in countries for r in mc.get("rows") or []
+                                     if r.get("account")}))
     for mc in countries:
         for r in mc.get("rows") or []:
+            r["hold"] = _row_holds.get(r.get("account"))
             r["state"] = _astate.account_state(r)
             seen_accounts.setdefault(r["account"], r["state"])
         mc["rows_aov"] = _astate.sort_rows(mc.get("rows") or [])
@@ -917,7 +944,7 @@ def _build_account_map_view(
     buckets = _avail.split_available(
         account_links.available_accounts(all_known),
         connected=known,
-        placed=[a for a, _v in account_links.all_pairs("country")],
+        placed=[a for a, _v in account_links.all_pairs("country") if _mine(a)],
         activity=activity,
         hidden=hidden,
     )
@@ -925,7 +952,7 @@ def _build_account_map_view(
     from src.analysis_agent import bi_compare
 
     activity_sources = {}
-    if activity is not None and df is not None:
+    if activity is not None and df is not None and not compare_only:
         window = bi_compare.period_rows(df, activity.window_from, activity.window_to)
         if "Account Alias" in window:
             activity_sources = {
@@ -950,12 +977,9 @@ def _build_account_map_view(
         mc["note_key"] = _account_notes.country_key(mc.get("country") or "")
 
     available = _with_assets(buckets["shown"])
-    from src.web import source_display
 
     return {
         "countries": countries,
-        "saved_source_check": source_display.saved_comparison(
-            df, countries, live, date_from, date_to, span),
         "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),
         # ACL-1654: строка Totals под странами.
         "totals": _amap_totals(countries, live),
@@ -1272,44 +1296,43 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
-_targets_refresh_lock = threading.Lock()
-_targets_refreshing = False
+def _sync_team_library_in_background(*kinds: str) -> None:
+    """Обновить копии общей библиотеки в своих потоках — событие, не таймер.
 
-
-def _refresh_sheet_targets_in_background() -> None:
-    """Обновить копию библиотеки таргетингов в своём потоке, один раз за раз.
-
-    ACL-1380: раньше страница сама ходила в api.github.com (`pull(force=True)`,
-    таймаут 15 с) на каждом открытии и на каждом `/api/ref-data`. Теперь
-    отрисовка читает копию на машине, а обновление идёт рядом: свежие цели
-    коллег видны со следующего открытия. Без force — `pull` сам не ходит в сеть
-    чаще раза в PULL_EVERY_SECONDS; второй поток, пока первый ещё ждёт ответа,
-    не запускается.
+    ACL-1380: отрисовка читает копию на машине, обновление идёт рядом: свежие
+    правки коллег видны со следующего показа. ACL-2668 (решение владельца
+    17.11): обновление только по событиям — загрузка страницы и её Refresh,
+    открытие выбора в билдере; 15-секундного порога больше нет, каждое событие
+    идёт в GitHub. Пока прошлое обновление вида ещё ждёт ответа, второе не
+    запускается.
     """
-    global _targets_refreshing
-    with _targets_refresh_lock:
-        if _targets_refreshing:
-            return
-        _targets_refreshing = True
+    from src.analysis_agent import team_library as tl
 
-    def run() -> None:
-        global _targets_refreshing
+    def wrapper(kind: str):
+        def run() -> None:
+            # Импорт реестра подписывает его копию на свежие данные (on_update).
+            if kind == "targets":
+                from src.analysis_agent import targeting_registry as reg
+            elif kind == "ad_texts":
+                from src.analysis_agent import ad_text_registry as reg
+            else:
+                from src.fb_api import form_templates as reg
+            reg.pull(force=True)
+        return run
+
+    for kind in kinds or ("targets", "ad_texts", "form_templates"):
         try:
-            from src.analysis_agent import targeting_registry as tr
-            tr.pull()
+            tl.pull_in_background(kind, wrapper(kind))
         except Exception:
             pass
-        finally:
-            with _targets_refresh_lock:
-                _targets_refreshing = False
-
-    threading.Thread(target=run, daemon=True, name="acl-targets-refresh").start()
 
 
 def _load_sheet_targets() -> list[dict]:
     """The team targeting library from the machine's read copy (no network)."""
     from src.analysis_agent import targeting_registry as tr
-    _refresh_sheet_targets_in_background()
+    # Страница (и её Refresh) и /api/ref-data строят билдер: всё, что в нём
+    # выбирается из библиотеки, обновляется рядом, не задерживая ответ.
+    _sync_team_library_in_background()
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -1387,6 +1410,42 @@ def _load_ref_options() -> dict:
     return result
 
 
+def _builder_buyer_scope() -> dict:
+    """{name, suffix}: чьи черновики у страницы и как называть её ключи localStorage.
+
+    Суффикс пустой у байера по умолчанию: его ключи остаются прежними, и
+    существующие черновики в браузере не теряются."""
+    from src.web import builder_drafts as _bd
+    from src.web.buyer import get_selected_cm
+
+    name = (get_selected_cm() or "").strip()
+    suffix = _bd._suffix(name)
+    return {"name": name, "suffix": suffix}
+
+
+def _drop_other_buyers_builder_rows(report: dict) -> None:
+    """ACL-2780: в билдере только аккаунты выбранного байера.
+
+    Строки из отчёта (`open_recs`, `account_rows`) могут принадлежать другому
+    байеру той же машины: убираем их из этой отрисовки (отчёт уже скопирован).
+    Аккаунт без строки в карте никому не принадлежит и остаётся, как в списке."""
+    from src.web import account_buyer as _ab
+    from src.web.buyer import get_selected_cm
+
+    selected = (get_selected_cm() or "").strip()
+    tag_map = _ab.tags()
+    for country in report.get("countries", []):
+        recs = country.get("open_recs")
+        if isinstance(recs, dict):
+            country["open_recs"] = {k: v for k, v in recs.items() if _ab.is_visible(k, selected, tag_map)}
+        rows = country.get("account_rows")
+        if isinstance(rows, list):
+            country["account_rows"] = [
+                r for r in rows
+                if not isinstance(r, dict)
+                or _ab.is_visible(r.get("account_label") or r.get("account") or "", selected, tag_map)]
+
+
 def _add_linked_accounts_to_builder(report: dict) -> int:
     """Аккаунт, привязанный к стране на дешборде, виден и в её билдере.
 
@@ -1409,10 +1468,14 @@ def _add_linked_accounts_to_builder(report: dict) -> int:
     from src.web import account_links
 
     account_links.seed_from_account_map()
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
     by_key: dict[str, list[str]] = {}
     for stored in account_links.all_values("country"):
         by_key.setdefault(stored.casefold(), []).extend(
-            account_links.accounts_for("country", stored)
+            a for a in account_links.accounts_for("country", stored)
+            if _ab.is_visible(a, tag_map=_tags)
         )
 
     # A newly linked country can have no statistics at all, including no report
@@ -1466,6 +1529,31 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+
+
+# Флаги стран (ACL-2622). Файлы лежат в static/flags/<iso2>.svg (flag-icons, MIT);
+# строка без файла просто остаётся без флага — страница от этого не ломается.
+_FLAGS_DIR = Path(__file__).parent / "static" / "flags"
+
+
+def _flag_code_map() -> dict[str, str]:
+    """{имя страны в нижнем регистре: iso2} только для стран, у которых есть файл флага."""
+    have = {p.stem for p in _FLAGS_DIR.glob("*.svg")} if _FLAGS_DIR.is_dir() else set()
+    out = {name: code.lower() for name, code in _COUNTRY_CODES.items() if code.lower() in have}
+    out.update({code: code for code in have if len(code) == 2})
+    return out
+
+
+_FLAG_CODES = _flag_code_map()
+
+
+def _flag_code(name: object) -> str:
+    """'Kuwait' / 'KW' / 'kw' -> 'kw'; неизвестное или без файла -> ''."""
+    return _FLAG_CODES.get(str(name or "").strip().lower(), "")
+
+
+templates.env.filters["flag_code"] = _flag_code
+templates.env.globals["flag_codes"] = _FLAG_CODES
 from src.web.account_state import AOV_ROWS_COLLAPSED as _AOV_ROWS_COLLAPSED  # noqa: E402
 templates.env.globals["aov_rows_collapsed"] = _AOV_ROWS_COLLAPSED
 
@@ -1622,7 +1710,10 @@ def _secure_headers(response: Response, *, keep_cache_control: bool = False) -> 
         "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; "
         "script-src 'self' 'unsafe-inline' https://unpkg.com; "
         "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
-        "media-src 'self' blob:; connect-src 'self'"
+        "media-src 'self' blob:; connect-src 'self'; "
+        # ACL-2878: окно предпросмотра лендинга в билдере грузит чужую https-страницу;
+        # без frame-src её режет default-src 'self'. Сам iframe в песочнице без allow-same-origin.
+        "frame-src https:"
     )
     return response
 
@@ -1920,9 +2011,14 @@ async def acl_update_check(request: Request) -> JSONResponse:
             # Установленный ACL.exe: выпуски GitHub, не git (ACL-1240).
             from src.web import release_updates
             force = (request.query_params.get("force") or "").strip().lower() in {"1", "true", "yes"}
-            return JSONResponse(await run_in_threadpool(release_updates.check, force=force))
-        # `git fetch` ждёт сеть до двух минут — не в цикле событий (ACL-1399).
-        return JSONResponse(await run_in_threadpool(acl_update.check, fetch=not skip_fetch))
+            state = await run_in_threadpool(release_updates.check, force=force)
+        else:
+            # `git fetch` ждёт сеть до двух минут — не в цикле событий (ACL-1399).
+            state = await run_in_threadpool(acl_update.check, fetch=not skip_fetch)
+        # ACL-2668 №11: обновление, ждущее конца публикации, видно и после
+        # перезагрузки страницы — состояние на сервере, не в странице.
+        from src.web import update_queue
+        return JSONResponse({**state, "queued": update_queue.status()})
     except Exception as exc:  # pragma: no cover - defensive
         return JSONResponse(
             {"ok": False, "available": False, "note": f"Update check failed: {exc}"}
@@ -1934,8 +2030,9 @@ async def acl_update_apply() -> JSONResponse:
     """Hand the update to the launcher and stop, so it can restart us into it.
 
     Every refusal below is a case where clicking would have produced a dashboard
-    that does not come back: no supervising launcher, a run in flight, or a
-    candidate the launcher would reject anyway.
+    that does not come back: no supervising launcher, or a candidate the
+    launcher would reject anyway. A campaign job in flight is not a refusal
+    (ACL-2668 №11): the update is queued and starts by itself when it ends.
     """
     from src.web import acl_update
     from src.web.publish_jobs import active_job_count
@@ -1954,16 +2051,10 @@ async def acl_update_apply() -> JSONResponse:
             status_code=409,
         )
 
-    busy = active_job_count()
-    if busy:
-        return JSONResponse(
-            {
-                "ok": False,
-                "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACM, which would abandon them half-built.",
-            },
-            status_code=409,
-        )
+    from src.web import publish_jobs, update_queue
+
+    if update_queue.is_waiting():
+        return _queued_update_response()
 
     acl_update.forget_cache()
     state = acl_update.check(fetch=True, use_cache=False)
@@ -1975,42 +2066,78 @@ async def acl_update_apply() -> JSONResponse:
 
     candidate = state.get("candidate") or {}
     target = candidate.get("tag") or candidate.get("short") or ""
-    acl_update.request_restart(target=target)
-    acl_update.schedule_exit()
-    return JSONResponse({"ok": True, "target": target})
+
+    def start() -> None:
+        acl_update.request_restart(target=target)
+        acl_update.schedule_exit()
+
+    if publish_jobs.reserve_update():
+        try:
+            start()
+        except BaseException:
+            publish_jobs.release_update()
+            raise
+        return JSONResponse({"ok": True, "target": target})
+    # ACL-2668 №11: идёт публикация — не отказ, а очередь до её конца.
+    update_queue.queue(target, reserve=publish_jobs.reserve_update, start=start,
+                       cancel=publish_jobs.release_update)
+    return _queued_update_response()
+
+
+def _queued_update_response() -> JSONResponse:
+    """Ответ кнопке: обновление ждёт конца публикации и начнётся само."""
+    from src.web import update_queue
+
+    queued = update_queue.status()
+    return JSONResponse({"ok": True, "queued": True, "target": queued.get("target", ""),
+                         "message": update_queue.WAITING_TEXT})
 
 
 async def _apply_release_update(active_jobs) -> JSONResponse:
-    """Serialize the download and reserve an idle runtime before restarting."""
-    from starlette.concurrency import run_in_threadpool
-    from src.web import acl_update, release_updates, publish_jobs
-    from src.fb_ads_rpa.operations import browser_operation
+    """Serialize the download and reserve an idle runtime before restarting.
 
+    ACL-2668 №11: идёт публикация — обновление встаёт в очередь и начинается
+    само после неё (`update_queue`); чтение аккаунта обновление не держит —
+    рестарт его обрывает, очередь чтений после рестарта ставит его заново.
+    `active_jobs` оставлен ради прежней сигнатуры: занятость решает
+    `reserve_update()` под замком заданий, иначе задание, начатое между
+    проверкой и рестартом, оборвалось бы.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from src.web import acl_update, release_updates, publish_jobs, update_queue
+
+    if update_queue.is_waiting():
+        return _queued_update_response()
     if not release_updates.apply_lock.acquire(blocking=False):
         return JSONResponse({"ok": False, "error": "An update is already in progress."}, status_code=409)
-    restarting = reserved = browser_held = False
+    handed_off = reserved = False
     try:
-        if active_jobs():
-            return JSONResponse({"ok": False, "error": "Wait for campaign jobs to finish before updating."}, status_code=409)
         setup, manifest = await run_in_threadpool(release_updates.download)
-        if active_jobs() or not publish_jobs.reserve_update():
-            return JSONResponse({"ok": False, "error": "Campaign jobs started during the download; try again when they finish."}, status_code=409)
-        reserved = True
-        browser_held = browser_operation.acquire(blocking=False)
-        if not browser_held:
-            return JSONResponse({"ok": False, "error": "Wait for browser reading to finish before updating."}, status_code=409)
-        release_updates.start_helper(setup, manifest)
-        acl_update.schedule_exit()
-        restarting = True
-        return JSONResponse({"ok": True, "target": manifest["version"]})
+
+        def start() -> None:
+            release_updates.start_helper(setup, manifest)
+            acl_update.schedule_exit()
+
+        def cancel() -> None:
+            publish_jobs.release_update()
+            release_updates.apply_lock.release()
+
+        if publish_jobs.reserve_update():
+            reserved = True
+            start()
+            handed_off = True
+            return JSONResponse({"ok": True, "target": manifest["version"]})
+        # Замок обновления переходит ожидающему потоку: второй установки не будет.
+        update_queue.queue(manifest["version"], reserve=publish_jobs.reserve_update,
+                           start=start, cancel=cancel)
+        handed_off = True
+        return _queued_update_response()
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
         message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
-        if not restarting:
-            if browser_held:
-                browser_operation.release()
+        if not handed_off:
             if reserved:
                 publish_jobs.release_update()
             release_updates.apply_lock.release()
@@ -2075,10 +2202,44 @@ def _build_compare(
         prev = deepcopy(report_for_period(base_report, df, info["date_from"], info["date_to"]))
         _enrich_country_overview(prev)
         # span="all": чтения с аккаунтов сравнению не нужны, только книжные числа.
-        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all")
+        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all", compare_only=True)
         return period_compare.PeriodCompare(info, prev, prev_amap), ""
     except Exception:
         return None, "Could not calculate the earlier period; showing the selected period only."
+
+
+def _no_data_message(exc: BaseException) -> str:
+    """ACL-2607: why there is no stats data, in terms safe to show (no host, user or password)."""
+    if not bi_stats.bi_enabled() and (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() != "excel":
+        return ("BI is not connected on this computer, and there is no Stats workbook. "
+                "Sign in below to load the connection settings.\n\n" + bi_stats.redact(str(exc)))
+    return bi_stats.redact(str(exc))
+
+
+def _needs_bi_sign_in(exc: BaseException) -> bool:
+    """A computer with no BI connection and no stats workbook (fresh install, or an update from
+    the Excel era): the one step it needs is the Google sign-in, not an error page."""
+    if bi_stats.bi_enabled() or (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() == "excel":
+        return False
+    return str(exc).startswith("Excel file not found")
+
+
+def _after_connections_change() -> None:
+    """ACL-2607: new connection settings mean a failed load may work now - drop the remembered
+    failure and the stale BI revision so the next request rebuilds, no restart."""
+    from src.web.cache import forget_background_error
+
+    forget_background_error()
+    if bi_stats.bi_enabled():
+        try:
+            bi_stats.refresh_revision(force=True)
+        except Exception:  # noqa: BLE001 - the next page load decides
+            pass
+        # Start building now, so the page that opens after sign-in is already on its way.
+        try:
+            _start_warm("", "", "")
+        except Exception:  # noqa: BLE001 - the next page load starts it anyway
+            pass
 
 
 def _render_report(
@@ -2095,10 +2256,23 @@ def _render_report(
     try:
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
+        if _needs_bi_sign_in(e):
+            from src.analysis_agent import connection_settings as cs
+
+            return templates.TemplateResponse(
+                request,
+                "error.html",
+                {"request": request, "title": "Connect statistics", "onboarding": True,
+                 "auto_sign_in": cs.has_google_token()},
+                status_code=200,
+            )
+        # ACL-2607: first run with no stats data - the page offers the Connections
+        # sign-in, because that is how a fresh computer gets its BI credentials.
         return templates.TemplateResponse(
             request,
             "error.html",
-            {"request": request, "title": "No data file", "message": str(e)},
+            {"request": request, "title": "No data file", "message": _no_data_message(e),
+             "connect": True},
             status_code=200,
         )
     except ValueError as e:
@@ -2135,6 +2309,7 @@ def _render_report(
     # До сборки списка аккаунтов ниже: добавленные должны получить и проверку
     # готовности, и строку в билдере, а не одно из двух.
     _add_linked_accounts_to_builder(report)
+    _drop_other_buyers_builder_rows(report)
     _enrich_country_overview(report)
     period_cmp, compare_note = _build_compare(
         base_report, _df, date_from, date_to, span.strip(),
@@ -2182,6 +2357,8 @@ def _render_report(
             "account_preflight": account_preflight,
             "account_preflight_json": account_preflight,
             "account_alias_map_json": account_alias_map,
+            # ACL-2780: байер, чьи черновики билдера показывает страница.
+            "builder_buyer": _builder_buyer_scope(),
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
@@ -2277,7 +2454,7 @@ def _fb_backend() -> str:
 
         return publish_api.backend()
     except Exception:  # pragma: no cover - кнопка не важнее страницы
-        return "rpa"
+        return "api"
 
 
 
@@ -2363,6 +2540,12 @@ def _compact_account_key(name) -> str:
     return re.sub(r"[^0-9a-z]", "", key)
 
 
+def _is_facebook_label(name) -> bool:
+    """Имя Facebook-аккаунта: `Facebook…` в книге или `KLD_…` из Multilogin."""
+    n = str(name or "").strip().casefold()
+    return n.startswith("facebook") or n.startswith("kld_")
+
+
 def _alias_by_tail(label: str, known: dict) -> str:
     """Имя из книги для подключённого аккаунта — или пусто.
 
@@ -2378,15 +2561,28 @@ def _alias_by_tail(label: str, known: dict) -> str:
         return exact
     if has_own_name(label, known):
         return ""  # своё имя в книге есть — альтернатива не нужна
-    tail = _account_tail(label)
-    if not tail:
+    # ACL-2863: хвост — только от собственного имени (первое слово, без
+    # пометки « - Имя Фамилия»), и в нём обязана быть цифра: хвост из одних
+    # букв — это чьё-то имя или бренд, а не номер аккаунта.
+    from src.analysis_agent.analyze_fb_stats import normalize_account_alias
+
+    # Имя уже в стиле книги (`FacebookDoc446 - …`) — догадка по хвосту не нужна
+    # и ошибается: цепляет чужую серию (Doc405 → FacebookMKTO1405). Хвостом
+    # пользуются только имена Multilogin (`KLD_…`); суффикс id — как прежде.
+    if str(label or "").strip().casefold().startswith("facebook"):
+        return _alias_without_id_suffix(label, known)
+    tail = _account_tail(normalize_account_alias(label))
+    if not tail or not any(ch.isdigit() for ch in tail):
         return ""
+    label_is_fb = _is_facebook_label(label)
     # Само имя из кандидатов исключается: свой хвост у него, разумеется,
     # единственный, и аккаунт «совпадал» сам с собой — на экране появлялась
     # подпись «= KLD_BFL_X01», объясняющая ровно ничего.
     hits = [
         a for a in known
         if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
+        # ACL-2863: Facebook-аккаунт не берёт числа чужой платформы (Taboola_…).
+        and (not label_is_fb or _is_facebook_label(a))
     ]
     if hits:
         return hits[0] if len(hits) == 1 else ""
@@ -2714,6 +2910,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 # Страница - на кампании: ключ есть только когда поле пришло в форме.
                 if f"camp_{idx}_page_id" in form:
                     slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
+                # Пиксель кампании (поле Pixel рядом со Страницей): пусто = Automatic, ключа нет.
+                campaign_pixel = str(form.get(f"camp_{idx}_pixel_id") or "").strip()
+                if campaign_pixel:
+                    slot["campaign_pixel_id"] = campaign_pixel
                 if sf["adset_name"]:
                     slot["adset_name"] = sf["adset_name"]
                 if sf["pixel"]:
@@ -2911,12 +3111,34 @@ def _render_and_remember(request: Request, inputs: dict, **kwargs) -> HTMLRespon
     return response
 
 
+# ACL-2668 #21: последний показанный период по менеджеру. Новые данные BI
+# проверяются, когда байер сменил период или сравнение (и по Refresh), а не
+# фоновым опросом раз в пять минут.
+_PERIOD_FIELDS = ("date_from", "date_to", "span", "compare", "cmp_from", "cmp_to")
+_LAST_PERIOD: dict[str, tuple] = {}
+_LAST_PERIOD_LOCK = threading.Lock()
+
+
+def _period_changed(inputs: dict) -> bool:
+    """Этот запрос меняет период/сравнение относительно прошлого показа. Без сети."""
+    period = tuple(inputs[name] for name in _PERIOD_FIELDS)
+    with _LAST_PERIOD_LOCK:
+        previous = _LAST_PERIOD.get(inputs["cm"])
+        _LAST_PERIOD[inputs["cm"]] = period
+    return previous is not None and previous != period
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = "",
     compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
     inputs = _store_inputs(date_from, date_to, span, compare, cmp_from, cmp_to)
+    if _period_changed(inputs) and bi_stats.bi_enabled():
+        # Смена периода — событие байера: спросить BI о новых данных в пуле
+        # (ограниченное ожидание). Новая ревизия меняет ключ, и ниже
+        # страница уйдёт в фоновую пересборку, как после Refresh.
+        await _in_report_pool(recheck_bi_revision)
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
     # а сразу ответить и собрать его в фоне. ACL-2207: отвечаем последней
     # сохранённой страницей, если она есть, а не экраном ожидания.
@@ -2926,9 +3148,9 @@ async def index(
         # and only when there is something to show.
         stored = await _in_report_pool(_stored_page, inputs) if report_store.exists(inputs) else None
         if failure is None and rebuild_deferred() and (stored is not None or report_has_entry()):
-            # ACL-2260: a publish or a kept profile window is active - no rebuild
-            # of its own. Show the saved page (or the older report in memory)
-            # and let the page ask again; it rebuilds once things are idle.
+            # ACL-2668: memory is short (the 92 % gate) - no rebuild of its own.
+            # Show the saved page (or the older report in memory) and let the
+            # page ask again; it rebuilds once memory is back.
             if stored is not None:
                 return HTMLResponse(report_store.decorate(stored, deferred=True))
         elif failure is None:
@@ -3222,20 +3444,15 @@ async def api_save_run_limits(request: Request) -> JSONResponse:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
-    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset", "confirm"}:
+    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset"}:
         return JSONResponse({"ok": False, "error": "Unknown setting in the request"}, status_code=400)
     if "reset" in data and not isinstance(data["reset"], bool):
         return JSONResponse({"ok": False, "error": "Expected true or false for reset"}, status_code=400)
-    if "confirm" in data and not isinstance(data["confirm"], bool):
-        return JSONResponse({"ok": False, "error": "Expected true or false for confirm"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
         result = await run_in_threadpool(
-            lambda: run_limits.save(data.get("ceiling"), data.get("warm_heavy"),
-                                    data.get("memory_max_used_pct"), reset=bool(data.get("reset")),
-                                    confirm=data.get("confirm") is True))
-    except run_limits.NeedsConfirm as exc:
-        return JSONResponse({"ok": False, "needs_confirm": True, "error": str(exc)}, status_code=409)
+            lambda: run_limits.save(data.get("ceiling"), data.get("memory_max_used_pct"),
+                                    reset=bool(data.get("reset"))))
     except run_limits.RunLimitError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, **result})
@@ -3711,6 +3928,9 @@ def api_accounts_overview() -> JSONResponse:
     country_by_alias = primary_country(_resolved)
 
     selected_cm = (get_selected_cm() or "").strip()
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
     open_detail = open_profiles_detailed()
     open_ids = [p["profile_id"] for p in open_detail]
     # Profiles already spoken for, so the picker can say so instead of letting
@@ -3726,6 +3946,9 @@ def api_accounts_overview() -> JSONResponse:
     for row in sheet_rows:
         label = (row.get("account_label") or row.get("alias") or "").strip()
         entry = resolve_account_entry(account_map, label) if label else None
+        # Connected under another buyer: not on this buyer's screen.
+        if entry is not None and not _ab.is_visible(label, selected_cm, _tags):
+            continue
         ad_id = (getattr(entry, "ad_account_id", "") or "").strip() if entry else ""
         profile_id = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
         missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
@@ -3764,6 +3987,8 @@ def api_accounts_overview() -> JSONResponse:
     for label, entry in account_map.items():
         label = (label or "").strip()
         if not label or label in listed:
+            continue
+        if not _ab.is_visible(label, selected_cm, _tags):
             continue
         owner = owner_by_alias.get(normalize_account_alias(label), "")
         # ACL-1588: подключён здесь — виден всегда, чьим бы ни назвала его книга.
@@ -3933,6 +4158,7 @@ async def api_connections_sign_in() -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not sign in. Try again."}, status_code=500)
     checks = await asyncio.to_thread(cs.check_all)
+    await asyncio.to_thread(_after_connections_change)
     return JSONResponse({"ok": True, "updated": applied["updated"], "checks": checks})
 
 
@@ -3941,7 +4167,9 @@ async def api_connections_check() -> JSONResponse:
     """One read per connection; a green or red line each."""
     from src.analysis_agent import connection_settings as cs
 
-    return JSONResponse({"ok": True, "checks": await asyncio.to_thread(cs.check_all)})
+    checks = await asyncio.to_thread(cs.check_all)
+    await asyncio.to_thread(_after_connections_change)
+    return JSONResponse({"ok": True, "checks": checks})
 
 
 @app.get("/api/connections/shareable")
@@ -4375,9 +4603,12 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
 
 
 @app.get("/api/builder-state")
-def api_builder_state_get() -> JSONResponse:
-    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}."""
-    return JSONResponse({"ok": True, "docs": _builder_drafts.load()})
+def api_builder_state_get(buyer: str | None = None) -> JSONResponse:
+    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}.
+
+    ACL-2780: набор свой у каждого байера. `buyer` — тот, под кем открыта
+    страница (вкладка могла остаться от прежнего байера); нет — выбранный сейчас."""
+    return JSONResponse({"ok": True, "docs": _builder_drafts.load(buyer)})
 
 
 @app.post("/api/builder-state")
@@ -4395,7 +4626,8 @@ async def api_builder_state_set(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
     try:
         accepted, doc = _builder_drafts.save(body.get("name"), body.get("saved_at"),
-                                             body.get("data"), body.get("base"))
+                                             body.get("data"), body.get("base"),
+                                             buyer=body.get("buyer") if isinstance(body.get("buyer"), str) else None)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except OSError:
@@ -4460,7 +4692,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
     _FIELDNAMES = [
         "account_name", "ad_account_id", "page_id", "multilogin_instance",
         "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
-        "proxy_user", "proxy_pass", "country", "page_name",
+        "proxy_user", "proxy_pass", "country", "page_name", "buyer",
     ]
 
     try:
@@ -4543,6 +4775,11 @@ async def account_map_patch(request: Request) -> JSONResponse:
         if existing_idx is not None:
             rows[existing_idx] = new_row
         else:
+            # A new account belongs to the buyer selected while it is connected.
+            # An existing row keeps its tag: editing a profile is not a re-tag.
+            from src.web import account_buyer as _ab
+
+            new_row[_ab.COLUMN] = _ab.tag_for_new_row()
             rows.append(new_row)
 
         write_csv_atomic(map_path, fieldnames, rows)
@@ -5214,6 +5451,28 @@ async def account_refresh_request(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **result})
 
 
+def _lock_holds(accounts) -> dict:
+    """ACL-2653: `{account: {reason, next, at, seen, person_lock}}` of the profiles held by a Facebook lock (local file only)."""
+    try:
+        from src.fb_api import account_blocks
+
+        return {a: {k: v.get(k) for k in ("kind", "code", "reason", "next", "at", "seen", "person_lock", "page", "title")}
+                for a, v in account_blocks.view(list(accounts)).items() if v.get("person_lock")}
+    except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the page
+        return {}
+
+
+def _account_holds(accounts) -> dict:
+    """ACL-2652: `{account: {kind, reason, next, at}}` of the profiles that wait for a person (local file only)."""
+    try:
+        from src.fb_api import account_blocks
+
+        return {a: {k: v[k] for k in ("kind", "code", "reason", "next", "at")}
+                for a, v in account_blocks.view(list(accounts)).items()}
+    except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the state
+        return {}
+
+
 @app.get("/account-refresh/state")
 @_off_loop
 def account_refresh_state() -> JSONResponse:
@@ -5225,7 +5484,8 @@ def account_refresh_state() -> JSONResponse:
     except (OSError, RuntimeError, ValueError):
         return JSONResponse({"ok": False, "error": "Saved account refresh state is unavailable. Check the settings backup."}, status_code=503)
     state["rows"] = {a: value for a, value in state["rows"].items() if a in accounts}
-    return JSONResponse({"ok": True, **state, "accounts": ci.summaries(accounts),
+    return JSONResponse({"ok": True, **state, "holds": _account_holds(accounts), "locks": _lock_holds(accounts),
+                         "accounts": ci.summaries(accounts),
                          "needs_api": not ci.backend_ready()})
 
 
@@ -5733,6 +5993,7 @@ async def account_links_edit(request: Request) -> JSONResponse:
     also how somebody notices that a country still has money running through it.
     """
     from src.web import account_links
+    from src.web.buyer import get_selected_cm
 
     try:
         data = await request.json()
@@ -5755,18 +6016,27 @@ async def account_links_edit(request: Request) -> JSONResponse:
             # Страна без аккаунтов: сначала заводим место, потом подключаем в
             # него аккаунт из Multilogin. Обратный порядок требовал выбрать
             # аккаунт из уже известных — то есть до подключения нового.
-            return JSONResponse({"ok": True, "changed": account_links.add_value(kind, value)})
+            changed = account_links.add_value(kind, value, buyer=get_selected_cm())
+            if changed:
+                return JSONResponse({"ok": True, "changed": True})
+            # ACL-2853: «ничего не изменилось» не должно кончаться молчаливой
+            # перезагрузкой того же экрана — страница покажет причину у кнопки.
+            return JSONResponse({
+                "ok": True, "changed": False,
+                "reason": f"{value} is already on your account map. Nothing was added.",
+            })
 
         if action == "link":
             if not account:
                 return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
-            added = account_links.link(account, kind, value)
+            added = account_links.link(account, kind, value, buyer=get_selected_cm())
             return JSONResponse({"ok": True, "changed": added})
 
         if action in ("unlink", "close"):
             spending = await _in_report_pool(
                 _accounts_spending_today,
-                [account] if action == "unlink" else account_links.accounts_for(kind, value),
+                [account] if action == "unlink"
+                else account_links.accounts_visible_for(kind, value, get_selected_cm()),
             )
             if spending and not confirm:
                 names = ", ".join(spending[:4]) + ("…" if len(spending) > 4 else "")
@@ -5786,9 +6056,11 @@ async def account_links_edit(request: Request) -> JSONResponse:
             # «Изменилось» — про страну, а не про освобождённые аккаунты:
             # у пустой страны их нет, и ответ «ничего не поменялось» после
             # её удаления был бы неправдой.
-            existed = any(v.lower() == value.lower() for v in account_links.all_values(kind))
-            freed = account_links.unlink_all_for(kind, value)
-            return JSONResponse({"ok": True, "changed": existed, "freed": freed})
+            freed, removed = account_links.close_country(kind, value, buyer=get_selected_cm())
+            out = {"ok": True, "changed": bool(removed), "freed": freed}
+            if not removed:
+                out["reason"] = f"{value} is not on your account map, so there was nothing to close."
+            return JSONResponse(out)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # pragma: no cover - defensive
@@ -5928,6 +6200,15 @@ async def account_map_remove(request: Request) -> JSONResponse:
         # Ordinary map-only removals retain their exact-name matching.
         return name.lower() if also_unlink else name
 
+    # ACL-2653: the machine stop and the profile hold of a removed account are keyed by its map row, so the keys
+    # are taken before the row goes.
+    try:
+        from src.analysis_agent import account_refresh as _refresh
+
+        _removal = _refresh.removal_keys(list(dict.fromkeys(wanted)))
+    except Exception:  # noqa: BLE001 - a key problem never blocks the removal
+        _removal = {}
+
     try:
         if map_path.is_file():
             with open(map_path, encoding="utf-8-sig", newline="") as f:
@@ -5970,6 +6251,15 @@ async def account_map_remove(request: Request) -> JSONResponse:
             _hidden.set_hidden(name, True)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    if _removal:
+        try:
+            from starlette.concurrency import run_in_threadpool
+
+            await run_in_threadpool(_refresh.forget_accounts, _removal,
+                                    [(r.get("account_name") or "").strip() for r in kept])
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Removed account stop was not dropped", exc_info=True)
 
     # `missing` is reported rather than treated as failure: the rest were
     # removed, and pretending otherwise would invite a confused retry.
@@ -6439,6 +6729,89 @@ async def api_account_pages(request: Request) -> JSONResponse:
     return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
 
 
+@app.post("/api/account-pixels")
+async def api_account_pixels(request: Request) -> Response:
+    """Пиксели кабинета для поля Pixel кампании; та же сессия профиля на чтение, без записей в Meta."""
+    from src.web.account_pixels import cached_only, read_pixels
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
+    if str(form.get("cached") or "") == "1":
+        return JSONResponse(await asyncio.to_thread(cached_only, account))
+    force = str(form.get("force") or "") == "1"
+    if str(form.get("stream") or "") == "1":
+        # ACL-2850: строки ожидания («Waiting for a free profile slot», «Opening ...») едут строками JSON
+        # по ходу чтения, а не опросом: поле Pixel не молчит, пока профиль не открыт.
+        from src.web.account_pixels import stream_pixels
+
+        def lines():
+            import json as _json
+            for item in stream_pixels(account, force=force):
+                yield _json.dumps(item, ensure_ascii=False) + "\n"
+        return StreamingResponse(lines(), media_type="application/x-ndjson")
+    return JSONResponse(await asyncio.to_thread(read_pixels, account, force=force))
+
+
+@app.post("/api/jcloud/landings/search")
+async def api_jcloud_landings_search(request: Request) -> JSONResponse:
+    """ACL-2852: поиск лендингов в JCloudFront для билдера. Только чтение, только по нажатию.
+
+    Токен JCloud остаётся на сервере: в ответ идут лишь поля карточки.
+    """
+    from src.jcloud import client as jcloud
+
+    form = await request.form()
+    try:
+        page = int(str(form.get("page") or "1"))
+    except ValueError:
+        page = 1
+    try:
+        stock_id = int(str(form.get("stock_id") or "")) or None
+    except ValueError:
+        stock_id = None
+    result = await asyncio.to_thread(
+        jcloud.search, str(form.get("query") or ""), page=page,
+        snapshot_id=str(form.get("snapshot_id") or "") or None,
+        mode=str(form.get("mode") or "") or None, stock_id=stock_id)
+    return JSONResponse(result)
+
+
+@app.post("/api/jcloud/stocks/search")
+async def api_jcloud_stocks_search(request: Request) -> JSONResponse:
+    """ACL-2852: подсказки ассета (сток JCloudFront) для фильтра поиска лендингов."""
+    from src.jcloud import client as jcloud
+
+    form = await request.form()
+    return JSONResponse(await asyncio.to_thread(jcloud.find_stocks, str(form.get("query") or "")))
+
+
+@app.post("/api/account-landings")
+async def api_account_landings(request: Request) -> JSONResponse:
+    """ACL-2852: лендинги аккаунта (до трёх, с процентами). op: get | add | remove | percent."""
+    from src.web import account_landings as store
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "message": "account is required"}, status_code=400)
+    op = str(form.get("op") or "get")
+    if op == "add":
+        try:
+            landing = json.loads(str(form.get("landing") or ""))
+        except ValueError:
+            landing = None
+        result = await asyncio.to_thread(store.add_landing, account, landing)
+    elif op == "remove":
+        result = await asyncio.to_thread(store.remove_landing, account, form.get("id"))
+    elif op == "percent":
+        result = await asyncio.to_thread(store.set_percent, account, form.get("id"), form.get("percent"))
+    else:
+        result = {"ok": True, "landings": await asyncio.to_thread(store.get_landings, account)}
+    return JSONResponse(result)
+
+
 @app.post("/api/page-forms")
 async def api_page_forms(request: Request) -> JSONResponse:
     """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
@@ -6459,6 +6832,54 @@ async def api_page_forms(request: Request) -> JSONResponse:
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
 
 
+@app.post("/api/page-photos")
+async def api_page_photos(request: Request) -> JSONResponse:
+    """ACL-2188: картинки Страницы для фона формы. Только по нажатию человека; без ссылок на картинки.
+
+    Чтение без права записи; ни опроса, ни расписания. Страница обязательна и должна принадлежать аккаунту.
+    """
+    from src.web import page_forms, publish_api
+
+    form = await read_form(request, BUILDER_FORM)
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    page_id = str(form.get("page_id") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not page_id:
+        return JSONResponse({"ok": False, "error": "page_id is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Background images need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.read_photos, account, page_id))
+
+
+@app.post("/api/form-photo-upload")
+async def api_form_photo_upload(request: Request) -> JSONResponse:
+    """ACL-2533: фон формы из файла. Файл с локальной страницы -> вкладка профиля -> id фото.
+
+    Только по нажатию человека; картинка из Meta назад не читается (предпросмотр - из локального файла).
+    Тип определяется по байтам, а не по имени; не jpeg/png и больше 8 МБ - отказ до профиля.
+    """
+    from src.web import page_forms, publish_api
+    from src.web.request_limits import FORM_PHOTO_FORM
+
+    form = await read_form(request, FORM_PHOTO_FORM)
+    account = str(form.get("account_label") or form.get("account") or "").strip()
+    page_id = str(form.get("page_id") or "").strip()
+    upload = form.get("file")
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not page_id:
+        return JSONResponse({"ok": False, "error": "page_id is required"}, status_code=400)
+    if upload is None or not hasattr(upload, "read"):
+        return JSONResponse({"ok": False, "error": "an image file is required"}, status_code=400)
+    data = await upload.read()
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Background images need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.upload_photo, account, page_id, data))
+
+
 @app.get("/api/form-templates")
 def api_form_templates_list(force: bool = False) -> JSONResponse:
     """ACL-1776/2054: шаблоны Instant Form из общей библиотеки (в Meta не ходит).
@@ -6466,9 +6887,13 @@ def api_form_templates_list(force: bool = False) -> JSONResponse:
     `templates` - годные к публикации (выбор в билдере); `rows` - все записи для
     вкладки Forms, в том числе invalid; `deleted`, `library`, `migration` - для неё же.
     `force` перечитывает библиотеку: вкладка открывается с ним, билдер - без.
+    ACL-2668: билдер отвечает по копии сразу, а открытие выбора — событие:
+    библиотека обновляется рядом, к следующему показу.
     """
     from src.fb_api import form_templates
 
+    if not force:
+        _sync_team_library_in_background("form_templates")
     try:
         view = form_templates.listing(force=force)
     except form_templates.TemplateError as exc:
@@ -6526,7 +6951,46 @@ async def api_form_templates_save(request: Request) -> JSONResponse:
     except OSError:
         return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
                             status_code=500)
+    # ACL-2571: the picture kept on this computer now belongs to the saved template (the library has only its hash).
+    if saved.get("cover_local_sha256"):
+        from src.fb_api import form_cover_store
+
+        await asyncio.to_thread(form_cover_store.adopt, saved["id"], saved["cover_local_sha256"])
     return JSONResponse({"ok": True, "template": saved})
+
+
+@app.post("/api/form-templates/cover-file")
+async def api_form_template_cover_stage(request: Request) -> JSONResponse:
+    """ACL-2571: keep the background picture of a shared template ON THIS COMPUTER; nothing goes to Meta.
+
+    No account or Page is needed. The type comes from the bytes, JPEG/PNG up to 8 MB. The answer is the
+    hash that the template record keeps - the team library never receives image bytes.
+    """
+    from src.fb_api import form_cover_store
+    from src.web.request_limits import FORM_PHOTO_FORM
+
+    form = await read_form(request, FORM_PHOTO_FORM)
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return JSONResponse({"ok": False, "message": "An image file is required"}, status_code=400)
+    data = await upload.read()
+    try:
+        got = await asyncio.to_thread(form_cover_store.stage, data)
+    except OSError:
+        return JSONResponse({"ok": False, "message": "The picture could not be kept on this computer"}, status_code=500)
+    return JSONResponse(got, status_code=200 if got.get("ok") else 400)
+
+
+@app.get("/api/form-templates/cover-file")
+def api_form_template_cover_file(id: str = "", sha: str = "") -> Response:
+    """ACL-2571: the stored picture of a template, for the editor preview (same origin, so `img-src 'self'`)."""
+    from src.fb_api import form_cover_store
+
+    data = form_cover_store.read(id, sha)
+    if data is None:
+        return Response(status_code=404)
+    return Response(content=data, media_type=form_cover_store.sniff_image(data) or "application/octet-stream",
+                    headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @app.post("/api/form-templates/delete")
@@ -6552,7 +7016,20 @@ async def api_form_templates_restore(request: Request) -> JSONResponse:
 async def api_form_templates_duplicate(request: Request) -> JSONResponse:
     from src.fb_api import form_templates
 
-    return await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+    resp = await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+    if resp.status_code == 200:
+        # ACL-2571: a copy keeps the picture kept on this computer.
+        from src.fb_api import form_cover_store
+
+        try:
+            raw = await request.json()
+            src_id = str((raw or {}).get("id") or "")
+            new = json.loads(resp.body)["template"]
+            if new.get("cover_local_sha256"):
+                await asyncio.to_thread(form_cover_store.copy_to, src_id, new["id"], new["cover_local_sha256"])
+        except (ValueError, KeyError, OSError, TypeError):
+            pass
+    return resp
 
 
 @app.post("/api/form-templates/migrate")
@@ -7511,8 +7988,12 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "token is required"})
 
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
+    claim = _slot_claim(token)
+    clash = _slot_clash(instance, claim)
+    if clash:
+        return JSONResponse({"ok": False, "error": clash})
     try:
-        update_machine_env({env_key: token})
+        update_machine_env(_slot_values(instance, token, claim))
     except Exception as exc:
         return JSONResponse(
             {"ok": False, "error": f"Failed to save machine settings: {exc}"},
@@ -7520,6 +8001,112 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
         )
 
     return JSONResponse({"ok": True, "instance": instance, "env_key": env_key})
+
+
+def _slot_work_busy() -> int:
+    """Work that needs the Multilogin connections: campaign jobs, held profile
+    slots, and profile warm-ups (manual or automatic). Returns a rough count."""
+    from src.web.publish_jobs import active_job_count, profile_slots_held
+
+    n = active_job_count()
+    try:
+        from src.web import warm_api
+
+        n += warm_api.running_job_count()
+    except Exception:
+        pass
+    # ACL-2668: оставленное открытым окно — открытый профиль на этом подключении, считаем его.
+    if not n and profile_slots_held():
+        n = 1
+    return n
+
+
+def _slot_claim(token: str) -> str:
+    from src.web import mlx_slots
+
+    return mlx_slots.token_workspace(token)
+
+
+def _slot_values(instance: str, token: str, claim: str) -> dict:
+    """Machine-env values for a pasted token: the id always follows the token.
+
+    The remembered name is kept only when it already belonged to this same
+    workspace; otherwise it is stale and is blanked together with the id.
+    """
+    key_ws, key_id = f"MULTILOGIN_WORKSPACE_{instance}", f"MULTILOGIN_WORKSPACE_ID_{instance}"
+    values = {f"MULTILOGIN_AUTOMATION_TOKEN_{instance}": token, key_id: claim}
+    if not claim or (os.environ.get(key_id) or "").strip().lower() != claim:
+        values[key_ws] = ""
+    return values
+
+
+def _slot_clash(instance: str, workspace: str) -> str:
+    """Why this token must not go into `instance`: the other slot already has it.
+
+    The two slots are two different Multilogin accounts by design. The same
+    workspace in both is what happened when the KLD login was typed under
+    Inhouse — every later publish then went to the wrong account.
+    """
+    from src.web import mlx_slots
+
+    other = mlx_slots.other_slot_with(workspace, instance)
+    if not other:
+        return ""
+    labels = mlx_instance_labels()
+    return (f"This login belongs to the same Multilogin workspace as {labels.get(other, other)}, "
+            f"which is already connected. {labels.get(instance, instance)} needs its own account — "
+            f"nothing was saved.")
+
+
+@app.post("/multilogin-slots-repair")
+async def multilogin_slots_repair() -> JSONResponse:
+    """Fix "both slots are the same workspace" if this machine is in that state.
+
+    The page calls it once on load. Nothing changes when the slots are fine, so
+    it is safe to call every time; when it does change something the answer says
+    what and why, and the page shows it.
+    """
+    from src.web import mlx_slots
+
+    try:
+        if mlx_slots.duplicate(claims_only=True) and _slot_work_busy():
+            return JSONResponse({"ok": True, "repaired": False, "deferred": True,
+                                 "message": mlx_slots.deferred_message()},
+                                headers={"Cache-Control": "no-store"})
+        result = mlx_slots.repair(mlx_instance_labels())
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Could not repair Multilogin connections: {exc}"})
+    return JSONResponse({"ok": True, **result}, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/multilogin-logout")
+async def multilogin_logout(request: Request) -> JSONResponse:
+    """Disconnect one Multilogin slot on this machine. Body: {instance: 'A'|'B'}."""
+    from src.web import mlx_slots
+    from src.web.publish_jobs import active_job_count
+
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    instance = str((data or {}).get("instance") or "").strip().upper()
+    if instance not in ("A", "B"):
+        return JSONResponse({"ok": False, "error": "Say which Multilogin account to log out of."},
+                            status_code=400)
+    busy = active_job_count()
+    if busy or _slot_work_busy():
+        what = f"{busy} campaign job(s)" if busy else "Campaign or profile work"
+        return JSONResponse(
+            {"ok": False, "error": f"{what} still running — they need this connection. "
+                                   "Log out when they finish."},
+            status_code=409,
+        )
+    try:
+        mlx_slots.disconnect(instance)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Could not change this machine's settings: {exc}"},
+                            status_code=500)
+    return JSONResponse({"ok": True, "instance": instance})
 
 
 @app.post("/multilogin-signin")
@@ -7587,7 +8174,10 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     # token works for this request but could not be persisted for next launch.
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
     if save_token and auto_token:
-        values = {env_key: auto_token}
+        clash = _slot_clash(instance, signed.workspace_id or _slot_claim(auto_token))
+        if clash:
+            return JSONResponse({"ok": False, "error": clash})
+        values = _slot_values(instance, auto_token, _slot_claim(auto_token))
         if signed.workspace_id:
             values.update({ws_key: signed.workspace_name, ws_id_key: signed.workspace_id})
         try:

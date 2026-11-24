@@ -26,6 +26,28 @@ log = logging.getLogger(__name__)
 #: Поля чтения созданной формы для сверки.
 READBACK_FIELDS = "id,name,status,locale,page{id},questions{key,label,type,options}"
 
+#: ACL-2188: картинка шаблона принадлежит другой Странице - стоп на Check plan, до любой записи.
+MSG_COVER_OTHER_PAGE = ("Form template {name!r}: the background image belongs to another Page. Duplicate the "
+                        "template and choose a picture of this Page, or remove the image.")
+MSG_COVER_REFUSED = ("Meta refused the form {form_name!r} with its background image: {why}. "
+                     "Choose another picture or remove the image, then publish again.")
+#: ACL-2579: the one-field read of an existing form's background (preflight).
+COVER_ONLY_FIELDS = "id,background_image_option,context_card{cover_photo{id}}"
+MSG_COVER_UNCONFIRMED = "the background image could not be confirmed"
+#: ACL-2579: a form of this exact name is already on the Page but Meta shows it without the template's background.
+MSG_COVER_MISSING_ON_EXISTING = (
+    "A form named {name!r} is already on this Page, but it has no background image (or another one), while the "
+    "template has a background. The robot will not reuse it. Archive that form in Ads Manager (or change the "
+    "template), then publish again.")
+#: ACL-2571: the picture of a shared template is a file on one computer; each Page gets its own upload at publish.
+MSG_COVER_ON_OTHER_COMPUTER = ("the background picture of form template {name!r} is on another computer, so this form "
+                               "is created without a background. Choose the picture again in the template on this "
+                               "computer to use it")
+MSG_COVER_FILE_LOST = ("The background picture of form template {name!r} is no longer on this computer. Choose it again "
+                       "in the template. Nothing was created.")
+MSG_COVER_UPLOAD_REFUSED = ("The background picture of form template {name!r} could not be uploaded to the Page: "
+                            "{why}. Nothing was created; fix this or remove the picture from the template.")
+
 MSG_TERMS_STOP = ("This Page has not accepted the Lead Ads terms, so the robot can't create a form. "
                   "Accept the terms for this Page in Meta (the robot never accepts them), then publish again")
 MSG_NO_PERMISSION = ("The captured Ads Manager session can't create forms on this Page "
@@ -55,30 +77,64 @@ class FormStep:
                 "form_id": self.existing_id or self.form_id}
 
 
-def match_existing(read: _forms.FormsRead, tpl: dict[str, Any]) -> tuple[str, str]:
-    """Своя форма по ТОЧНОМУ имени -> (id ACTIVE-формы, причина отказа).
+#: Слово дубля формы, как у кампаний (`creator.COPY_WORD`; оттуда не импортировать - цикл).
+COPY_WORD = " copy "
 
-    Форма с таким именем, но не ACTIVE (архив), не переиспользуется и не
-    дублируется: человек сам решает (вернуть форму или поменять шаблон).
+
+def copy_form_name(tpl: dict[str, Any], n: int) -> str:
+    """Имя дубля формы: «<шаблон> copy N · ACL <хэш>» - метка робота остаётся в конце (политика записи)."""
+    if n <= 0:
+        return ft.form_name(tpl)
+    return f"{tpl['name']}{COPY_WORD}{n} · ACL {ft.content_hash(tpl)}"
+
+
+def copy_number(name: str, tpl: dict[str, Any]) -> int:
+    """Номер копии в имени формы шаблона: 0 - само имя шаблона, -1 - чужое имя."""
+    if name == ft.form_name(tpl):
+        return 0
+    prefix, suffix = f"{tpl['name']}{COPY_WORD}", f" · ACL {ft.content_hash(tpl)}"
+    if not (name.startswith(prefix) and name.endswith(suffix)):
+        return -1
+    mid = name[len(prefix):len(name) - len(suffix)]
+    return int(mid) if mid.isdigit() and int(mid) > 0 else -1
+
+
+def _family(read: _forms.FormsRead, tpl: dict[str, Any]) -> list[tuple[int, Any]]:
+    """Формы шаблона на Странице: точное имя и его дубли «copy N» (ACL-2668), с номером копии."""
+    return [(n, f) for f in read.forms for n in (copy_number(f.name, tpl),) if n >= 0]
+
+
+def match_existing(read: _forms.FormsRead, tpl: dict[str, Any]) -> tuple[str, str]:
+    """Своя форма по имени шаблона или его дублю «copy N» -> (id ACTIVE-формы, причина отказа).
+
+    Сначала точное имя, затем дубль с меньшим номером (ACL-2668: дубль после потерянного
+    ответа Meta - тоже своя форма). Формы семьи есть, но ни одной ACTIVE (архив): не
+    переиспользуется и не дублируется - человек сам решает (вернуть форму или поменять шаблон).
     """
     name = ft.form_name(tpl)
-    same = [f for f in read.forms if f.name == name]
-    active = sorted((f for f in same if f.usable), key=lambda f: f.id)
+    same = _family(read, tpl)
+    active = sorted(((n, f) for n, f in same if f.usable), key=lambda nf: (nf[0], nf[1].id))
     if active:
-        return active[0].id, ""
+        return active[0][1].id, ""
     if same:
-        return "", (f"A form named {name!r} already exists on the Page but is "
-                    f"{same[0].status.lower() or 'not active'}. Restore it in Meta or change the template "
+        first = min(same, key=lambda nf: nf[0])[1]
+        return "", (f"A form named {first.name!r} already exists on the Page but is "
+                    f"{first.status.lower() or 'not active'}. Restore it in Meta or change the template "
                     "(a changed template gets a new form name)")
     return "", ""
 
 
-def compare_form(tpl: dict[str, Any], page_id: str, row: dict[str, Any]) -> list[str]:
-    """Прочитанная форма против шаблона: пустой список - всё совпало."""
+def next_copy_name(read: _forms.FormsRead, tpl: dict[str, Any]) -> str:
+    """Имя нового дубля формы (ACL-2668): «<шаблон> copy N · ACL <хэш>», N - следующий после уже видимых."""
+    return copy_form_name(tpl, max([n for n, _f in _family(read, tpl)], default=0) + 1)
+
+
+def compare_form(tpl: dict[str, Any], page_id: str, row: dict[str, Any], name: str = "") -> list[str]:
+    """Прочитанная форма против шаблона: пустой список - всё совпало. `name` - имя дубля «copy N», если он."""
     bad: list[str] = []
     if not isinstance(row, dict) or not row.get("id"):
         return ["the form could not be read back"]
-    if str(row.get("name") or "") != ft.form_name(tpl):
+    if str(row.get("name") or "") != (name or ft.form_name(tpl)):
         bad.append("name")
     if str(row.get("status") or "").upper() != _forms.USABLE_STATUS:
         bad.append(f"status is {row.get('status')!r}, expected ACTIVE")
@@ -106,23 +162,133 @@ def compare_form(tpl: dict[str, Any], page_id: str, row: dict[str, Any]) -> list
     return bad
 
 
-def refused_message(exc: Exception) -> str:
+def readback_fields(tpl: dict[str, Any] | None = None) -> str:
+    """Поля чтения созданной формы. Без картинки - прежняя строка байт в байт.
+
+    Неизвестное поле роняет всё чтение, поэтому константу не расширяем: `context_card` просим только у
+    шаблона с картинкой.
+    """
+    fields = READBACK_FIELDS
+    if tpl and tpl.get("cover_photo_id"):
+        fields += ",background_image_option,context_card{cover_photo{id}}"
+    if tpl and ft.has_logic(tpl):
+        # ACL-2178: both fields are proven readable (Doc120, 02.11); only a template with conditions asks for them.
+        fields += ",conditional_logic,end_pages"
+    return fields
+
+
+def _logic_rows(value: Any) -> dict[str, list[tuple[str, str]]]:
+    """`logic_data` as read (list of {key, value}) or as sent (object) -> {key: [(type, id)]}."""
+    data = value.get("logic_data") if isinstance(value, dict) else None
+    if isinstance(data, list):
+        data = {str(r.get("key")): r.get("value") for r in data if isinstance(r, dict)}
+    out: dict[str, list[tuple[str, str]]] = {}
+    for key, dests in (data.items() if isinstance(data, dict) else []):
+        out[str(key)] = [(str(d.get("destination_type") or ""), str(d.get("destination_id") or ""))
+                         for d in (dests if isinstance(dests, list) else []) if isinstance(d, dict)]
+    return out
+
+
+def compare_logic(tpl: dict[str, Any], row: dict[str, Any]) -> list[str]:
+    """ACL-2178: the conditions the form really has on the Page against the template.
+
+    Meta reads `logic_data` back as a list of {key, value} while we send an object, and adds fields of its own
+    (`id`, `button_type` on the non-lead page, `enable_messenger`, ...): only what the template set is compared.
+    Differences are named per answer text, e.g. `question 2: condition for "Yes"`.
+    """
+    if not ft.has_logic(tpl):
+        return []
+    bad: list[str] = []
+    got = _logic_rows(row.get("conditional_logic") if isinstance(row, dict) else None)
+    if not got:
+        return ["conditions are missing on the Page form"]
+    for key, want in _logic_rows({"logic_data": ft.logic_data(tpl)}).items():
+        n = int(key.rsplit("_", 1)[1])
+        q = tpl["questions"][n]
+        have = got.get(key)
+        if have is None:
+            bad.append(f"question {n + 1}: conditions")
+            continue
+        if len(have) != len(want):
+            bad.append(f"question {n + 1}: number of conditions")
+            continue
+        names = q.get("options") or [""]
+        for answer, w, g in zip(names, want, have):
+            if w != g:
+                bad.append(f'question {n + 1}: condition for "{answer}"' if answer else f"question {n + 1}: condition")
+    if set(got) - set(_logic_rows({"logic_data": ft.logic_data(tpl)})):
+        bad.append("conditions for an unexpected question")
+    pages = row.get("end_pages") if isinstance(row.get("end_pages"), dict) else {}
+    want_pages = ft.end_pages(tpl)
+    for group, label in (("thank_you_pages", "lead end page"), ("disqualified_end_components", "non-lead end page")):
+        want_list = want_pages.get(group)
+        have_list = pages.get(group)
+        if not want_list:
+            continue
+        have = have_list[0] if isinstance(have_list, list) and have_list and isinstance(have_list[0], dict) else {}
+        for field, value in want_list[0].items():
+            if field == "name" or (group == "disqualified_end_components" and field == "button_type"):
+                continue
+            if str(have.get(field) or "") != str(value):
+                bad.append(f"{label}: {field.replace('_', ' ')}")
+    return bad
+
+
+def compare_cover(tpl: dict[str, Any], row: dict[str, Any]) -> list[str]:
+    """Картинка прочитанной формы против шаблона (отдельно от `compare_form`)."""
+    want = str(tpl.get("cover_photo_id") or "")
+    if not want:
+        return []
+    card = row.get("context_card") if isinstance(row, dict) else None
+    photo = card.get("cover_photo") if isinstance(card, dict) else None
+    got = str(photo.get("id") or "") if isinstance(photo, dict) else ""
+    if got != want:
+        return ["background image"]
+    # ACL-2579: the photo is stored but Ads Manager shows it only with the option UPLOAD.
+    return [] if str(row.get("background_image_option") or "") == "UPLOAD" else ["background image"]
+
+
+def existing_cover_state(tpl: dict[str, Any], row: Any, want: str = "") -> str:
+    """Cover of an EXISTING same-name form against the template: "ok" | "missing" | "different" | "unknown".
+
+    `want` is the Page photo id the template resolves to (empty when only "some picture" is expected, as for a
+    local picture that is not uploaded to this Page yet). "unknown" = the row could not be read: the caller keeps
+    the old behaviour (reuse, with a note).
+    """
+    if not isinstance(row, dict) or not row.get("id"):
+        return "unknown"
+    card = row.get("context_card")
+    photo = card.get("cover_photo") if isinstance(card, dict) else None
+    got = str(photo.get("id") or "") if isinstance(photo, dict) else ""
+    if not got:
+        return "missing"
+    if str(row.get("background_image_option") or "") != "UPLOAD":
+        return "missing"  # ACL-2579: photo on the card but not shown by Ads Manager
+    return "different" if want and got != want else "ok"
+
+
+def refused_message(exc: Exception, tpl: dict[str, Any] | None = None) -> str:
     """Текст человеку, когда Meta отказала в создании формы."""
     text = str(exc)
     if _forms.mentions_terms(text):
         return MSG_TERMS_STOP
+    # ACL-2178: Meta's own code and subcode are shown verbatim, for forms with conditions (the others keep today's text).
+    code, sub = getattr(exc, "code", None), getattr(exc, "subcode", None)
+    if tpl and ft.has_logic(tpl) and code is not None:
+        text = f"{text[:300]} (code {code}" + (f", subcode {sub})" if sub is not None else ")")
+    if tpl and tpl.get("cover_photo_id"):
+        return MSG_COVER_REFUSED.format(form_name=ft.form_name(tpl), why=text[:300])
     return MSG_REFUSED.format(why=text[:300])
 
 
-# ───────────────── «форма ещё появляется»: метка после неизвестного результата ─────────────────
+# ───────────────── «ответ Meta потерян»: метка после неизвестного результата ─────────────────
 #
-# Запись формы оборвалась (`WriteUnknown`), список форм её ещё не показывает. Повторный
-# запуск за это время создал бы вторую форму: помним (кабинет, Страница, имя, время) локально.
+# Запись формы оборвалась (`WriteUnknown`), список форм её ещё не показывает. Повторный запуск
+# НЕ ждёт (ACL-2668, решение владельца 16.11: публикация важнее блокировки): создаёт форму
+# сразу, под именем «<шаблон> copy N · ACL <хэш>», чтобы дубль был виден. Метка (кабинет, Страница, имя, время)
+# нужна только для этого имени; не записалась - публикуем всё равно.
 
-PENDING_WINDOW_S = 15 * 60
-MSG_NO_STATE = ("Couldn't record the form state locally - not creating a form. "
-                "Check that the ACL data folder is writable, then run again")
-MSG_PENDING = ("A form with this name may still be appearing at Meta - wait a few minutes and run again")
+PENDING_WINDOW_S = 24 * 60 * 60     # старше суток метка уже ничего не говорит: форма бы появилась
 
 
 def pending_path() -> Path:
@@ -162,7 +328,7 @@ def _pending_save(data: dict[str, float]) -> None:
 
 
 def record_pending(act: str, page_id: str, form_name: str) -> None:
-    """Записать метку ДО отправки формы. `OSError` - метку сохранить не удалось: формы не создаём."""
+    """Записать метку ДО отправки формы. `OSError` наружу; вызывающий его глотает (только имя дубля)."""
     now = time.time()
     data = {k: v for k, v in _pending_load().items() if now - v < PENDING_WINDOW_S}
     data[_pending_key(act, page_id, form_name)] = now

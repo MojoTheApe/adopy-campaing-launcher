@@ -27,7 +27,7 @@ def _fail_nth(meta, edge, nth):
         if path.rsplit("/", 1)[1] == edge:
             seen["n"] += 1
             if seen["n"] == nth:
-                meta.fail_next[edge] = "unsent"
+                meta.fail_next[edge] = "unsent_stuck"
         return real(path, params, *a, **k)
     meta.write = write
 
@@ -129,16 +129,17 @@ def _three(tmp_path):
 
 def test_12_publish_all_after_a_stopped_job_does_not_copy_the_finished_campaign(tmp_path, jobs):
     meta = FakeMeta()
-    _fail_nth(meta, "adsets", 2)                         # обрыв на второй кампании
+    _fail_nth(meta, "adsets", 2)                         # the second campaign stops (its re-send gets no answer either)
     jobs(meta, _three(tmp_path), "j1")
-    assert _names(meta) == ["MX Leads 1", "MX Leads 2"]
+    # owner rule 12.11: only the second campaign stopped, the third was still published
+    assert _names(meta) == ["MX Leads 1", "MX Leads 2", "MX Leads 3"]
     assert nr.load(ACT, "MX Leads 1") is not None and nr.load(ACT, "MX Leads 2") is not None
     meta.fail_next.clear()
     posts = len(meta.posts)
     results = jobs(meta, _three(tmp_path), "j2")
     assert [r["error"] for r in results] == [None, None, None]
     assert _names(meta) == ["MX Leads 1", "MX Leads 2", "MX Leads 3"], "копий нет"
-    assert len([p for p, _ in meta.posts[posts:] if p.endswith("/campaigns")]) == 1, "новая только третья"
+    assert not [p for p, _ in meta.posts[posts:] if p.endswith("/campaigns")], "новых кампаний нет"
     for i in (1, 2, 3):
         assert nr.load(ACT, f"MX Leads {i}") is None, "конец чистого задания очистил квитанции"
     jobs(meta, _three(tmp_path)[:1], "j3")                # теперь это повтор
@@ -167,7 +168,7 @@ def test_15_unknown_campaign_write_with_and_without_a_visible_row(tmp_path):
     assert nr.load(ACT, BASE)["campaign_id"] == out.campaign_id
     nr.delete(ACT, BASE)
     meta2 = FakeMeta()                                    # квитанция без id, строка видна -> дописываем её
-    meta2.fail_next["ads"] = "unsent"
+    meta2.fail_next["ads"] = "unsent_stuck"
     _run(meta2, _draft(tmp_path, ads=1))
     nr.save(ACT, BASE, BASE, 0)
     meta2.fail_next.clear()
@@ -192,12 +193,14 @@ def test_14b_receipt_with_a_missing_campaign_falls_back_to_the_listing(tmp_path,
         return real(method, path, params)
     monkeypatch.setattr(meta, "request", request)
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert out.error == "" and out.published_as == BASE and _names(meta) == [BASE]
+    # ACL-2583: "does not exist" for a campaign the receipt names never frees its name (Meta says the same for a live
+    # campaign it cannot load): the next copy, never a second campaign with the base name.
+    assert out.error == "" and out.published_as == BASE + " copy 1" and _names(meta) == [BASE + " copy 1"]
 
 
 def test_14c_edited_draft_after_a_stop_takes_the_next_number(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     _run(meta, _draft(tmp_path, ads=1))
     meta.fail_next.clear()
     d = _draft(tmp_path, ads=1)

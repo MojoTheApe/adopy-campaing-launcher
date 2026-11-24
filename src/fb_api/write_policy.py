@@ -30,6 +30,8 @@ ACL-2105: отдельный `page_validation`/`InPageGraph.validate_page` не 
 — и только когда набор объявлений того же плана создан с `destination_type=ON_AD`
 (вызывающий передаёт `on_ad=True`). Везде в другом месте ключ по-прежнему
 запрещён.
+ACL-2528: второе допустимое место - кнопка ленты ассетов Instant Form
+(`asset_feed_spec.call_to_actions[0].value`), при тех же условиях.
 """
 from __future__ import annotations
 
@@ -83,16 +85,149 @@ UPLOAD_KEYS = {
 }
 #: Файл фазы transfer (multipart); у start и finish файла нет.
 UPLOAD_CHUNK_FIELD = "video_file_chunk"
-#: Потолок одного куска, который мы отправляем (память профиля и одного запроса).
-UPLOAD_CHUNK_MAX = 8 * 1024 * 1024
-#: Потолок файла на пути кусками: безопасный для профиля и для бюджета вызовов (Meta сама - 4 ГБ).
-UPLOAD_FILE_MAX = 1536 * 1024 * 1024
+#: ACL-2629: потолок куска на пути воркера (байты идут бинарно через CDP Fetch в Web Worker профиля,
+#: страница их не декодирует): 64 МБ. Сам размер куска всё равно задаёт Meta (start/end_offset).
+UPLOAD_CHUNK_MAX = 64 * 1024 * 1024
+#: Потолок куска на СТАРОМ пути (base64 через Runtime.evaluate, atob в странице): прежние 8 МБ.
+UPLOAD_STAGED_CHUNK_MAX = 8 * 1024 * 1024
+#: Один запрос воркера к Python за частью куска: часть лежит в памяти воркера целиком, поэтому небольшая.
+UPLOAD_PIECE_MAX = 8 * 1024 * 1024
+#: Потолок файла на пути воркера: лимит Meta (4 ГБ).
+UPLOAD_FILE_MAX = 4 * 1024 * 1024 * 1024
+#: Потолок файла на старом пути (с ffmpeg-сжатием, ACL-2000): безопасный для профиля и бюджета вызовов.
+UPLOAD_FILE_STAGED_MAX = 1536 * 1024 * 1024
+#: Токен выдачи частей воркеру и путь, который перехватывает Python (CDP Fetch); тот же в помощнике страницы.
+SERVE_PREFIX = "/__acl_upload/"
+SERVE_TOKEN_RE = re.compile(r"[a-z0-9]{16,40}", re.ASCII)
 UPLOAD_ID_RE = re.compile(r"^[0-9]{5,25}$")
 UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
+
+#: ACL-2639: the upload protocol of Ads Manager itself ("file API", recorded live 15.11 on a profile). The documented
+#: `video_ads` protocol is refused for the Ads Manager token ((#10) Permission Denied), so it is not used.
+#:   1. POST /act_<id>/advideos upload_phase=start, file_size, file_extension, waterfall_id, supports_chunking,
+#:      supports_file_api, partition offsets (0 .. file_size) -> video_id, upload_session_id;
+#:   2. the bytes go to the resumable service of the page (NOT Graph): GET/POST
+#:      https://<rupload-...up>.facebook.com/fb_video/<waterfall_id>-0-<file_size>?fb_dtsg_ag=...&__a=1 with the session
+#:      cookies (`credentials: include`), headers `offset`, `X-Entity-Length`, `X-Entity-Type`; the answer to the last
+#:      POST carries the file handle; GET answers {offset} (how many bytes Meta holds - the resume point);
+#:   3. POST advideos upload_phase=transfer ... fbuploader_video_file_chunk=<handle> (both offsets == file_size);
+#:   4. POST advideos upload_phase=finish, upload_session_id, video_id, title (the ACL tag name).
+#: The advideos shapes of this protocol are told from the chunked ones by their marker keys.
+FILE_API_MARKERS = ("supports_file_api", "fbuploader_video_file_chunk", "video_id")
+FILE_API_KEYS = {
+    "start": frozenset({"upload_phase", "file_size", "file_extension", "waterfall_id", "supports_chunking",
+                        "supports_file_api", "partition_start_offset", "partition_end_offset"}),
+    "transfer": frozenset({"upload_phase", "upload_session_id", "video_id", "start_offset", "end_offset",
+                           "partition_start_offset", "partition_end_offset", "fbuploader_video_file_chunk"}),
+    "finish": frozenset({"upload_phase", "upload_session_id", "video_id", "title"}),
+}
+#: Opaque file handle from the answer to the last rupload POST: `N:<base64 name>:<mime>:<id>:e:<expiry>:<signature>`.
+FILE_HANDLE_RE = re.compile(r"^[0-9]{1,3}:[A-Za-z0-9+/=_-]*:[^:\s]{1,100}:[A-Za-z0-9_.-]{1,100}:e:[0-9]{1,20}"
+                            r"(?::[A-Za-z0-9_.+/=-]{1,300}){1,6}$", re.ASCII)
+FILE_HANDLE_MAX = 1000
+
+
+def file_handle(body: Any) -> str:
+    """The file handle in the answer of the last rupload POST, '' if none. Prefers the string field `h`; otherwise any
+    string value (of the answer or of one nested object) that has exactly the handle shape."""
+    if not isinstance(body, dict):
+        return ""
+    h = body.get("h")
+    if isinstance(h, str) and len(h) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(h):
+        return h
+    for v in body.values():
+        for x in (list(v.values()) if isinstance(v, dict) else [v]):
+            if isinstance(x, str) and len(x) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(x):
+                return x
+    return ""
+
+
+#: One rupload POST carries the whole remainder of the file (Ads Manager sends a partition in one POST), so the cap is
+#: the file limit; a resume sends the rest from the offset the service reports.
+RUPLOAD_SEGMENT_MAX = UPLOAD_FILE_MAX
+#: The resumable service of the page (`AdsVideoUploadConfig`): `rupload-<place>.up` + facebook.com, nothing else.
+RUPLOAD_NAME_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up$", re.ASCII)
+RUPLOAD_DOMAIN = "facebook.com"
+#: The generic upload host (live 15.11: answers GET/POST like the regional one): used when the page's regional service is
+#: not known (its config module loads a few seconds after the page). `rupload.up.facebook.com` does not exist.
+RUPLOAD_GENERIC_HOST = "rupload.facebook.com"
+_RUPLOAD_REGIONAL_HOST_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up\.facebook\.com$", re.ASCII)
+
+
+def rupload_host_ok(host: Any) -> bool:
+    """The only hosts a service request may go to: the page's regional `rupload-<x>.up.facebook.com` or exactly the
+    generic `rupload.facebook.com`."""
+    return isinstance(host, str) and (host == RUPLOAD_GENERIC_HOST or bool(_RUPLOAD_REGIONAL_HOST_RE.fullmatch(host)))
+RUPLOAD_PATH_RE = re.compile(r"^/fb_video/[0-9a-f]{32}-0-[0-9]{1,13}$", re.ASCII)
+RUPLOAD_METHODS = ("GET", "POST")
+RUPLOAD_QUERY_KEYS = ("fb_dtsg_ag", "__a")
+RUPLOAD_HEADERS = ("offset", "X-Entity-Length", "X-Entity-Type")
+RUPLOAD_TYPE = "application/octet-stream"
+RUPLOAD_BODY_FIELD = "rupload_body"
+#: Without a streaming request body the page builds one Blob of the checked pieces: only up to this size.
+RUPLOAD_BLOB_SAFE = 256 * 1024 * 1024
+#: The session token of the upload page (`DTSGInitData.async_get_token`): a secret, never logged or sent to Python.
+RUPLOAD_DTSG_RE = re.compile(r"^[A-Za-z0-9_:-]{20,100}$", re.ASCII)
+
+#: ACL-2639: the tag name of an ad video (`creator.video_title`); the only title an upload may finish with.
+VIDEO_TITLE_RE = re.compile(r"^acl-[A-Za-z0-9_-]{1,64}-[0-9a-f]{12}$", re.ASCII)
+
+
+def rupload_service_ok(name: Any, domain: Any) -> bool:
+    return isinstance(name, str) and bool(RUPLOAD_NAME_RE.fullmatch(name)) and domain == RUPLOAD_DOMAIN
+
+
+def rupload_path(waterfall: str, size: int) -> str:
+    return f"/fb_video/{waterfall}-0-{size}"
+
+
+RUPLOAD_HOST_KINDS = ("generic", "regional")
+
+
+def check_rupload(method: str, path: str, *, query: dict | None = None, headers: dict | None = None,
+                  files: dict | None = None, host_kind: str | None = None) -> None:
+    """ACL-2639: one request to the resumable service: GET (offset) or POST (bytes of one segment) of THIS upload's
+    path, only the known query keys and headers, the body only a served window of the file."""
+    if host_kind is not None and host_kind not in RUPLOAD_HOST_KINDS:
+        raise WriteRefused("write refused: host_kind must be generic or regional")
+    if method not in RUPLOAD_METHODS:
+        raise WriteRefused(f"write refused: upload service method {method!r} (only GET and POST)")
+    if not RUPLOAD_PATH_RE.fullmatch(path or ""):
+        raise WriteRefused("write refused: path must be /fb_video/<waterfall>-0-<size>")
+    extra = sorted(set(query or {}) - set(RUPLOAD_QUERY_KEYS))
+    if extra:
+        raise WriteRefused(f"write refused: query key {extra[0]!r} is not allowed on the upload service")
+    headers = dict(headers or {})
+    files = dict(files or {})
+    if method == "GET":
+        if headers or files:
+            raise WriteRefused("write refused: an upload service read takes no headers and no body")
+        return
+    if set(headers) != set(RUPLOAD_HEADERS):
+        raise WriteRefused("write refused: the upload needs exactly the headers offset, X-Entity-Length, X-Entity-Type")
+    total = int(path.rsplit("-", 1)[1])
+    off, length = _digits(headers["offset"]), _digits(headers["X-Entity-Length"])
+    if not total or total > UPLOAD_FILE_MAX or length != total:
+        raise WriteRefused("write refused: X-Entity-Length must be the size in the path, within the video limit")
+    if off is None or off >= total:
+        raise WriteRefused("write refused: offset must be a number inside the file")
+    if headers["X-Entity-Type"] != RUPLOAD_TYPE:
+        raise WriteRefused("write refused: X-Entity-Type must be application/octet-stream")
+    if set(files) != {RUPLOAD_BODY_FIELD} or not isinstance(files[RUPLOAD_BODY_FIELD], ServedChunk):
+        raise WriteRefused(f"write refused: the upload needs exactly the served body {RUPLOAD_BODY_FIELD!r}")
+    body = files[RUPLOAD_BODY_FIELD]
+    if not 0 < len(body) <= RUPLOAD_SEGMENT_MAX:
+        raise WriteRefused(f"write refused: one upload request carries 1..{RUPLOAD_SEGMENT_MAX} bytes")
+    if body.offset != off or off + len(body) > total:
+        raise WriteRefused("write refused: the served body must start at offset and end inside the file")
+
+
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
 LEAD_FORM_FORMATS = ("link_data", "video_data")
+#: ACL-2528: ссылка-заглушка Instant Form в ленте ассетов (та же, что `creator.INSTANT_FORM_LINK`; тест сверяет).
+LEAD_FEED_LINK = "https://fb.me/"
 #: Instagram-идентичность креатива (ACL-1896): ОДНО числовое поле, и только прямым ключом
 #: `object_story_spec`. Справочник Meta: `object_story_spec.instagram_user_id` - строка из цифр.
 #: Старое `instagram_actor_id` не разрешено нигде.
@@ -150,10 +285,30 @@ ASSET_FEED_TEXTS_WITH_RULES = 1
 #: Ключ набора, включающий Dynamic Creative: только значение True.
 DYNAMIC_KEY = "is_dynamic_creative"
 #: Тексты отказов (один источник для плана, предпроверки и страницы).
-MSG_TEXTS_VERTICAL = ("Several primary texts and a Stories/Reels file can't be combined: Meta applies one "
-                      "text per placement group. Use several texts without the vertical file, or one text with it.")
 MSG_TEXTS_DYNAMIC_SET = ("An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an "
                          "ad set: move the other ads of this ad set to a separate ad set")
+#: ACL-2584: лента Instant Form с несколькими текстами - форма Ads Manager (HAR владельца 2026-11-11, вариант A2):
+#: `optimization_type: PLACEMENT`, ДВА правила площадок, ВСЕ тексты несут метку основного правила, первый ещё и метку
+#: вертикального (Stories/Reels/Status берут первый текст). Набор НЕ Dynamic Creative, поэтому объявлений в наборе
+#: сколько позволит Meta. Один файл, обе метки на нём; метки по виду ассета: `acl_<вид>_main|vertical`.
+INSTANT_OPTIMIZATION_KEY = "optimization_type"
+INSTANT_OPTIMIZATION = "PLACEMENT"
+#: вид ассета -> (короткое имя метки, ключ метки в правиле)
+INSTANT_ASSET_KINDS = {"bodies": ("body", "body_label"), "titles": ("title", "title_label"),
+                       "descriptions": ("description", "description_label"),
+                       "link_urls": ("link", "link_url_label"),
+                       "images": ("image", "image_label"), "videos": ("video", "video_label")}
+#: Площадки вертикального правила (Stories и Reels); основное правило не несёт ни одной из них.
+INSTANT_VERTICAL_POSITIONS = {"facebook_positions": ("story", "facebook_reels"),
+                              "instagram_positions": ("story", "reels")}
+
+
+def instant_labels(kind: str) -> tuple[str, str]:
+    """(метка основного правила, метка вертикального) для вида ассета ленты Instant Form."""
+    short = INSTANT_ASSET_KINDS[kind][0]
+    return f"acl_{short}_main", f"acl_{short}_vertical"
+
+
 ASSET_FEED_TEXT_MAX = {"bodies": 1024, "titles": 255, "descriptions": 255}
 ASSET_FEED_MAX_MEDIA = 2
 ASSET_FEED_FORMATS = ("SINGLE_IMAGE", "SINGLE_VIDEO")
@@ -195,7 +350,7 @@ def os_version_ok(os_name: str, ver: str) -> bool:
 
 USER_OS_RE = re.compile(r"^(iOS|Android)(_ver_[0-9]{1,2}(\.[0-9]{1,2})?_and_above)?$")
 
-_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
+_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z_]+)\Z")
 
 
 class WriteRefused(ValueError):
@@ -211,19 +366,33 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "child_edges": sorted(CHILD_EDGES),
         "files": dict(FILE_FIELDS),
         "upload": {"phases": list(UPLOAD_PHASES), "keys": {k: sorted(v) for k, v in UPLOAD_KEYS.items()},
-                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_CHUNK_MAX,
+                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_STAGED_CHUNK_MAX,
+                   "served_chunk_max": UPLOAD_CHUNK_MAX, "piece_max": UPLOAD_PIECE_MAX,
+                   "serve_prefix": SERVE_PREFIX, "serve_token_re": SERVE_TOKEN_RE.pattern,
                    "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
                    "number_re": UPLOAD_NUMBER_RE.pattern},
+        "video_title_re": VIDEO_TITLE_RE.pattern,
+        "file_api": {"markers": list(FILE_API_MARKERS), "keys": {k: sorted(v) for k, v in FILE_API_KEYS.items()},
+                     "handle_re": FILE_HANDLE_RE.pattern, "handle_max": FILE_HANDLE_MAX},
+        "rupload": {"name_re": RUPLOAD_NAME_RE.pattern, "domain": RUPLOAD_DOMAIN, "generic_host": RUPLOAD_GENERIC_HOST, "path_re": RUPLOAD_PATH_RE.pattern,
+                    "methods": list(RUPLOAD_METHODS), "query_keys": list(RUPLOAD_QUERY_KEYS),
+                    "headers": list(RUPLOAD_HEADERS), "type": RUPLOAD_TYPE, "field": RUPLOAD_BODY_FIELD,
+                    "segment_max": RUPLOAD_SEGMENT_MAX, "blob_safe": RUPLOAD_BLOB_SAFE, "dtsg_re": RUPLOAD_DTSG_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
         "dof_features": sorted(DOF_FEATURES),
         "multi_ads_key": MULTI_ADS_KEY,
-        "asset_feed": {"key": ASSET_FEED_KEY, "max_texts": ASSET_FEED_MAX_TEXTS, "max_texts_with_rules": ASSET_FEED_TEXTS_WITH_RULES,
+        "asset_feed": {"key": ASSET_FEED_KEY, "form_link": LEAD_FEED_LINK, "max_texts": ASSET_FEED_MAX_TEXTS, "max_texts_with_rules": ASSET_FEED_TEXTS_WITH_RULES,
                        "dynamic_key": DYNAMIC_KEY,
                        "text_max": dict(ASSET_FEED_TEXT_MAX), "max_media": ASSET_FEED_MAX_MEDIA,
                        "formats": list(ASSET_FEED_FORMATS), "label_re": ASSET_LABEL_RE.pattern,
                        "hash_re": IMAGE_HASH_RE.pattern, "video_id_re": VIDEO_ID_RE.pattern,
+                       "instant": {"optimization_key": INSTANT_OPTIMIZATION_KEY,
+                                   "optimization": INSTANT_OPTIMIZATION,
+                                   "kinds": {k: {"labels": list(instant_labels(k)), "rule_key": v[1]}
+                                             for k, v in INSTANT_ASSET_KINDS.items()},
+                                   "vertical_positions": {k: list(v) for k, v in INSTANT_VERTICAL_POSITIONS.items()}},
                        "platforms": sorted(RULE_PLATFORMS),
                        "facebook_positions": sorted(RULE_FACEBOOK_POSITIONS),
                        "instagram_positions": sorted(RULE_INSTAGRAM_POSITIONS)},
@@ -234,8 +403,12 @@ def policy_for_page(act: str, page: str = "") -> dict:
                       "devices": sorted(DEVICE_PLATFORMS), "user_os_re": USER_OS_RE.pattern},
         "instagram": {"key": INSTAGRAM_KEY, "id_re": INSTAGRAM_ID_RE.pattern},
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
-                      "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
+                      "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern,
+                      "feed_key": "call_to_actions"},
         "form_create": policy_for_form_create(page),
+        # ACL-2571: the same narrow upload as the form-photo session, in the creation session too, so the
+        # picture of a shared template reaches the campaign's Page from inside its profile. Needs the Page.
+        "form_photo": policy_for_form_photo(page),
     }
 
 
@@ -314,27 +487,244 @@ def _labels_of(item: dict) -> list[str] | None:
     return [raw[0]["name"]]
 
 
-def _check_asset_feed(spec: Any, creative: dict) -> None:
+def _check_feed_form_button(spec: dict, ctas: Any, refuse: Any) -> None:
+    """ACL-2528: кнопка ленты Instant Form: ровно один `{type, value}`, форма - числовой id, ссылка - заглушка."""
+    items = spec["call_to_actions"]
+    if not (isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict)
+            and set(items[0]) == {"type", "value"}):
+        refuse("call_to_actions must hold exactly one {type, value} button")
+    button = items[0]
+    if not (isinstance(ctas, list) and len(ctas) == 1 and button["type"] == ctas[0]):
+        refuse("call_to_actions button type must equal call_to_action_types")
+    value = button["value"]
+    if not (isinstance(value, dict) and LEAD_FORM_KEY in value and set(value) <= {LEAD_FORM_KEY, "link"}):
+        refuse("call_to_actions value may hold only lead_gen_form_id and the form link")
+    if not (isinstance(value[LEAD_FORM_KEY], str) and LEAD_FORM_ID_RE.fullmatch(value[LEAD_FORM_KEY])):
+        refuse("lead_gen_form_id must be the numeric id of a Page form")
+    if "link" in value and value["link"] != LEAD_FEED_LINK:
+        refuse("call_to_actions link must be the Instant Form placeholder link")
+
+
+def _check_customization_spec(cs: Any, refuse: Any) -> None:
+    """Площадки одного правила: непустой объект из трёх известных ключей со списками известных значений."""
+    if not (isinstance(cs, dict) and cs and set(cs) <= {"publisher_platforms", "facebook_positions",
+                                                       "instagram_positions"}):
+        refuse("customization_spec keys are not allowed")
+    for key, allowed_values in (("publisher_platforms", RULE_PLATFORMS),
+                                ("facebook_positions", RULE_FACEBOOK_POSITIONS),
+                                ("instagram_positions", RULE_INSTAGRAM_POSITIONS)):
+        if key in cs and not (isinstance(cs[key], list) and cs[key]
+                              and all(isinstance(x, str) and x in allowed_values for x in cs[key])):
+            refuse(f"{key} value is not allowed")
+
+
+def _instant_labelled_list(spec: dict, kind: str, refuse: Any, *, texts: bool, files: bool = False) -> list:
+    """Список ассетов размеченной ленты: у каждого ровно наши метки (первый - обе, остальные - основную).
+
+    ACL-2611: `files` - список файлов (1-2): один файл несёт обе метки, два - основной метку основного правила,
+    вертикальный метку вертикального.
+    """
+    items = spec.get(kind)
+    main, vertical = instant_labels(kind)
+    cap = ASSET_FEED_MAX_TEXTS if texts else (ASSET_FEED_MAX_MEDIA if files else 1)
+    if not (isinstance(items, list) and 1 <= len(items) <= cap):
+        refuse(f"{kind} must hold 1-{cap} items")
+    for n, item in enumerate(items):
+        want = [main, vertical] if n == 0 else [main]
+        if files and len(items) == 2:
+            want = [main] if n == 0 else [vertical]
+        if not isinstance(item, dict):
+            refuse(f"{kind} item must be an object")
+        labels = item.get("adlabels")
+        if not (isinstance(labels, list) and labels == [{"name": x} for x in want]):
+            refuse(f"{kind} item {n + 1} must carry exactly the labels {want}")
+    return items
+
+
+def _has_labelled_text(spec: dict, kind: str) -> bool:
+    items = spec.get(kind)
+    return isinstance(items, list) and any(isinstance(x, dict) and "adlabels" in x for x in items)
+
+
+def _check_labelled_file_item(media: Any, media_kind: str, refuse: Any) -> None:
+    """Один файл размеченной ленты: точный набор ключей, id по шаблону, https-миниатюра."""
+    if media_kind == "images":
+        ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str)             and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
+    else:
+        thumb = media.get("thumbnail_url")
+        ok = set(media) == {"video_id", "thumbnail_url", "adlabels"}             and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"]))             and isinstance(thumb, str) and thumb.startswith("https://")
+    if not ok:
+        refuse(f"{media_kind} item is not allowed")
+
+
+def _check_website_labelled_feed(spec: dict, media_kind: str, refuse: Any) -> None:
+    """ACL-2611: Website, несколько текстов + вертикальный файл - размеченная лента (форма Ads Manager, ACL-2584).
+
+    Ровно два файла (основной и вертикальный) с метками, тексты 1-5 непустых: все с основной меткой, первый ещё с
+    вертикальной; ссылка https с обеими метками; два правила, каждое называет метки всех видов ассета. Без заголовка
+    такая лента не проверена (как у Website с одним текстом).
+    """
+    present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_kind]
+    if "titles" not in spec:
+        refuse("titles must hold 1-5 non-empty texts (a Website ad with several texts and no headline is not verified yet)")
+    for kind in ("bodies", "titles", "descriptions"):
+        if kind not in spec:
+            continue
+        limit = ASSET_FEED_TEXT_MAX[kind]
+        for item in _instant_labelled_list(spec, kind, refuse, texts=True):
+            text = item.get("text")
+            if set(item) != {"text", "adlabels"} or not isinstance(text, str) or not text.strip():
+                refuse(f"{kind} must hold non-empty texts with labels only")
+            if len(text) > limit:
+                refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
+    files = _instant_labelled_list(spec, media_kind, refuse, texts=False, files=True)
+    if len(files) != 2:
+        refuse(f"{media_kind} must hold the main and the Stories/Reels file")
+    for item in files:
+        _check_labelled_file_item(item, media_kind, refuse)
+    link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
+    if set(link) != {"website_url", "adlabels"} or not (isinstance(link["website_url"], str)
+                                                         and link["website_url"].startswith("https://")):
+        refuse("link_urls must hold one https website_url")
+    ctas = spec.get("call_to_action_types")
+    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in CTA_WEBSITE):
+        refuse("call_to_action_types must hold one allowed button")
+    want = "SINGLE_IMAGE" if media_kind == "images" else "SINGLE_VIDEO"
+    if spec.get("ad_formats") != [want]:
+        refuse(f"ad_formats must be exactly [{want!r}]")
+    if spec.get(INSTANT_OPTIMIZATION_KEY) != INSTANT_OPTIMIZATION:
+        # ACL-2845 (live 20.11): without it Meta treats Arabic texts as a language asset feed (2490266).
+        refuse(f"a labelled Website feed needs {INSTANT_OPTIMIZATION_KEY} {INSTANT_OPTIMIZATION}")
+    rules = spec.get("asset_customization_rules")
+    if not (isinstance(rules, list) and len(rules) == 2):
+        refuse("two files need exactly two rules")
+    for n, rule in enumerate(rules):
+        label_keys = {INSTANT_ASSET_KINDS[k][1]: instant_labels(k)[n] for k in present}
+        if not (isinstance(rule, dict) and set(rule) == {"customization_spec"} | set(label_keys)):
+            refuse("rule keys are not allowed")
+        for key, name in label_keys.items():
+            if rule[key] != {"name": name}:
+                refuse(f"rule {key} must name {name!r}")
+        if n == 0:
+            # Live 19.11: the main rule is the empty catch-all (default rule), like Ads Manager and the Instant Form.
+            if rule["customization_spec"] != {}:
+                refuse("the main rule must be the empty catch-all")
+            continue
+        _check_customization_spec(rule["customization_spec"], refuse)
+
+
+def _check_instant_feed(spec: dict, refuse: Any) -> None:
+    """ACL-2584: ЕДИНСТВЕННАЯ форма ленты Instant Form (вариант A2 из Ads Manager); всё иное - отказ.
+
+    Рядом с `object_story_spec` (проверен выше): тексты с метками, один файл с двумя метками, ссылка-заглушка формы
+    с двумя метками, кнопка формы, `optimization_type: PLACEMENT` и ровно два правила: основное (все тексты) и
+    вертикальное (первый текст). Заголовок: 1-5 непустых текстов либо ровно один пустой (`""`) с обеими метками -
+    так Ads Manager отправил объявление без заголовка (HAR владельца); любые другие пустые тексты - отказ.
+    """
+    allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls", "call_to_action_types",
+               "call_to_actions", "ad_formats", "optimization_type", "asset_customization_rules"}
+    extra = sorted(set(spec) - allowed)
+    if extra:
+        refuse(f"key {extra[0]!r} is not allowed")
+    if spec.get(INSTANT_OPTIMIZATION_KEY) != INSTANT_OPTIMIZATION:
+        refuse(f"an Instant Form feed needs {INSTANT_OPTIMIZATION_KEY} {INSTANT_OPTIMIZATION}")
+    has_images, has_videos = bool(spec.get("images")), bool(spec.get("videos"))
+    if has_images == has_videos or ("images" in spec and "videos" in spec):
+        refuse("needs either images or videos")
+    media_kind = "images" if has_images else "videos"
+    if "titles" not in spec:
+        refuse("titles must be present: 1-5 non-empty texts, or exactly one empty text when the ad has no headline")
+    present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_kind]
+    for kind in ("bodies", "titles", "descriptions"):
+        if kind not in spec:
+            continue
+        items = _instant_labelled_list(spec, kind, refuse, texts=True)
+        limit = ASSET_FEED_TEXT_MAX[kind]
+        # ACL-2584: the ONE empty text allowed is a lone title "" (no headline, as Ads Manager sent it).
+        no_headline = kind == "titles" and len(items) == 1
+        for item in items:
+            text = item.get("text")
+            if set(item) != {"text", "adlabels"} or not isinstance(text, str)                     or not (text.strip() or (no_headline and text == "")):
+                refuse(f"{kind} must hold non-empty texts with labels only")
+            if len(text) > limit:
+                refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
+    for media in _instant_labelled_list(spec, media_kind, refuse, texts=False, files=True):
+        if media_kind == "images":
+            ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str) \
+                and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
+        else:
+            thumb = media.get("thumbnail_url")
+            ok = set(media) == {"video_id", "thumbnail_url", "adlabels"} \
+                and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"])) \
+                and isinstance(thumb, str) and thumb.startswith("https://")
+        if not ok:
+            refuse(f"{media_kind} item is not allowed")
+    link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
+    if set(link) != {"website_url", "adlabels"} or link["website_url"] != LEAD_FEED_LINK:
+        refuse("link_urls must hold the Instant Form placeholder link")
+    ctas = spec.get("call_to_action_types")
+    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in CTA_FORM):
+        refuse("call_to_action_types must hold one allowed button")
+    if "call_to_actions" not in spec:
+        refuse("an Instant Form feed needs the form button")
+    _check_feed_form_button(spec, ctas, refuse)
+    want = "SINGLE_IMAGE" if media_kind == "images" else "SINGLE_VIDEO"
+    if spec.get("ad_formats") != [want]:
+        refuse(f"ad_formats must be exactly [{want!r}]")
+    rules = spec.get("asset_customization_rules")
+    if not (isinstance(rules, list) and len(rules) == 2):
+        refuse("an Instant Form feed needs exactly two rules (main and Stories/Reels)")
+    for n, rule in enumerate(rules):
+        # Порядок: основное правило, затем вертикальное (как в Ads Manager).
+        label_keys = {INSTANT_ASSET_KINDS[k][1]: instant_labels(k)[n] for k in present}
+        if not (isinstance(rule, dict) and set(rule) == {"customization_spec"} | set(label_keys)):
+            refuse("rule keys are not allowed")
+        for key, name in label_keys.items():
+            if rule[key] != {"name": name}:
+                refuse(f"rule {key} must name {name!r}")
+        cs = rule["customization_spec"]
+        if n == 0:
+            if cs != {}:
+                # ACL-2584: only the empty catch-all keeps the several-text editor of Ads Manager.
+                refuse("the main rule must be the empty catch-all")
+            continue
+        _check_customization_spec(cs, refuse)
+        if not (cs.get("facebook_positions") or cs.get("instagram_positions")):
+            # Platforms alone would make the two rules overlap completely.
+            refuse("a rule with publisher_platforms needs position lists")
+        for key, vertical in INSTANT_VERTICAL_POSITIONS.items():
+            values = cs.get(key) or []
+            inside = [x for x in values if x in vertical]
+            if (n == 1 and len(inside) != len(values)) or (n == 0 and inside):
+                refuse(f"{key} of the {'Stories/Reels' if n else 'main'} rule are not allowed")
+
+
+def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     """Закрытая схема `asset_feed_spec` (ACL-1774); всё сверх неё - отказ.
 
     Рядом допустим `object_story_spec` со Страницей и проверенной Instagram-идентичностью: формат объявления
     (`link_data`/`video_data`) вместе с лентой ассетов Meta не принимает, и мы его не даём.
-    Форма лидов сюда не попадает вовсе: `lead_gen_form_id` в этом ключе запрещён везде.
+    Форма лидов (ACL-2528) допустима только при `on_ad` и только в кнопке ленты `call_to_actions[0].value`;
+    лента Instant Form - один файл, без правил площадок, ссылка - заглушка формы, кнопка - из списка формы.
     """
     def refuse(why: str) -> None:
         raise WriteRefused(f"write refused: asset_feed_spec {why}")
 
     if not isinstance(spec, dict):
         refuse("must be an object")
-    allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls",
-               "call_to_action_types", "ad_formats", "asset_customization_rules"}
-    extra = sorted(set(spec) - allowed)
-    if extra:
-        refuse(f"key {extra[0]!r} is not allowed")
+    if not on_ad:
+        allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls",
+                   "call_to_action_types", "ad_formats", "asset_customization_rules", INSTANT_OPTIMIZATION_KEY}
+        extra = sorted(set(spec) - allowed)
+        if extra:
+            refuse(f"key {extra[0]!r} is not allowed")
     story = creative.get("object_story_spec")
     if not (isinstance(story, dict) and set(story) <= {"page_id", INSTAGRAM_KEY}
             and isinstance(story.get("page_id"), str)):
         refuse("needs object_story_spec with page_id and optional Instagram identity only")
+    if on_ad:
+        _check_instant_feed(spec, refuse)  # ACL-2584: the only Instant Form feed shape; the rest is Website
+        return
     has_images, has_videos = bool(spec.get("images")), bool(spec.get("videos"))
     if has_images == has_videos or ("images" in spec and "videos" in spec):
         refuse("needs either images or videos")
@@ -342,6 +732,11 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
     media = spec[kind]
     if not (isinstance(media, list) and 1 <= len(media) <= ASSET_FEED_MAX_MEDIA):
         refuse(f"{kind} must hold 1-{ASSET_FEED_MAX_MEDIA} files")
+    if len(media) > 1 and any(_has_labelled_text(spec, k) for k in ("bodies", "titles", "descriptions")):
+        _check_website_labelled_feed(spec, kind, refuse)  # ACL-2611: тексты с метками правил + два файла
+        return
+    if INSTANT_OPTIMIZATION_KEY in spec:
+        refuse(f"key {INSTANT_OPTIMIZATION_KEY!r} is not allowed")  # ACL-2845: only the labelled Website feed sends it
     cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
     for kind_name in ("bodies", "titles", "descriptions"):
         # Длина - отдельная причина: «1-N текстов» скрыла бы её (ACL-1774).
@@ -355,7 +750,7 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
     if "bodies" in spec and not _is_text_list(spec["bodies"], "bodies", required=True, limit_count=cap):
         refuse(f"bodies must hold 1-{cap} non-empty texts, or be left out")
     if not _is_text_list(spec.get("titles"), "titles", required=True, limit_count=cap):
-        refuse(f"titles must hold 1-{cap} non-empty texts (a headline is required in an asset-feed ad)")
+        refuse(f"titles must hold 1-{cap} non-empty texts (a Website ad with several texts and no headline is not verified yet)")
     if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True,
                                                     limit_count=cap):
         refuse(f"descriptions must hold 1-{cap} non-empty texts")
@@ -410,16 +805,7 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
         if not (isinstance(lab, dict) and set(lab) == {"name"} and lab["name"] in names):
             refuse("rule label must name one of the files")
         used.append(lab["name"])
-        cs = rule["customization_spec"]
-        if not (isinstance(cs, dict) and cs and set(cs) <= {"publisher_platforms", "facebook_positions",
-                                                           "instagram_positions"}):
-            refuse("customization_spec keys are not allowed")
-        for key, allowed_values in (("publisher_platforms", RULE_PLATFORMS),
-                                    ("facebook_positions", RULE_FACEBOOK_POSITIONS),
-                                    ("instagram_positions", RULE_INSTAGRAM_POSITIONS)):
-            if key in cs and not (isinstance(cs[key], list) and cs[key]
-                                  and all(isinstance(x, str) and x in allowed_values for x in cs[key])):
-                refuse(f"{key} value is not allowed")
+        _check_customization_spec(rule["customization_spec"], refuse)
     if sorted(used) != sorted(names):
         refuse("each file needs its own rule")
 
@@ -466,35 +852,51 @@ def _check_targeting(t: Any) -> None:
 
 
 def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
-    """Копия параметров БЕЗ единственного разрешённого `lead_gen_form_id` (ACL-1775).
+    """Копия параметров БЕЗ разрешённых `lead_gen_form_id` (ACL-1775, ACL-2528).
 
-    Разрешённое место: креатив → object_story_spec → link_data|video_data →
-    call_to_action → value, и значение там — ровно {lead_gen_form_id: "<цифры>"}.
+    Разрешённые места, и значение там - ровно {lead_gen_form_id: "<цифры>"} (в ленте допустима ещё заглушка `link`):
+    1. креатив → object_story_spec → link_data|video_data → call_to_action → value;
+    2. креатив → asset_feed_spec → call_to_actions[0] → value (лента Instant Form, ACL-2528).
     Ключ в любом другом месте остаётся в копии, и `_walk` его отвергнет.
     Без `on_ad` (набор объявлений плана не ON_AD) форма не допускается и там.
     """
-    spec = checked.get("object_story_spec") if edge == "adcreatives" else None
-    if not isinstance(spec, dict):
+    if edge != "adcreatives":
         return checked
-    for fmt in LEAD_FORM_FORMATS:
-        data = spec.get(fmt)
-        cta = data.get("call_to_action") if isinstance(data, dict) else None
-        value = cta.get("value") if isinstance(cta, dict) else None
-        if not (isinstance(value, dict) and LEAD_FORM_KEY in value):
-            continue
+    out = checked
+
+    def verify(value: dict, extra: frozenset[str]) -> None:
         if not on_ad:
             raise WriteRefused("write refused: lead_gen_form_id is allowed only when the ad set "
                                "of the same plan is ON_AD")
         form = value[LEAD_FORM_KEY]
         if not (isinstance(form, str) and LEAD_FORM_ID_RE.fullmatch(form)):
             raise WriteRefused("write refused: lead_gen_form_id must be the numeric id of a Page form")
-        if set(value) != {LEAD_FORM_KEY}:
+        if not set(value) <= {LEAD_FORM_KEY} | extra:
             raise WriteRefused("write refused: call_to_action.value may hold only lead_gen_form_id "
                                "next to an Instant Form")
-        out = copy.deepcopy(checked)
-        del out["object_story_spec"][fmt]["call_to_action"]["value"][LEAD_FORM_KEY]
-        return out
-    return checked
+
+    spec = checked.get("object_story_spec")
+    if isinstance(spec, dict):
+        for fmt in LEAD_FORM_FORMATS:
+            data = spec.get(fmt)
+            cta = data.get("call_to_action") if isinstance(data, dict) else None
+            value = cta.get("value") if isinstance(cta, dict) else None
+            if not (isinstance(value, dict) and LEAD_FORM_KEY in value):
+                continue
+            verify(value, frozenset())
+            out = copy.deepcopy(checked)
+            del out["object_story_spec"][fmt]["call_to_action"]["value"][LEAD_FORM_KEY]
+            break
+    feed = checked.get(ASSET_FEED_KEY)
+    buttons = feed.get("call_to_actions") if isinstance(feed, dict) else None
+    if isinstance(buttons, list) and len(buttons) == 1 and isinstance(buttons[0], dict):
+        value = buttons[0].get("value")
+        if isinstance(value, dict) and LEAD_FORM_KEY in value:
+            verify(value, frozenset({"link"}))
+            if out is checked:
+                out = copy.deepcopy(checked)
+            del out[ASSET_FEED_KEY]["call_to_actions"][0]["value"][LEAD_FORM_KEY]
+    return out
 
 
 def _count_key(value: Any, key: str) -> int:
@@ -516,6 +918,41 @@ def _check_instagram(edge: str, checked: dict) -> None:
         raise WriteRefused(f"write refused: {INSTAGRAM_KEY} is allowed only in object_story_spec of a creative")
     if not (isinstance(value, str) and INSTAGRAM_ID_RE.fullmatch(value)):
         raise WriteRefused(f"write refused: {INSTAGRAM_KEY} must be the numeric id of an Instagram account")
+
+class ServedChunk:
+    """ACL-2629: a window [offset, offset+length) of a file on disk, handed to the page's Web Worker piece by
+    piece instead of being copied into the page (the old staged path). Holds no bytes itself.
+
+    `source` must offer `read_range(offset, n)` (`creator.LargeFile`). `len()` is the chunk length, so the
+    chunk-size checks apply to it exactly as to bytes.
+    """
+
+    def __init__(self, source: Any, offset: int, length: int):
+        if not (isinstance(offset, int) and isinstance(length, int)) or offset < 0 or length < 1:
+            raise ValueError("a served chunk needs a non-negative offset and a positive length")
+        self.source = source
+        self.offset = offset
+        self.length = length
+
+    def __len__(self) -> int:
+        return self.length
+
+    def read(self, rel: int, n: int) -> bytes:
+        """Bytes [rel, rel+n) of the chunk; never outside the window."""
+        if rel < 0 or n < 0 or rel + n > self.length:
+            raise ValueError("read outside the served chunk")
+        return self.source.read_range(self.offset + rel, n) if n else b""
+
+    def pieces(self, piece: int) -> list[tuple[int, int]]:
+        """[(rel_offset, length)] covering the chunk in pieces of at most `piece` bytes."""
+        piece = max(1, min(int(piece), UPLOAD_PIECE_MAX))
+        return [(o, min(piece, self.length - o)) for o in range(0, self.length, piece)]
+
+    def piece_hashes(self, piece: int) -> list[str]:
+        import hashlib
+
+        return [hashlib.sha256(self.read(o, n)).hexdigest() for o, n in self.pieces(piece)]
+
 
 def _digits(value: Any) -> int | None:
     """Целое из int или строки цифр (не bool, не float); иначе None."""
@@ -559,10 +996,62 @@ def _check_upload(params: dict, files: dict) -> None:
         if set(files) != {UPLOAD_CHUNK_FIELD}:
             raise WriteRefused(f"write refused: transfer needs exactly the file field {UPLOAD_CHUNK_FIELD!r}")
         chunk = files[UPLOAD_CHUNK_FIELD]
-        if not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
-            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+        if isinstance(chunk, ServedChunk):
+            # ACL-2629: the bytes are read from the file by the controller and served to the worker piece by piece.
+            if not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
+                raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+            if chunk.offset != _digits(params.get("start_offset")):
+                raise WriteRefused("write refused: the served chunk must start at start_offset")
+        elif not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_STAGED_CHUNK_MAX:
+            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_STAGED_CHUNK_MAX} bytes")
     elif files:
         raise WriteRefused(f"write refused: upload phase {phase} takes no file")
+
+
+def _is_file_api(params: dict) -> bool:
+    return any(k in params for k in FILE_API_MARKERS)
+
+
+def _check_file_api(params: dict, files: dict) -> None:
+    """ACL-2639: the advideos phases of the Ads Manager file-API upload: closed keys per phase, exact values."""
+    phase = params.get("upload_phase")
+    if not (isinstance(phase, str) and phase in FILE_API_KEYS):
+        raise WriteRefused("write refused: upload_phase must be start, transfer or finish")
+    extra = sorted(set(params) - FILE_API_KEYS[phase])
+    missing = sorted(FILE_API_KEYS[phase] - set(params))
+    if extra or missing:
+        raise WriteRefused(f"write refused: key {(extra or missing)[0]!r} is "
+                           f"{'not allowed' if extra else 'required'} in upload phase {phase}")
+    if files:
+        raise WriteRefused(f"write refused: upload phase {phase} takes no file")
+    if phase == "start":
+        size = _digits(params["file_size"])
+        if not size or size > UPLOAD_FILE_MAX or not isinstance(params["file_size"], str):
+            raise WriteRefused("write refused: file_size must be a positive size within the video limit")
+        if not (isinstance(params["waterfall_id"], str) and UPLOAD_WATERFALL_RE.fullmatch(params["waterfall_id"])):
+            raise WriteRefused("write refused: waterfall_id must be 32 lowercase hex characters")
+        if (params["file_extension"] != "mp4" or params["supports_chunking"] != "true"
+                or params["supports_file_api"] != "true" or params["partition_start_offset"] != "0"
+                or params["partition_end_offset"] != params["file_size"]):
+            raise WriteRefused("write refused: the start of an upload must be one whole-file mp4 partition")
+        return
+    for key in ("upload_session_id", "video_id"):
+        v = params[key]
+        if not (isinstance(v, str) and UPLOAD_ID_RE.fullmatch(v)):
+            raise WriteRefused(f"write refused: {key} must be the numeric id Meta returned")
+    if phase == "transfer":
+        end = _digits(params["end_offset"])
+        if (params["start_offset"] != "0" or params["partition_start_offset"] != "0" or not end
+                or end > UPLOAD_FILE_MAX or not isinstance(params["end_offset"], str)
+                or params["partition_end_offset"] != params["end_offset"]):
+            raise WriteRefused("write refused: the transfer must cover one whole-file partition from 0")
+        h = params["fbuploader_video_file_chunk"]
+        if not (isinstance(h, str) and len(h) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(h)):
+            raise WriteRefused("write refused: fbuploader_video_file_chunk must be the file handle of the upload")
+    else:
+        t = params["title"]
+        if not (isinstance(t, str) and VIDEO_TITLE_RE.fullmatch(t)):
+            raise WriteRefused("write refused: the video title must be its ACL tag name")
 
 
 # ───────────────────────── lifetime-бюджет и расписание (ACL-1443) ─────────────────────────
@@ -666,7 +1155,10 @@ def check(act: str, method: str, path: str, params: dict | None,
         raise WriteRefused(f"write refused: edge {edge!r} is not on the allowlist")
     params = dict(params or {})
     if edge == "advideos" and "upload_phase" in params:
-        _check_upload(params, dict(files or {}))
+        if _is_file_api(params):
+            _check_file_api(params, dict(files or {}))             # ACL-2639: the Ads Manager file-API upload
+        else:
+            _check_upload(params, dict(files or {}))
         return edge
     extra = sorted(set(params) - EDGE_KEYS[edge])
     if extra:
@@ -689,13 +1181,16 @@ def check(act: str, method: str, path: str, params: dict | None,
     if MULTI_ADS_KEY in checked:
         _check_multi_ads(checked[MULTI_ADS_KEY])
     if ASSET_FEED_KEY in checked:
-        _check_asset_feed(checked[ASSET_FEED_KEY], checked)
+        _check_asset_feed(checked[ASSET_FEED_KEY], checked, on_ad)
     if edge == "adcreatives":
         _check_cta(checked.get("object_story_spec"), on_ad)
     if edge == "adsets" and "targeting" in checked:
         _check_targeting(checked["targeting"])
     if DYNAMIC_KEY in checked and checked[DYNAMIC_KEY] is not True:
         raise WriteRefused(f"write refused: {DYNAMIC_KEY} may only be true")
+    if edge == "adsets" and checked.get(DYNAMIC_KEY) is True and checked.get("destination_type") == "ON_AD":
+        # ACL-2584: an Instant Form ad set is never Dynamic Creative (its feed uses placement rules).
+        raise WriteRefused(f"write refused: an Instant Form (ON_AD) ad set may not set {DYNAMIC_KEY}")
     if edge == "ads" and "creative" in checked:
         # Объявление ссылается на готовый креатив — и только (ревью R5-M1:
         # встроенный креатив провёз бы свой degrees_of_freedom_spec).
@@ -726,19 +1221,37 @@ FORM_EDGE = "leadgen_forms"
 #: Ключи верхнего уровня запроса. `tos_accepted` сюда не попадёт никогда.
 FORM_KEYS = frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
                        "question_page_custom_headline", "locale", "follow_up_action_url",
-                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer",
+                       "background_image_option", "conditional_logic", "end_pages"})
+#: ACL-2579: the only intro background choice allowed, and only together with context_card.cover_photo_id.
+FORM_BACKGROUND_OPTIONS = ("UPLOAD",)
 #: Булевы ключи верхнего уровня (ACL-2053): только true/false, не строки и не числа.
 FORM_BOOL_KEYS = frozenset({"is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
 #: Ключи, которые Graph читает как JSON (строку разбираем до проверок, как у `act_X`).
-FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "context_card"})
+FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "context_card",
+                            "conditional_logic", "end_pages"})
 #: Допустимые ключи вложенных объектов.
 FORM_NESTED: dict[str, list[str]] = {
     "privacy_policy": ["link_text", "url"],
     "thank_you_page": ["body", "button_text", "button_type", "title", "website_url"],
-    "context_card": ["button_text", "content", "style", "title"],
+    "context_card": ["button_text", "content", "cover_photo_id", "style", "title"],
     "question": ["key", "label", "options", "type"],
     "option": ["key", "value"],
+    # ACL-2178: answer conditions. Create shape proven on Doc120 (03.11) and in the owner's HAR (11.11):
+    # `logic_data` is an object keyed `customized_N`; Meta reads it back as a list of {key, value}.
+    "conditional_logic": ["logic_data", "version"],
+    "destination": ["destination_id", "destination_type"],
+    "end_pages": ["disqualified_end_components", "thank_you_pages"],
+    "thank_you_end_page": ["body", "button_text", "button_type", "name", "title", "website_url"],
+    # The non-lead page refuses `button_type` on create (Meta sets VIEW_WEBSITE itself).
+    "non_lead_end_page": ["body", "button_text", "name", "title", "website_url"],
 }
+#: ACL-2178: destination kinds of a condition and the ids each one may carry.
+FORM_DEST_QUESTION, FORM_DEST_THANKS, FORM_DEST_DISQUALIFIED = "QUESTION", "THANK_YOU_PAGE", "DISQUALIFIED_END_COMPONENT"
+FORM_DEST_TYPES = (FORM_DEST_QUESTION, FORM_DEST_THANKS, FORM_DEST_DISQUALIFIED)
+FORM_DEST_THANKS_ID, FORM_DEST_DISQUALIFIED_ID = "thank_you_page_0", "disqualified_page_0"
+FORM_LOGIC_KEY_RE = r"^customized_[0-9]{1,2}$"
+FORM_LOGIC_VERSION = 1
 FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FIRST_NAME", "FULL_NAME", "LAST_NAME", "PHONE")
 #: `NONE` - кнопки нет (нет ссылки на сайт): `button_type` у thank_you_page обязателен
 #: (справочник Meta page/leadgen_forms), для «без ссылки» там предусмотрен `NONE`.
@@ -751,6 +1264,8 @@ FORM_MAX_TEXT = 1000
 FORM_NAME_RE = r" · ACL [0-9a-f]{6}$"
 FORM_PAGE_RE = r"^[0-9]{1,25}$"
 FORM_LOCALE_RE = r"^[A-Z]{2}_[A-Z]{2}$"
+#: ACL-2188: id существующего фото Страницы в context_card. Только строка из цифр; `cover_photo` (файл) отказ.
+FORM_PHOTO_ID_RE = r"^[0-9]{1,25}$"
 FORM_URL_RE = r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$"
 #: Ключи, которых нет нигде и на любой глубине (условия, токены, обходные пути).
 FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "tos", "terms",
@@ -767,6 +1282,9 @@ def policy_for_form_create(page: str = "") -> dict:
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
         "max_options": FORM_MAX_OPTIONS, "max_text": FORM_MAX_TEXT,
         "name_re": FORM_NAME_RE, "page_re": FORM_PAGE_RE, "locale_re": FORM_LOCALE_RE,
+        "photo_id_re": FORM_PHOTO_ID_RE, "background_options": list(FORM_BACKGROUND_OPTIONS),
+        "logic": {"version": FORM_LOGIC_VERSION, "key_re": FORM_LOGIC_KEY_RE, "dest_types": list(FORM_DEST_TYPES),
+                  "thanks_id": FORM_DEST_THANKS_ID, "disqualified_id": FORM_DEST_DISQUALIFIED_ID},
         "url_re": FORM_URL_RE, "forbidden": sorted(FORM_FORBIDDEN_ANYWHERE),
     }
 
@@ -826,6 +1344,119 @@ def _check_form_question(q: Any, i: int) -> None:
             o = _form_keys(o, "option", f"{where}.options[{j}]")
             _form_text(o.get("key"), f"{where}.options[{j}].key")
             _form_text(o.get("value"), f"{where}.options[{j}].value")
+
+
+def _check_form_end_page(page: Any, kind: str, where: str) -> None:
+    page = _form_keys(page, kind, where)
+    _form_text(page.get("name"), f"{where}.name")
+    _form_text(page.get("title"), f"{where}.title")
+    for key in ("body", "button_text"):
+        if key in page:
+            _form_text(page[key], f"{where}.{key}")
+    if "button_type" in page and page["button_type"] not in FORM_BUTTON_TYPES:
+        raise WriteRefused(f"write refused: {where}.button_type is not allowed")
+    if "website_url" in page:
+        _form_url(page["website_url"], f"{where}.website_url")
+
+
+def _check_form_logic(checked: dict, questions: list) -> None:
+    """ACL-2178: `conditional_logic` and `end_pages` go together, forward-only, one entry per answer."""
+    cl, ep = checked.get("conditional_logic"), checked.get("end_pages")
+    if cl is None and ep is None:
+        return
+    if cl is None or ep is None:
+        raise WriteRefused("write refused: conditional_logic and end_pages are sent together")
+    if "thank_you_page" in checked:
+        raise WriteRefused("write refused: a form with conditions has its lead end page in end_pages only")
+    cl = _form_keys(cl, "conditional_logic", "conditional_logic")
+    version = cl.get("version")
+    if isinstance(version, bool) or version != FORM_LOGIC_VERSION:
+        raise WriteRefused("write refused: conditional_logic.version must be 1")
+    data = cl.get("logic_data")
+    custom = [q for q in questions if q.get("type") == "CUSTOM"]
+    if not isinstance(data, dict) or set(data) != {f"customized_{n}" for n in range(len(custom))}:
+        raise WriteRefused("write refused: conditional_logic.logic_data needs one entry per custom question")
+    used: set[str] = set()
+    for n, q in enumerate(custom):
+        key = f"customized_{n}"
+        dests = data[key]
+        want = max(1, len(q.get("options") or []))
+        if not (isinstance(dests, list) and len(dests) == want):
+            raise WriteRefused(f"write refused: logic_data.{key} needs one destination per answer")
+        for d in dests:
+            d = _form_keys(d, "destination", f"logic_data.{key}[]")
+            kind, dest = d.get("destination_type"), d.get("destination_id")
+            if kind not in FORM_DEST_TYPES:
+                raise WriteRefused(f"write refused: logic_data.{key} destination_type is not allowed")
+            if kind == FORM_DEST_QUESTION:
+                m = re.match(FORM_LOGIC_KEY_RE, str(dest))
+                if not (isinstance(dest, str) and m and n < int(dest[len("customized_"):]) < len(custom)):
+                    raise WriteRefused(f"write refused: logic_data.{key} may only go to a later question")
+            elif dest != (FORM_DEST_THANKS_ID if kind == FORM_DEST_THANKS else FORM_DEST_DISQUALIFIED_ID):
+                raise WriteRefused(f"write refused: logic_data.{key} destination_id does not match its type")
+            used.add(kind)
+    ep = _form_keys(ep, "end_pages", "end_pages")
+    pages = ep.get("thank_you_pages")
+    if not (isinstance(pages, list) and len(pages) == 1):
+        raise WriteRefused("write refused: end_pages.thank_you_pages must hold exactly one page")
+    _check_form_end_page(pages[0], "thank_you_end_page", "end_pages.thank_you_pages[0]")
+    disq = ep.get("disqualified_end_components")
+    if FORM_DEST_DISQUALIFIED in used:
+        if not (isinstance(disq, list) and len(disq) == 1):
+            raise WriteRefused("write refused: a closing answer needs exactly one non-lead end page")
+        _check_form_end_page(disq[0], "non_lead_end_page", "end_pages.disqualified_end_components[0]")
+    elif disq is not None:
+        raise WriteRefused("write refused: a non-lead end page without a closing answer")
+
+
+# ───────────────────── фон формы: загрузка картинки (ACL-2533) ─────────────────────
+#
+# НЕ Graph: тот же запрос, что шлёт сам Ads Manager (`/ads/leadgen/upload/photo/`), с вкладки профиля,
+# от имени Страницы (`av`) и по сессии пользователя. Отдельная узкая политика: фиксированный адрес,
+# хост страницы, `av` = закреплённая Страница, jpeg/png, потолок размера. Зеркало на странице-помощнике -
+# `uploadFormPhoto` в token_capture (читает ту же таблицу из `policy_for_form_photo()`).
+
+FORM_PHOTO_HOST = "adsmanager.facebook.com"
+FORM_PHOTO_URL = "https://adsmanager.facebook.com/ads/leadgen/upload/photo/"
+FORM_PHOTO_MIMES = ("image/jpeg", "image/png")
+FORM_PHOTO_MAX_BYTES = 8 * 1024 * 1024
+#: Один запрос на одну картинку; идёт в оценку вызовов вместе с чтениями Страницы.
+FORM_PHOTO_UPLOAD_CALLS = 1
+
+
+def policy_for_form_photo(page: str = "") -> dict:
+    """Политика загрузки фона формы для помощника страницы (JSON-сериализуемая)."""
+    return {"host": FORM_PHOTO_HOST, "url": FORM_PHOTO_URL, "page": str(page or ""),
+            "mimes": list(FORM_PHOTO_MIMES), "max_bytes": FORM_PHOTO_MAX_BYTES, "page_re": FORM_PAGE_RE}
+
+
+def policy_for_form_photo_only(page: str = "") -> dict:
+    """Помощник, который умеет ТОЛЬКО эту загрузку: ни рёбер Graph, ни правок объектов."""
+    return {"form_photo_only": True, "form_photo": policy_for_form_photo(page)}
+
+
+def check_form_photo_upload(host: str, av: str, pinned_page: str, mime: str, size: int) -> str:
+    """Проверить загрузку фона формы. Возвращает адрес запроса; иначе `WriteRefused`.
+
+    Хост - только `adsmanager.facebook.com`; `av` (Страница-актёр) - числовой id и ровно закреплённая
+    Страница сессии; файл - jpeg/png, не пустой и не больше потолка.
+    """
+    if str(host or "").lower() != FORM_PHOTO_HOST:
+        raise WriteRefused(f"write refused: the form background is uploaded only from {FORM_PHOTO_HOST}")
+    if not re.match(FORM_PAGE_RE, str(pinned_page or "")):
+        raise WriteRefused("write refused: no Page is pinned for this session; the upload is off")
+    if not re.match(FORM_PAGE_RE, str(av or "")):
+        raise WriteRefused("write refused: the Page of the upload is not set")
+    if str(av) != str(pinned_page):
+        raise WriteRefused("write refused: the upload Page is not the Page of the plan")
+    if mime not in FORM_PHOTO_MIMES:
+        raise WriteRefused("write refused: the background image must be a JPEG or PNG")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 1:
+        raise WriteRefused("write refused: the background image is empty")
+    if size > FORM_PHOTO_MAX_BYTES:
+        raise WriteRefused(f"write refused: the background image is larger than "
+                           f"{FORM_PHOTO_MAX_BYTES // (1024 * 1024)} MB")
+    return FORM_PHOTO_URL
 
 
 def check_form_create(page_id: str, method: str, path: str, params: dict | None,
@@ -901,6 +1532,17 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         content = cc.get("content")
         if not (isinstance(content, list) and content and all(isinstance(x, str) and x.strip() for x in content)):
             raise WriteRefused("write refused: context_card.content must be a list of texts")
+        if "cover_photo_id" in cc:
+            photo = cc["cover_photo_id"]
+            if not (isinstance(photo, str) and re.match(FORM_PHOTO_ID_RE, photo)):
+                raise WriteRefused("write refused: context_card.cover_photo_id must be a photo id of digits")
+    _check_form_logic(checked, qs)
+    if "background_image_option" in checked:
+        card = checked.get("context_card")
+        if checked["background_image_option"] not in FORM_BACKGROUND_OPTIONS:
+            raise WriteRefused("write refused: background_image_option is not allowed")
+        if not (isinstance(card, dict) and "cover_photo_id" in card):
+            raise WriteRefused("write refused: background_image_option needs context_card.cover_photo_id")
     return FORM_EDGE
 
 

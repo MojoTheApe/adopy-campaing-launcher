@@ -174,7 +174,7 @@ def test_switch_off_drops_the_light_tab_and_runs_as_today(rig, monkeypatch):
 
 
 def test_flag_off_opens_one_tab_only(tmp_path, monkeypatch):
-    monkeypatch.delenv("ACL_LIGHT_WORK_TAB", raising=False)
+    monkeypatch.setenv("ACL_LIGHT_WORK_TAB", "0")
     r = Rig(tmp_path)
     r.warm_up()
     r.checkout().release()
@@ -207,3 +207,41 @@ def test_a_successful_light_lease_resets_the_fallback_count(rig):
     LightGraph.handover_reason = ""
     rig.checkout().release()
     assert rig.reg.session(PID).light_fallbacks == 0 and rig.reg.session(PID).mode_kind == "light"
+
+
+def test_acl2533_photo_leases_run_on_the_ads_manager_tab_with_the_light_switch_on(rig):
+    """A form-photo upload needs the Ads Manager page (fb_dtsg/lsd) and a fresh graph per Page."""
+    rig.checkout().release()                                             # a normal read: the light tab
+    sess = rig.reg.session(PID)
+    assert sess.mode_kind == "light"
+    graphs = []
+    for _ in range(2):                                                   # two uploads (two Pages) in a row
+        lease = rig.checkout(mode="photo")
+        assert lease.tab is sess.tab and sess.mode_kind == "ads_manager"
+        assert lease.tab.url != light_tab.LIGHT_URL and getattr(lease.tab, "light", None) is None
+        graphs.append(lease.graph)
+        lease.release()
+    assert graphs[0] is not graphs[1]                                    # never the previous upload's graph
+    lease = rig.checkout()                                               # a normal read: light again
+    assert sess.mode_kind == "light" and lease.tab.light is not None
+    lease.release()
+
+
+def test_unset_flag_leases_in_light_mode(rig, monkeypatch):
+    """ACL-2591: no variable at all = the light work tab."""
+    monkeypatch.delenv("ACL_LIGHT_WORK_TAB", raising=False)
+    lease = rig.checkout()
+    assert rig.reg.session(PID).mode_kind == "light"
+    assert getattr(lease.tab, "light", None) is not None
+    assert not [r for r in rig.rows if r.get("fallback_reason") == "flag_off"]
+    lease.release()
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off"])
+def test_explicit_off_values_use_ads_manager_tab_with_flag_off(rig, monkeypatch, value):
+    monkeypatch.setenv("ACL_LIGHT_WORK_TAB", value)
+    lease = rig.checkout()
+    assert rig.reg.session(PID).mode_kind == "ads_manager"
+    assert getattr(lease.tab, "light", None) is None
+    assert any(r.get("fallback_reason") == "flag_off" and r.get("mode") == "ads_manager" for r in rig.rows)
+    lease.release()

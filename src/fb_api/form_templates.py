@@ -53,7 +53,15 @@ CONTACT_TYPES: dict[str, str] = {"name": "FULL_NAME", "email": "EMAIL", "phone":
                                  "first_name": "FIRST_NAME", "last_name": "LAST_NAME"}
 #: Тип пользовательского вопроса шаблона.
 SHORT, CHOICE = "short_answer", "multiple_choice"
-QUESTION_KINDS = (SHORT, CHOICE)
+#: ACL-2178: a multiple choice question whose answers carry conditions. A DISTINCT stored type on purpose: an
+#: older build does not know it, so `validate` there fails the template, `load` keeps it out of publishing and
+#: an old-build save is refused. The UI still calls it "Multiple choice".
+CHOICE_LOGIC = "multiple_choice_logic"
+QUESTION_KINDS = (SHORT, CHOICE, CHOICE_LOGIC)
+#: What an answer does. `qN` = go to custom question N (1-based, later questions only).
+ACTION_NEXT, ACTION_SUBMIT, ACTION_CLOSE = "next", "submit", "close"
+_ACTION_Q_RE = re.compile(r"^q([0-9]{1,2})$")
+MAX_NON_LEAD_TITLE = 60
 
 DEFAULT_LOCALE = "EN_US"
 #: ACL-2180: язык формы выбирается при публикации из языка и страны набора.
@@ -80,6 +88,13 @@ ROBOT_NAME_RE = re.compile(r" · ACL [0-9a-f]{6}$")
 
 _HTTPS_RE = re.compile(r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$", re.I)
 _ID_RE = re.compile(r"^[0-9a-f]{12}$")
+#: ACL-2188: id фото Страницы (и самой Страницы) - строка из цифр. Зеркало: FORM_PHOTO_ID_RE в write_policy.
+PHOTO_ID_RE = re.compile(r"^[0-9]{1,25}$")
+#: ACL-2533: sha256 загруженного файла (метка «та же картинка на той же Странице»); сами байты в библиотеку не кладём.
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+#: Ключи, которые `save` убирает из записи, когда редактор их не прислал (иначе Remove ничего не делает:
+#: `{**was, **out}` хранит старое значение).
+DROPPED_WHEN_EMPTY = ("cover_photo_id", "cover_page_id", "cover_sha256", "cover_local_sha256", "non_lead_end")
 
 _lock = threading.RLock()
 
@@ -97,6 +112,84 @@ def _s(value: Any) -> str:
 def _multiline(value: Any) -> str:
     text = str(value if value is not None else "").replace("\r\n", "\n").strip()
     return "\n".join(" ".join(line.split()) for line in text.split("\n"))
+
+
+def _clean_logic(raw: Any, opts: list[str], i: int, total: int, errors: list[str]) -> dict[str, str]:
+    """Conditions of question `i`, keyed by answer text (so reordering the options never moves a branch)."""
+    raw = raw if isinstance(raw, dict) else {}
+    given = {_s(k): _s(v).lower() for k, v in raw.items()}
+    for key in given:
+        if key not in opts:
+            errors.append(f'Question {i}: the condition for "{key}" does not match any answer')
+    out: dict[str, str] = {}
+    for opt in opts:
+        action = given.get(opt, "")
+        if not action:
+            errors.append(f'Question {i}: choose what happens after the answer "{opt}"')
+            continue
+        m = _ACTION_Q_RE.match(action)
+        if action in (ACTION_NEXT, ACTION_SUBMIT, ACTION_CLOSE):
+            out[opt] = action
+        elif not m:
+            errors.append(f'Question {i}: "{action}" is not a valid action')
+        elif int(m.group(1)) > total or int(m.group(1)) < 1:
+            errors.append(f'Question {i}: the answer "{opt}" goes to question {int(m.group(1))}, which does not exist')
+        elif int(m.group(1)) <= i:
+            errors.append(f'Question {i}: the answer "{opt}" can only go to a later question')
+        else:
+            out[opt] = action
+    return out
+
+
+def _next_index(questions: list[dict[str, Any]], i: int) -> int | None:
+    """0-based index of the question asked after question `i` in normal order; None = the lead end page."""
+    for j in range(i + 1, len(questions)):
+        if not questions[j].get("after_answer"):
+            return j
+    return None
+
+
+def _validate_flow(questions: list[dict[str, Any]], errors: list[str]) -> None:
+    """Reachability checks of a form with conditions (after the per-answer checks)."""
+    if questions and questions[0].get("after_answer"):
+        errors.append("The first question can't be shown only after an answer")
+    targeted: set[int] = set()
+    submits = False
+    for i, q in enumerate(questions):
+        nxt = _next_index(questions, i)
+        for answer in (list(q["logic"].values()) if q.get("logic") else [ACTION_NEXT]):
+            m = _ACTION_Q_RE.match(answer)
+            if m:
+                targeted.add(int(m.group(1)) - 1)
+            elif answer == ACTION_SUBMIT or (answer == ACTION_NEXT and nxt is None):
+                submits = True
+            elif answer == ACTION_NEXT:
+                targeted.add(nxt)
+    for i, q in enumerate(questions):
+        if q.get("after_answer") and i not in targeted and i > 0:
+            errors.append(f"Question {i + 1}: only shown after an answer, but no answer leads to it")
+    if not submits and not any(e.startswith("Question") for e in errors):
+        errors.append("At least one answer must submit the form")
+
+
+def _clean_non_lead_end(raw: Any, errors: list[str]) -> dict[str, str]:
+    """The page people see after a closing answer. Shown only when some answer closes the form."""
+    raw = raw if isinstance(raw, dict) else {}
+    page = {"title": _s(raw.get("title")), "text": _multiline(raw.get("text")),
+            "website_url": str(raw.get("website_url") or "").strip(),
+            "button_text": _s(raw.get("button_text")) or DEFAULT_BUTTON_TEXT}
+    if not page["title"]:
+        errors.append("Non-lead end page: title is required")
+    elif len(page["title"]) > MAX_NON_LEAD_TITLE:
+        errors.append(f"Non-lead end page: title is longer than {MAX_NON_LEAD_TITLE} characters")
+    if not page["text"]:
+        errors.append("Non-lead end page: text is required")
+    elif len(page["text"]) > MAX_THANKS:
+        errors.append(f"Non-lead end page: text is longer than {MAX_THANKS} characters")
+    # A page without a link is not proven on Meta yet (ACL-2178 live check), so the link is required.
+    if not is_https_url(page["website_url"]):
+        errors.append("Non-lead end page: website link must start with https://")
+    return page
 
 
 def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], list[str]]:
@@ -131,6 +224,37 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
         errors.append(f"Intro title is longer than {MAX_INTRO_TITLE} characters")
     if intro_title:
         out["intro_title"] = intro_title
+
+    # ACL-2188: фоновая картинка - пара «фото + Страница», только цифры, в шаблон кладётся лишь заданной.
+    cover_photo, cover_page = _s(src.get("cover_photo_id")), _s(src.get("cover_page_id"))
+    if cover_photo or cover_page:
+        if not (cover_photo and cover_page):
+            errors.append("Background image needs both a Photo ID and a Page")
+        elif not (PHOTO_ID_RE.match(cover_photo) and PHOTO_ID_RE.match(cover_page)):
+            errors.append("Photo ID must contain digits only")
+        else:
+            out["cover_photo_id"], out["cover_page_id"] = cover_photo, cover_page
+            # ACL-2533: необязательный sha256 файла, загруженного из билдера; для выбранного со Страницы его нет.
+            cover_sha = _s(src.get("cover_sha256")).lower()
+            if cover_sha:
+                if SHA256_RE.match(cover_sha):
+                    out["cover_sha256"] = cover_sha
+                else:
+                    errors.append("Background image checksum must be 64 hex characters")
+        if not out["intro"]:
+            errors.append("Background image needs a Description (Meta shows it on the intro screen)")
+    # ACL-2571: a picture kept on this computer and uploaded to each Page at publish. The library holds only
+    # its hash (never bytes). One picture per template: either a Page photo or the local one.
+    local_sha = _s(src.get("cover_local_sha256")).lower()
+    if local_sha:
+        if not SHA256_RE.match(local_sha):
+            errors.append("Background picture checksum must be 64 hex characters")
+        elif "cover_photo_id" in out:
+            errors.append("Choose either a Page photo or a picture from this computer for the background, not both")
+        else:
+            out["cover_local_sha256"] = local_sha
+            if not out["intro"]:
+                errors.append("Background image needs a Description (Meta shows it on the intro screen)")
 
     contacts = src.get("contact_fields")
     contacts = contacts if isinstance(contacts, (list, tuple)) else []
@@ -170,7 +294,9 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
             errors.append(f"Question {i}: type must be short answer or multiple choice")
             kind = SHORT
         item: dict[str, Any] = {"label": label, "type": kind}
-        if kind == CHOICE:
+        if q.get("after_answer") is True or _s(q.get("after_answer")).lower() == "true":
+            item["after_answer"] = True
+        if kind in (CHOICE, CHOICE_LOGIC):
             opts = [_s(o) for o in (q.get("options") if isinstance(q.get("options"), (list, tuple)) else [])]
             opts = [o for o in opts if o]
             if len(opts) < 2:
@@ -182,10 +308,23 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
             if any(len(o) > MAX_OPTION for o in opts):
                 errors.append(f"Question {i}: an option is longer than {MAX_OPTION} characters")
             item["options"] = opts
+            if kind == CHOICE_LOGIC:
+                item["logic"] = _clean_logic(q.get("logic"), opts, i, len(questions), errors)
+        elif q.get("logic"):
+            errors.append(f"Question {i}: conditions need a multiple choice question")
         clean_q.append(item)
     if len(clean_q) > MAX_QUESTIONS:
         errors.append(f"At most {MAX_QUESTIONS} custom questions")
     out["questions"] = clean_q
+    has_logic = any(q["type"] == CHOICE_LOGIC for q in clean_q)
+    if has_logic or any(q.get("after_answer") for q in clean_q):
+        _validate_flow(clean_q, errors)
+    if has_logic:
+        # Meta puts the custom questions before the contact fields on a form with conditions.
+        out["questions_first"] = True
+        closes = any(a == ACTION_CLOSE for q in clean_q for a in (q.get("logic") or {}).values())
+        if closes:
+            out["non_lead_end"] = _clean_non_lead_end(src.get("non_lead_end"), errors)
 
     out["privacy_url"] = str(src.get("privacy_url") or "").strip()
     if not out["privacy_url"]:
@@ -232,9 +371,20 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
     return out, errors
 
 
+#: ACL-2579: version marker mixed into the name hash of templates with a picture (see `content_hash`).
+COVER_SHAPE = "cover-v2"
+#: ACL-2579: the intro "Background image" choice Ads Manager sends with an uploaded picture.
+FORM_BACKGROUND_UPLOAD = "UPLOAD"
+
+
 def content_hash(tpl: dict[str, Any]) -> str:
     """Короткий хэш СОДЕРЖАНИЯ (без id и имени): другое содержание -> другая форма."""
     body = {k: tpl.get(k) for k in sorted(tpl) if k not in ("id", "name")}
+    if tpl.get("cover_photo_id") or tpl.get("cover_local_sha256"):
+        # ACL-2579: forms with a picture made before `background_image_option=UPLOAD` was sent (live 12.11, Doc284)
+        # show no background in Ads Manager and cannot be edited; a new shape marker gives them a NEW name, so the
+        # next publish creates a good form instead of reusing the broken one. Templates without a picture keep names.
+        body["_shape"] = COVER_SHAPE
     raw = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:6]
 
@@ -250,14 +400,71 @@ def expected_questions(tpl: dict[str, Any]) -> list[dict[str, Any]]:
     custom: list[dict[str, Any]] = []
     for i, q in enumerate(tpl["questions"], start=1):
         item: dict[str, Any] = {"type": "CUSTOM", "key": f"question_{i}", "label": q["label"]}
-        if q["type"] == CHOICE:
+        if q["type"] in (CHOICE, CHOICE_LOGIC):
             item["options"] = [{"key": f"q{i}_option_{j}", "value": v} for j, v in enumerate(q["options"], start=1)]
         custom.append(item)
     return custom + contacts if tpl.get("questions_first") else contacts + custom
 
 
-def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
-    """Тело `POST /{page}/leadgen_forms`: только то, что нужно шаблону. Без `tos_accepted`."""
+def has_logic(tpl: dict[str, Any]) -> bool:
+    return any(q.get("type") == CHOICE_LOGIC for q in tpl.get("questions") or [])
+
+
+def logic_data(tpl: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
+    """ACL-2178: `{customized_N: [destination per answer]}` for every custom question, in option order.
+
+    Built from the answer TEXT at request time. Meta has no implicit "continue", so the whole flow is explicit:
+    `next` (and every answer of a question without conditions) is the next question not marked "only after an
+    answer", or the lead end page after the last one.
+    """
+    questions = tpl["questions"]
+
+    def to(action: str, i: int) -> dict[str, str]:
+        m = _ACTION_Q_RE.match(action)
+        if m:
+            return {"destination_id": f"customized_{int(m.group(1)) - 1}", "destination_type": "QUESTION"}
+        if action == ACTION_CLOSE:
+            return {"destination_id": "disqualified_page_0", "destination_type": "DISQUALIFIED_END_COMPONENT"}
+        nxt = None if action == ACTION_SUBMIT else _next_index(questions, i)
+        if nxt is None:
+            return {"destination_id": "thank_you_page_0", "destination_type": "THANK_YOU_PAGE"}
+        return {"destination_id": f"customized_{nxt}", "destination_type": "QUESTION"}
+
+    data: dict[str, list[dict[str, str]]] = {}
+    for i, q in enumerate(questions):
+        if q["type"] == CHOICE_LOGIC:
+            data[f"customized_{i}"] = [to(q["logic"][o], i) for o in q["options"]]
+        else:
+            data[f"customized_{i}"] = [to(ACTION_NEXT, i) for _ in (q.get("options") or [None])]
+    return data
+
+
+def end_pages(tpl: dict[str, Any]) -> dict[str, Any]:
+    """ACL-2178: the lead end page (instead of the top-level `thank_you_page`) and the non-lead page."""
+    lead: dict[str, Any] = {"name": "End page for leads", "title": tpl["thank_you_title"]}
+    if tpl.get("thank_you_text"):
+        lead["body"] = tpl["thank_you_text"]
+    if tpl.get("website_url"):
+        lead.update({"button_type": "VIEW_WEBSITE", "button_text": tpl["button_text"], "website_url": tpl["website_url"]})
+    else:
+        lead["button_type"] = "NONE"
+    pages: dict[str, Any] = {"thank_you_pages": [lead]}
+    closes = any(a == ACTION_CLOSE for q in tpl["questions"] for a in (q.get("logic") or {}).values())
+    if closes:
+        non = tpl["non_lead_end"]
+        # Meta refuses `button_type` on the non-lead page and sets VIEW_WEBSITE itself.
+        pages["disqualified_end_components"] = [{"name": "End page for non-leads", "title": non["title"],
+                                                 "body": non["text"], "button_text": non["button_text"],
+                                                 "website_url": non["website_url"]}]
+    return pages
+
+
+def form_params(tpl: dict[str, Any], cover_photo_id: str = "") -> dict[str, Any]:
+    """Тело `POST /{page}/leadgen_forms`: только то, что нужно шаблону. Без `tos_accepted`.
+
+    `cover_photo_id` (ACL-2571): the photo uploaded to THIS Page for a template with a local picture. The name
+    is taken from the template itself, so it is the same on every Page.
+    """
     if tpl.get("locale") == AUTO_LOCALE:
         raise ValueError("form locale Auto must be resolved from the ad set language and country before writing")
     params: dict[str, Any] = {
@@ -274,10 +481,19 @@ def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
     }
     if tpl.get("follow_up_action_url"):
         params["follow_up_action_url"] = tpl["follow_up_action_url"]
-    if tpl.get("intro"):
+    photo = cover_photo_id or tpl.get("cover_photo_id")
+    if tpl.get("intro") or photo:
+        # A picture without intro text still needs its card (ACL-2579): the headline stands in for the text.
         params["context_card"] = {"title": tpl.get("intro_title") or tpl["headline"],
-                                  "style": "PARAGRAPH_STYLE", "content": [tpl["intro"]]}
-    if tpl.get("thank_you_text") or tpl.get("website_url"):
+                                  "style": "PARAGRAPH_STYLE", "content": [tpl.get("intro") or tpl["headline"]]}
+        if photo:
+            params["context_card"]["cover_photo_id"] = photo
+            # Live 12.11 (Doc284): without this Ads Manager ignores the stored photo (HAR 2533 #469/#472).
+            params["background_image_option"] = FORM_BACKGROUND_UPLOAD
+    if has_logic(tpl):
+        params["conditional_logic"] = {"version": 1, "logic_data": logic_data(tpl)}
+        params["end_pages"] = end_pages(tpl)
+    elif tpl.get("thank_you_text") or tpl.get("website_url"):
         thanks: dict[str, Any] = {"title": tpl["thank_you_title"]}
         if tpl.get("thank_you_text"):
             thanks["body"] = tpl["thank_you_text"]
@@ -492,7 +708,9 @@ def get(template_id: str) -> dict[str, Any] | None:
 def summary(tpl: dict[str, Any]) -> str:
     contacts = ", ".join(_CONTACT_LABEL[k] for k in tpl.get("contact_fields") or [] if k in _CONTACT_LABEL)
     n = len(tpl.get("questions") or [])
-    return f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
+    text = f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
+    text += " · conditions" if has_logic(tpl) else ""
+    return text + (" · background image" if (tpl.get("cover_photo_id") or tpl.get("cover_local_sha256")) else "")
 
 
 def _revision(rec: Any) -> str:
@@ -640,6 +858,9 @@ def save(raw: Any) -> dict[str, Any]:
         out = {**clean, "id": tid}
         # Поля записи, которых редактор не знает (поле из будущей версии), едут дальше.
         merged = {**(was if isinstance(was, dict) else {}), **out}
+        for key in DROPPED_WHEN_EMPTY:
+            if key not in out:
+                merged.pop(key, None)
         lib["templates"][tid] = _stamp(merged, was)
         return out
 

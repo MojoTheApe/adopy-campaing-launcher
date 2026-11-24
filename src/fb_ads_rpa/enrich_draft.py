@@ -182,6 +182,12 @@ def enrich_campaign_drafts(
         if any(ad.copy_name or ad.copy2_name or ad.more_copy_names for d in drafts for a in d.ad_sets for ad in a.ads):
             library_states.append(("Ad texts", _pull_unless_just_pulled(
                 "ad_texts", ad_text_registry.pull, info)))
+        # ACL-2668: шаблон формы на каждое объявление читается по копии без
+        # сети — копию обновляет это же событие, запуск публикации.
+        if any(getattr(ad, "lead_form_template", "") for d in drafts for a in d.ad_sets for ad in a.ads):
+            from src.fb_api import form_templates
+            library_states.append(("Form templates", _pull_unless_just_pulled(
+                "form_templates", form_templates.pull, info)))
 
     for draft in drafts:
         for label, state in library_states:
@@ -333,7 +339,9 @@ def enrich_campaign_drafts(
                 def text_key(body, headline, description):
                     return tuple("".join(str(x or "").split()) for x in (body, headline, description))
                 seen_texts = {text_key(ad.ad_body, ad.ad_title, ad.ad_link_description)}
-                wanted = ([(2, ad.copy2_name)] if ad.copy2_name and ad.ad_body else []) + [
+                # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 does not block;
+                # texts 2-5 with a body are used in order.
+                wanted = ([(2, ad.copy2_name)] if ad.copy2_name else []) + [
                     (3 + i, n) for i, n in enumerate(ad.more_copy_names) if str(n).strip()]
                 for slot_no, vname in wanted:
                     from src.analysis_agent.ad_text_registry import AdTextError

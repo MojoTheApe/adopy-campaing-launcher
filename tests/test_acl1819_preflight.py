@@ -143,11 +143,9 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "vertical_without_main": (_with(ads=_ad(1, file="", vertical_file="1001_story.png")),
                               "vertical_needs_main", "error", [2]),
     # Живой 2026-10-14: несколько текстов вместе с вертикальным файлом - отказ Meta; без него - отдельный набор.
-    "texts_vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "texts_vertical", "ok", []),
-    "texts_vertical_combo": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
-                             "texts_vertical", "error", [1]),
-    "texts_vertical_titles": (_with(ads=_ad(0, vertical_file="v.png", headlines=["a", "b"])),
-                              "texts_vertical", "error", [1]),
+    # ACL-2611: several texts with a Stories / Reels file are allowed (labelled feed); the Dynamic Creative rule skips them.
+    "texts_vertical_combo_not_dynamic": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
+                                         "texts_dynamic", "ok", []),
     "texts_dynamic_ok": (_with(ads=_ad(0, bodies=["a", "a "])), "texts_dynamic", "ok", []),
     "texts_dynamic_two": (_with(ads=_ad(0, bodies=["a", "b"])), "texts_dynamic", "error", [1]),
     "texts_dynamic_descriptions": (_with(ads=_ad(0, descriptions=["a", "b"])), "texts_dynamic", "error", [1]),
@@ -167,7 +165,19 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
                                            "feed_texts", "error", [1]),
     "feed_texts_multi_no_headline": (_with(ads=_ad(0, bodies=["a", "b"], headline="", headlines=[])),
                                      "feed_texts", "error", [1]),
+    # ACL-2584: an Instant Form ad without a headline goes out with an empty one (Ads Manager HAR): a warning, not a block.
+    "feed_texts_form_multi_no_headline": (_with(destination="instant_form", ads=_ad(0, form_id="7", bodies=["a", "b"],
+                                                                                headline="", headlines=[])),
+                                          "feed_texts", "warning", [1]),
+    "feed_texts_form_vertical_no_headline": (_with(destination="instant_form", ads=_ad(
+        0, form_id="7", vertical_file="v.png", headline="", headlines=[])), "feed_texts", "warning", [1]),
     "feed_texts_one_text_no_headline_ok": (_with(ads=_ad(0, headline="")), "feed_texts", "ok", []),
+    # ACL-2528 (owner 2026-11-12): empty or title-only text 1 with texts 2..3 filled does not block; warning only.
+    "feed_texts_empty_text1_ok": (_with(ads=_ad(0, body="", bodies=["", "b", "c"], headline="Head",
+                                                headlines=["Head", "h2", "h3"])), "feed_texts", "ok", []),
+    "texts_dynamic_empty_text1_ok": (_with(ads=_ad(0, body="", bodies=["", "b", "c"])[:1]), "texts_dynamic", "ok", []),
+    "primary_empty_text1_warns": (_with(ads=_ad(0, body="", bodies=["", "b", "c"], headline="Head")),
+                                  "primary_text", "warning", [1]),
     "primary_ok": (_with(), "primary_text", "ok", []),
     "primary_missing": (_with(ads=_ad(0, body="  ")), "primary_text", "warning", [1]),
     "headline_ok": (_with(), "headline", "ok", []),
@@ -228,7 +238,7 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "age_min_over_max": (_with(age_min=50, age_max=40), "age_range", "error", []),
     "age_nan": (_with(age_min=None, age_max=None), "age_range", "error", []),
     "names_ok": (_with(), "ad_names_unique", "ok", []),
-    "names_dup": (_with(ads=_ad(1, name="1000 - Text0")), "ad_names_unique", "error", [1, 2]),
+    "names_dup": (_with(ads=_ad(1, name="1000 - Text0")), "ad_names_unique", "warning", [2]),  # ACL-2538: a note, not a block
     "form_not_needed_for_website": (_with(), "form_chosen", None, []),
     "form_partly_missing": (_with(destination="instant_form", ads=_ad(0, form_id="7")), "form_chosen", "error", [2]),
     "form_all_ok": (_with(destination="instant_form",
@@ -286,7 +296,7 @@ CLIENT_CASES.update({
     "ads_numbered_across_sets": (_multi(_set("A"), _set("B", ads=_ad(0, file=""))), "media_chosen", "error", [3]),
     "same_ad_names_in_two_sets_ok": (_multi(_set("A"), _set("B")), "ad_names_unique", "ok", []),
     "same_ad_names_inside_a_set": (_multi(_set("A"), _set("B", ads=_ad(1, name="1000 - Text0"))),
-                                   "ad_names_unique", "error", [3, 4]),
+                                   "ad_names_unique", "warning", [4]),
     "mixed_destinations_cta_per_set": (
         _multi(_set("A"), _set("B", destination="instant_form",
                                ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]])),
@@ -353,8 +363,8 @@ def test_the_creator_agrees_with_the_client_about_the_shared_errors(tmp_path):
     d.ad_sets[0].ads[1].copy_name = d.ad_sets[0].ads[0].copy_name
     d.ad_sets[0].ads[1].creative_id = d.ad_sets[0].ads[0].creative_id
     d.ad_sets[0].ads[1].creative_filename = d.ad_sets[0].ads[0].creative_filename
-    with pytest.raises(cr.PlanError, match="would all be named"):
-        cr.plan_from_draft(d)
+    plan = cr.plan_from_draft(d)       # ACL-2538: renamed with " 2" instead of refused
+    assert plan.ad_sets[0].ads[1].name == plan.ad_sets[0].ads[0].name + " 2"
     # Instant Form без выбранной формы
     d = _draft(tmp_path, ads=1)
     d.ad_sets[0].destination = "instant_form"
@@ -484,7 +494,7 @@ def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
 def test_pixel_missing_for_website_conversions(tmp_path):
     d = _draft(tmp_path, ads=1)
     out = _audit(AuditMeta(pixels=[]), d)
-    assert _by(out)["pixel_ok"]["status"] == "error" and "pixels/datasets" in _by(out)["pixel_ok"]["detail"]
+    assert _by(out)["pixel_ok"]["status"] == "error" and "no pixel/dataset" in _by(out)["pixel_ok"]["detail"]
 
 
 def test_instant_form_needs_an_active_form_of_the_page(tmp_path):
@@ -838,6 +848,10 @@ NAME_CASES = [
     ("2175_ARM22.png", "T"), ("2175_ADN3.png", "T"), ("2175_ARM07_1080x1920.png", "T"),
     ("2175_post_9x16.mp4", "T"), ("2175_post_9:16.mp4", "T"), ("2175_post_1080х1920.png", "T"),
     ("12_2175_ARM22.png", "T"), ("2175_ARM22_Story.png", "T"),
+    # ACL-2538: a file name without a number -> the stem is the creative half.
+    ("dog.png", "Head"), ("my coffee beans.mp4", "Head"), ("big - sale.png", "Head"),
+    (r"C:\clips\Sunset_.mp4", "Head"), ("x" * 60 + ".png", "Head"), ("dog.png", ""),  # linux-ok: Windows path is only data for the name function
+    ("IMG_123.jpg", "Head"), ("clip 120.mp4", "Head"), ("1080x1080-17.png", "Head"), ("promo_1080х1920.png", "Head"),
 ]
 
 
@@ -856,8 +870,9 @@ def test_a_jpg_and_an_mp4_of_the_same_creative_with_the_same_text_are_duplicates
            for n, f in zip(names, ["2046 1.jpg", "2046 1.mp4"])]
     inp = _with(ads=ads)
     got = {v["rule"]: v for v in pf.evaluate_client(inp)}["ad_names_unique"]
-    assert got["status"] == "error" and got["ads"] == [1, 2]
-    # Те же объявления создатель тоже отвергает.
+    assert got["status"] == "warning" and got["ads"] == [2]   # ACL-2538: a note, the creator renames
+    assert "Ad 2 will be named '2046 1 - Text A 2' because Ad 1 has the same creative and text" in got["detail"]
+    # Те же объявления создатель называет одинаково (и сам добавит « 2»).
     from src.fb_ads_rpa.draft import AdDraft
     assert AdDraft(creative_filename="2046 1.jpg", copy_name="Text A").ad_name() ==         AdDraft(creative_filename="2046 1.mp4", copy_name="Text A").ad_name()
 

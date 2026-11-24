@@ -294,30 +294,32 @@ def test_the_readback_is_bounded_and_counted_in_the_call_budget(tmp_path):
     meta = LateMeta(visible_on_read=999)
     creator, client, slept = _creator(meta)
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
-    assert out.stop_kind == "unknown"
-    assert meta.reads_after == len(cr.UPLOAD_RECONCILE_FACTORS) == 6
-    assert sum(w for w in slept if w >= 5) <= 130            # ≈ 2 минуты, не больше
+    # owner rule 12.11: nothing found after the bounded reconcile -> the upload is sent once more
+    assert out.stop_kind == "" and len(cr.UPLOAD_RECONCILE_FACTORS) == 6
+    assert len([p for p, _ in meta.posts if p.endswith("/advideos")]) == 2
+    assert meta.reads_after >= 6                              # the bounded reconcile, then one more look
+    assert sum(w for w in slept[:6]) <= 130                   # ≈ 2 минуты, не больше
     assert client.calls >= 6                                  # чтения идут через клиента и считаются
 
 
 def test_other_writes_keep_one_readback(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["adsets"] = "unsent"
+    meta.fail_next["adsets"] = "unsent_stuck"
     creator, client, slept = _creator(meta)
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
-    assert out.stop_kind == "unknown" and slept.count(5.0) == 1
+    assert out.stop_kind == "unknown" and slept.count(5.0) == 2     # one readback per attempt (write + re-send)
 
 
 def test_stop_during_the_upload_reads_back_twice_and_stops(tmp_path):
     meta = LateMeta(visible_on_read=999)
-    meta.fail_next["advideos"] = "unsent"
+    meta.fail_next["advideos"] = "unsent_stuck"
     stop = {"on": False}
     meta.on_video_write = lambda: stop.__setitem__("on", True)    # Stop нажат, пока шла загрузка
     creator, client, slept = _creator(meta, cancelled=lambda: stop["on"])
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
     assert out.stop_kind == "cancelled"
     assert meta.reads_after == 2 and slept[:2] == [5.0, 20.0] and 30.0 not in slept
-    assert "wait a few minutes before publishing again" in out.error
+    assert "publish again to check it first" in out.error and "few minutes" not in out.error
     assert len([p for p, _ in meta.posts if p.endswith("/advideos")]) == 1
 
 
@@ -345,7 +347,7 @@ def test_stop_during_the_readback_stops_at_once_and_keeps_the_marker(tmp_path):
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
     assert out.stop_kind == "cancelled"
     assert len(orig_find_reads) == 1 and client.unreconciled is not None      # после Stop не читаем
-    assert "wait a few minutes before publishing again" in out.error
+    assert "publish again to check it first" in out.error and "few minutes" not in out.error
 
 
 def test_repeated_readbacks_read_fewer_pages_than_the_first_lookup(tmp_path):
@@ -360,8 +362,9 @@ def test_repeated_readbacks_read_fewer_pages_than_the_first_lookup(tmp_path):
         return _o(path, params, max_pages=max_pages)
     client.get_all = spy
     creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
-    # поиск до загрузки - 10 страниц, первое чтение сверки - 10, остальные пять - по 3
-    assert pages == [10, 10, 3, 3, 3, 3, 3]
+    # поиск до загрузки - 10 страниц, первое чтение сверки - 10, остальные пять - по 3,
+    # затем одно полное чтение перед повторной отправкой (owner rule 12.11)
+    assert pages[:7] == [10, 10, 3, 3, 3, 3, 3] and pages[7] == 10
 
 
 def test_several_videos_run_out_of_budget_during_readback_and_stop_safely(tmp_path):
@@ -517,7 +520,7 @@ def _node(mode, main):
 def test_the_page_helper_reports_progress_and_the_result():
     out = _node("ok", _MAIN_OK)
     assert out["start"]["job"].startswith("j")
-    assert out["mid"] == {"state": "running"}                  # байтов нет: прогресс - время на стороне Python
+    assert out["mid"] == {"state": "running", "progress": 0, "stream": False, "drained": False}                  # байтов нет: прогресс - время на стороне Python
     assert out["upload_listeners"] == []                        # ни одного слушателя на xhr.upload (CORS-preflight)
     assert out["with_credentials"] is True                      # куки как прежде
     assert out["end"]["state"] == "done" and out["end"]["result"]["body"] == {"id": "9"}

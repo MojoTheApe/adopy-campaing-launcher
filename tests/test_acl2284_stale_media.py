@@ -9,7 +9,7 @@ from tests.test_acl1761_api_create import ACT, FakeMeta, _draft, _run, g
 
 #: Fields that exist on the AdCreative node (what creative_recovery.FIELDS may ask for). Graph answers (#100) otherwise.
 CREATIVE_FIELDS = {"id", "name", "account_id", "adlabels", "object_story_spec", "asset_feed_spec",
-                   "degrees_of_freedom_spec", "contextual_multi_ads", "instagram_user_id"}
+                   "degrees_of_freedom_spec", "contextual_multi_ads", "instagram_user_id", "status"}
 
 
 def _top_level(fields):
@@ -84,7 +84,7 @@ def _videos(monkeypatch, meta, lengths):
 def _earlier(tmp_path, meta):
     """The creative is confirmed in the receipt, the ad is not: the repeat finds it by receipt."""
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     return draft, creatives(meta)[0]

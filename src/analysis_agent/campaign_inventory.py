@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import hashlib
 import logging
@@ -54,10 +55,10 @@ NEEDS_API_CODE = "needs_api_backend"
 # («менялся после нашей записи») читаются теми же запросами, что и раньше:
 # новых вызовов к Meta нет, потолок вызовов не затронут.
 CAMPAIGN_FIELDS = ("id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy,"
-                   "adlabels{name},updated_time")
+                   "adlabels{name},updated_time,issues_info")
 ADSET_FIELDS = ("id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,"
-                "bid_strategy,bid_amount,adlabels{name},updated_time")
-AD_FIELDS = "id,name,status,effective_status,campaign_id,adset_id,updated_time"
+                "bid_strategy,bid_amount,adlabels{name},updated_time,issues_info")
+AD_FIELDS = "id,name,status,effective_status,campaign_id,adset_id,updated_time,issues_info"
 #: Префикс метки, которой ACL помечает созданное им (`creator.py`).
 ACL_LABEL_PREFIX = "acl-"
 #: Insights на каждом уровне — отдельным запросом: Reach и Frequency
@@ -142,6 +143,9 @@ class Snapshot:
     #: Новых запросов ради них нет; старые снимки без полей читаются как «не знаем».
     account_status: int | None = None
     disable_reason: int | None = None
+    #: ACL-2610: `issues_info` кампаний/ad set/объявлений (код, уровень, текст; без id). Те же
+    #: запросы, что и раньше: поле добавлено в списки полей, новых вызовов нет.
+    issues: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -655,6 +659,48 @@ def _put_result(done: Snapshot) -> None:
         _notify_result(done)
 
 
+_CONFIRMED_FIELDS = {"status": "status", "daily_budget": "daily_budget", "bid_amount": "bid_amount"}
+_LEVEL_LIST = {"campaign": "campaigns", "adset": "adsets", "ad": "ads"}
+
+
+def apply_confirmed(account: str, items: list[dict]) -> int:
+    """ACL-2789: показать подтверждённое сверкой значение строки сразу, без чтения списка.
+
+    Берёт только значения, которые сверка прочитала и признала сохранёнными (`result == saved`).
+    Ни одного вызова Meta; машинная ревизия снимка не трогается, полное чтение придёт позже.
+    Возвращает, сколько строк изменено.
+    """
+    changes = [i for i in items if i.get("result") == "saved" and i.get("field") in _CONFIRMED_FIELDS
+               and i.get("level") in _LEVEL_LIST and "saved" in i]
+    if not changes:
+        return 0
+    done = 0
+    with _LOCK, paths.machine_file_lock(_store_path().with_suffix(".lock"), timeout=10):
+        data = _load_all()
+        rec = data.get(account)
+        snap = rec.get("snapshot") if isinstance(rec, dict) and _record_matches(rec, account) else None
+        if not isinstance(snap, dict):
+            return 0
+        for item in changes:
+            for obj in snap.get(_LEVEL_LIST[item["level"]]) or []:
+                if str(obj.get("id")) != str(item["id"]):
+                    continue
+                field_name = _CONFIRMED_FIELDS[item["field"]]
+                value = item["saved"]
+                if field_name == "status":
+                    value = str(value or "").upper()
+                    # Доставка своего уровня следует за выключателем, пока не пришло полное чтение.
+                    if obj.get("effective_status") in ("ACTIVE", "PAUSED", ""):
+                        obj["effective_status"] = value
+                else:
+                    value = _to_int(value)
+                obj[field_name] = value
+                done += 1
+        if done:
+            _save_all(data)
+    return done
+
+
 # ACL-1816: слушатели «человек прочитал опись аккаунта» (удачное чтение). Rules ставит
 # здесь только задание в очередь: оценка ничего не читает у Meta.
 _RESULT_LISTENERS: list[Callable[[Snapshot], None]] = []
@@ -789,6 +835,9 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
             snap.steps[step] = "failed"
             snap.problems.append(f"{step} were not read: {exc}")
             return None
+        for rec in _api.compact_issues(rows, level.upper()):
+            if rec not in snap.issues and len(snap.issues) < _api.MAX_ISSUES:
+                snap.issues.append(rec)
         objs, dropped = parse_inventory(rows, level)
         snap.steps[step] = "truncated" if _truncated_since(client, before) else "ok"
         if snap.steps[step] == "truncated":
@@ -867,10 +916,33 @@ def record_status(snap: Snapshot) -> bool:
 
         status, text, code, reason = _api.status_from_account(
             {"account_status": snap.account_status, "disable_reason": snap.disable_reason})
+        if snap.issues:
+            # Не телеметрия-ради-телеметрии: образец текста Meta нужен, чтобы подтвердить фразы.
+            log.info("issues_info on %s: %s", snap.account, snap.issues)
+            _api._tm.record({"event": "fb_issues_info", "source": "api", "issues": snap.issues})  # noqa: SLF001
+        if status == "clear" and _api.has_auth_restriction(snap.issues):
+            # account_status остаётся 1, но Meta остановила показ до аутентификации (ACL-2610).
+            status, text = "restricted", _api.AUTH_RESTRICTED_TEXT
+        elif status == "clear" and getattr(snap, "_status_only", False):
+            # Чтение одного кабинета issues_info не видит: его «clear» не снимает ограничение,
+            # найденное чтением кампаний. Снимет его следующее чтение кампаний без такой проблемы.
+            kept = _as.get_status(snap.account)
+            if kept.get("status") == "restricted" and kept.get("status_text") == _api.AUTH_RESTRICTED_TEXT:
+                return False
         return _as.put_status(snap.account, status, text, source="api", at=_as._now(),  # noqa: SLF001
                               disable_reason=reason, account_status=code)
     except Exception:  # noqa: BLE001 — статус вторичен, список важнее
         log.exception("Could not store the account status of %s", snap.account)
+        return False
+
+
+def _consume_person_open(account: str) -> bool:
+    """ACL-2652: is this `open` status read the one right after a person's Open profile press? Never raises."""
+    try:
+        from src.fb_api import account_blocks
+
+        return account_blocks.consume_person_open(_as._profile_key(account))  # noqa: SLF001
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -1002,7 +1074,6 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
     сохраняет физическую аренду профиля на весь вызов.
     """
     from src.analysis_agent import account_spend_api as _api
-    from src.analysis_agent.account_refresh_state import read_session
     from src.fb_ads_rpa.profile_lease import require_profile_lease
     from src.fb_api.graph import GraphStop
 
@@ -1022,15 +1093,15 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
         if _api.normalize_act(str(getattr(entry, "ad_account_id", "") or "")) != sess.act:
             raise ValueError("The account map changed. Its list was not read with the previous session.")
         require_profile_lease(_as._profile_key(account))  # noqa: SLF001
-        with read_session(priority=trigger in {"action", "retry"}):
-            from src.analysis_agent.account_refresh_machine import verify_session
-            verify_session(sess)
-            read_into(snap, sess.client, sess.act, structure_only=True)
-            if getattr(sess.client, "stopped", None) is not None:
-                stop = sess.client.stopped.kind
-                _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
-            finalize(snap)
-            record_status(snap)
+        # ACL-2668: общего машинного замка чтений нет; тот же аккаунт исключает аренда профиля выше.
+        from src.analysis_agent.account_refresh_machine import verify_session
+        verify_session(sess)
+        read_into(snap, sess.client, sess.act, structure_only=True)
+        if getattr(sess.client, "stopped", None) is not None:
+            stop = sess.client.stopped.kind
+            _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
+        finalize(snap)
+        record_status(snap)
     except Exception as exc:  # noqa: BLE001 — исход команды не меняется
         snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
@@ -1071,11 +1142,17 @@ def _run_read(account: str, *, trigger: str, baseline=None, persist: bool = True
             # this result's durable settlement, not only through _session.
             from src.analysis_agent import account_refresh, account_spend_api
             cached = get_snapshot(account)
-            if trigger.split(":")[0] == "open":
+            kind_ = trigger.split(":")[0]
+            if kind_ == "open" or (kind_ == "retry" and account_refresh._profile_held(account)):  # noqa: SLF001
                 # ACL-2419: после Open - только статус кабинета, один запрос, без дерева.
+                # ACL-2652: Retry on a held profile is the same one request (the account), not the whole list.
                 from src.fb_api.connection import user_started_action
 
-                with user_started_action(False):
+                from src.fb_api import account_blocks as _blocks_
+
+                person = kind_ == "open" and _consume_person_open(account)
+                with user_started_action(kind_ in USER_TRIGGERS), (
+                        _blocks_.person_edit() if person else contextlib.nullcontext()):
                     done = read_status_only(account, trigger=trigger)
             elif (account_refresh.is_fresh(account)
                     and (trigger.split(":")[0] in {"schedule", "attention"}
@@ -1118,13 +1195,15 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
             return _inner_operation()
 
     from src.analysis_agent.account_refresh_machine import MachineStore, binding
-    from src.analysis_agent.account_refresh_state import read_session, target_activity
+    from src.analysis_agent.account_refresh_state import target_activity
     coordinator = machine if machine is not None else MachineStore()
     clock = now if now is not None else time.time
-    force = trigger.split(":")[0] in {"action", "retry"}
+    force = trigger.split(":")[0] in {"action", "retry", "open"}      # ACL-2653: a person's Open reads past an untimed stop
     try:
         profile = _as._profile_key(account)  # noqa: SLF001
-        with browser_operation.reading(), _as._lock_for(account), target_activity(profile), read_session(priority=force):
+        # ACL-2668: чтения разных аккаунтов идут параллельно; одно чтение на аккаунт
+        # держат аренда профиля, target_activity и coordinator.run (по binding).
+        with browser_operation.reading(), _as._lock_for(account), target_activity(profile):
             key = binding(account)
             coordinator.recover_running(now=clock())
             halt = coordinator.halt(now=clock())
@@ -1134,15 +1213,18 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
                 paused._machine_committed = True
                 return paused
             done = None
-            if trigger.split(":")[0] == "open":
+            from src.analysis_agent import account_refresh as _ar
+
+            kind_ = trigger.split(":")[0]
+            # ACL-2652: Retry on a held profile is the same one status request as Open, so it ends the same way.
+            if kind_ == "open" or (kind_ == "retry" and _ar._profile_held(account)):  # noqa: SLF001
                 # ACL-2419: статус-чтение не публикует опись. Удача - без записи в общее
                 # хранилище результатов (оно заменило бы опись пустой); неудача идёт обычным путём.
                 done = operation()
                 if is_status_only_ok(done):
                     done._machine_committed = True
                     return done
-            token = coordinator.begin(key, "inline", trigger)
-            with coordinator.executing(token, key):
+            with coordinator.run(key, "inline", trigger) as token:
                 own_recovery = coordinator.stop_generation(key)
                 if done is None:
                     done = operation()

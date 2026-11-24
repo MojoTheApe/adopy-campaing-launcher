@@ -204,6 +204,7 @@ def create_job(
     campaign_names: list[str] | None = None,
     reviewed: bool = False,
     review_refused: list[dict[str, Any]] | None = None,
+    request_id: str = "",
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     if activate:
@@ -237,6 +238,8 @@ def create_job(
             "activate": activate,
             "dry_run": dry_run,
             "hand_off": hand_off,
+            #: ACL-1856: the page's submit key; the durable operation journal binds it to the plan revision.
+            "request_id": request_id,
             "backend": "rpa" if use_rpa_publish() else "api",
             # ACL-1761: чем создаются кампании — роботом или Graph API (PAUSED).
             "fb_backend": _fb_backend(),
@@ -527,10 +530,21 @@ def active_job_count() -> int:
 
 
 def publishing_busy() -> bool:
-    """A publish job is live, or a profile window (running or kept open) holds a slot.
+    """A publish job is live, or a job runs or waits in the profile queue.
 
     ACL-2260: the report must not start a rebuild of its own while this is true.
+    ACL-2668: a profile window kept open after a publish or Check plan does not count:
+    it neither defers the scheduled account reads nor the report rebuild.
     Cheap and non-blocking: two short locks, no snapshot of the queue decision.
+    """
+    return active_job_count() > 0 or _slots.working()
+
+
+def profile_slots_held() -> bool:
+    """A publish job is live, or a profile window (running or kept open) holds a queue entry.
+
+    For work that needs the Multilogin connections themselves (log out, repair): a kept
+    window is an open profile on that connection.
     """
     return active_job_count() > 0 or _slots.occupied()
 
@@ -729,7 +743,11 @@ def _run_job(job_id: str, slots: list[dict[str, Any]], **kwargs: Any) -> None:
     """
     ended = _job_ended.setdefault(job_id, threading.Event())
     try:
-        _run_job_inner(job_id, slots, **kwargs)
+        # ACL-2790: Publish стоит в очереди на аккаунте с отправки — профиль после чтения не закрывается.
+        from src.analysis_agent import account_spend as _as
+
+        with _as.action_queued(str(kwargs.get("account_label") or "")):
+            _run_job_inner(job_id, slots, **kwargs)
     except job_cancel.JobCancelled:
         with _jobs_lock:
             live = not _abandoned(job_id)
@@ -1228,8 +1246,10 @@ def _wait_out_machine_load(job_id: str, account_label: str, publisher: Any, rq: 
             snap = reg.load_snapshot(pid)
             pause = float(reg.restart_wait_s(pid)) if pid else 0.0
             waited = time.monotonic() - began
+            # ACL-2676: the CPU reading no longer holds a restart; only warming profiles and memory do.
+            held = [r for r in (snap.get("reasons") or []) if r != "cpu_high"]
             if waited >= backoff and pause <= 0 and (
-                    snap.get("clear") or waited >= max(backoff, _warm.LOAD_BACKOFF_CAP_S)):
+                    not held or waited >= max(backoff, _warm.LOAD_BACKOFF_CAP_S)):
                 return True
             _show_resource_wait(job_id, account_label, {
                 "hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"), "cpu_level": snap.get("cpu_level"),
@@ -1320,7 +1340,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
-                  else "waiting_account" if hold in ("account_busy", "heavy_limit")
+                  else "waiting_account" if hold == "account_busy"
                   else "waiting_load" if hold == "machine_busy"
                   else "waiting_memory" if (hold in ("memory_low", "below_reserve", "auto_resume")
                                             or verdict.get("behind_memory"))
@@ -1344,8 +1364,6 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "used_pct": verdict.get("used_pct"),
         "max_used_pct": verdict.get("max_used_pct"),
         "running": verdict.get("running"),
-        # ACL-2293: the warm heavy-action limit, when it is what holds the action.
-        "heavy_limit": verdict.get("heavy_limit"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),
@@ -1384,6 +1402,75 @@ def _record_slot_decision(rt: Any, campaign: str, account: str, verdict: dict[st
         pass
 
 
+def apply_account_signal(account: str, status: str, text: str) -> int:
+    """ACL-2811: Meta's reason for `account` was stored after its publish stopped: the stopped rows of that account's
+    latest finished job show it (same text as at stop time). Other accounts are untouched; a clean status changes
+    nothing; no read, no timer. Returns the number of changed rows."""
+    from types import SimpleNamespace
+
+    from src.fb_api import stop_reason
+
+    if not reason_failure_known(status, text):
+        return 0
+    with _jobs_lock:
+        mine = [j for j in _jobs.values() if _norm_account(j.get("account_label")) == _norm_account(account)]
+        done = [j for j in mine if j.get("status") == "done"]
+        if not done or any(j.get("status") in _LIVE_STATUSES for j in mine):
+            return 0
+        job = max(done, key=lambda j: str(j.get("finished_at") or ""))
+        changed = 0
+        new_line = ""
+        for res in job["results"]:
+            old = res.get("failure") if isinstance(res, dict) else None
+            if res.get("success") is True:
+                continue
+            if isinstance(old, dict) and old.get("key") in stop_reason.OVERRIDABLE:
+                base = SimpleNamespace(details=old.get("details") or {}, left=old.get("left") or [],
+                                       stage=old.get("stage") or "")
+                new = stop_reason.reason_failure({"status": status, "status_text": text}, base)
+                before = res.get("error")
+                res["failure"], res["error"] = new.as_dict(), new.text()
+                res["blocking_failures"] = [("not finished: " + new.text()) if str(b).startswith("not finished: ") else b
+                                            for b in res.get("blocking_failures") or []]
+                new_line = new.line()
+                changed += before != res["error"]
+            elif res.get("not_started") and str(res.get("error") or "").startswith(
+                    "Not started: Graph API stopped earlier"):
+                new = stop_reason.reason_failure({"status": status, "status_text": text})
+                res["error"] = f"Not started: {new.line()}. Nothing was created for it."
+                changed += 1
+        rows = job.setdefault("error_details", [])
+        rows.extend([None] * (len(job["errors"]) - len(rows)))
+        for i, det in enumerate(rows):
+            if isinstance(det, dict) and det.get("failure_key") in stop_reason.OVERRIDABLE:
+                new = stop_reason.reason_failure({"status": status, "status_text": text}, SimpleNamespace(
+                    details=det, left=[], stage=""))
+                if job["errors"][i] == new.text():
+                    continue   # already rewritten for this reason: nothing to persist
+                job["errors"][i] = new.text()
+                rows[i] = dict(new.details, failure_key=new.key)
+                changed += 1
+        if not changed:
+            return 0
+        snapshot = _status_snapshot_locked(job)
+    _persist_job(snapshot)
+    return changed
+
+
+def reason_failure_known(status: str, text: str) -> bool:
+    from src.fb_api import stop_reason
+
+    return stop_reason.reason_failure({"status": status, "status_text": text}) is not None
+
+
+try:    # ACL-2811: the stored account status is the one place every Meta read ends in
+    from src.analysis_agent import account_spend as _status_store
+
+    _status_store.add_status_listener(apply_account_signal)
+except Exception:  # noqa: BLE001
+    pass
+
+
 def _append_result(job_id: str, res: dict[str, Any]) -> None:
     with _jobs_lock:
         if _abandoned(job_id):
@@ -1402,6 +1489,14 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
                        campaign=res.get("campaign_name"))
         except Exception:
             pass
+        if res.get("success") is not True:
+            # Хаб телеметрии: сбой кампании уходит владельцу сразу, а не в следующем цикле отправки.
+            try:
+                from src.acl_event_log import wake_shipper
+
+                wake_shipper()
+            except Exception:
+                pass
 
 
 def _mlx_text(job_id: str, msg: str) -> str:
@@ -1426,7 +1521,7 @@ def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str,
     if exc is None:
         return text, None
     try:
-        from src.fb_api import plain_errors
+        from src.fb_api import plain_errors, stop_reason
         from src.fb_api.creator import PlanError
         from src.fb_api.graph import GraphError, GraphStop
 
@@ -1435,6 +1530,11 @@ def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str,
             cause = exc
         stage = getattr(exc, "stage", "") or getattr(cause, "stage", "")
         failure = plain_errors.classify(cause, ctx={"stage": stage} if stage else None)
+        with _jobs_lock:
+            account = (_jobs.get(job_id) or {}).get("account_label", "")
+        # ACL-2811: no Meta reason of its own -> the account's latest known Meta signal (no new read, no waiting).
+        failure = stop_reason.explain(failure, account)
+        failure.details.setdefault("failure_key", failure.key)   # ACL-2811: a later Meta signal may re-explain it
         if text != msg:  # Multilogin session / proxy text is already plain
             return text, failure.details
         return failure.text(), failure.details
@@ -1785,6 +1885,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     publisher.reviewed = review
     publisher.units = units
     with _jobs_lock:
+        publisher.request_id = str((_jobs.get(job_id) or {}).get("request_id") or "")
         # ACL-2113: окно, оставленное прошлым заданием, — наше: закрывать/держать его
         # решаем так же, как окно, поднятое этим заданием.
         publisher.inherited_profile = bool((_jobs.get(job_id) or {}).get("reused_kept"))
@@ -1816,6 +1917,8 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             _active_publishers.pop(job_id, None)
         return
 
+    # ACL-1856: the position of each draft in the submit (a stable part of its operation identity).
+    publisher.draft_slots = {id(d): i for i, d in enumerate(drafts)}
     ready: list[Any] = []
     for draft in drafts:
         if draft.errors:
@@ -1829,6 +1932,9 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     pending: list[Any] = list(ready)
     try:
         if ready and not _is_cancelled(job_id):
+            plan_photo = getattr(publisher, "plan_form_photo", None)
+            if callable(plan_photo):
+                plan_photo(ready, account_label=account_label)              # ACL-2593: the work tab mode is decided before the lease starts
             _open_with_load_requeue(job_id, publisher, account_label)
             _publish_pending(job_id, publisher, account_label, pending)
     except job_cancel.JobCancelled:
@@ -2450,7 +2556,7 @@ def start_job(
         return _start_job(account_label, country, slots, via_multilogin=via_multilogin,
                           activate=activate, dry_run=dry_run, hand_off=hand_off,
                           reviewed=reviewed, frozen_drafts=frozen_drafts,
-                          review_refused=review_refused)
+                          review_refused=review_refused, request_id="")
     # Под замком этого ключа целиком: исходный запрос и его повтор могут
     # прийти почти разом (первый ещё собирает черновики), и проверить-потом-
     # создать раздельно значило бы два задания. Замок — на ключ, а не общий:
@@ -2468,7 +2574,7 @@ def start_job(
             job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
                                 activate=activate, dry_run=dry_run, hand_off=hand_off,
                                 reviewed=reviewed, frozen_drafts=frozen_drafts,
-                                review_refused=review_refused)
+                                review_refused=review_refused, request_id=request_id)
             with _request_lock:
                 while len(_request_jobs) >= _REQUEST_KEYS_MAX:
                     _request_jobs.pop(next(iter(_request_jobs)))
@@ -2496,6 +2602,7 @@ def _start_job(
     reviewed: dict[str, Any] | None = None,
     frozen_drafts: list[Any] | None = None,
     review_refused: list[dict[str, Any]] | None = None,
+    request_id: str = "",
 ) -> str:
     if activate:
         raise ValueError("ACM is draft-only: live activation is disabled")
@@ -2523,6 +2630,7 @@ def _start_job(
         campaign_names=[str(getattr(d, "name", "") or "") for d in drafts],
         reviewed=reviewed is not None,
         review_refused=review_refused,
+        request_id=request_id,
     )
     # Event конца потока заводится здесь, прямо перед потоком: у задания, чей
     # поток не стартовал, он не остаётся навсегда.

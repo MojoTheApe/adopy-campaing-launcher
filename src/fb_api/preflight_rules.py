@@ -132,7 +132,6 @@ _TOPIC_OF = {
     "vertical_needs_main": "creative",
     "vertical_ratio": "creative",
     "texts_limit": "creative",
-    "texts_vertical": "creative",
     "texts_dynamic": "creative",
     "devices_consistent": "audience",
     "start_time_valid": "budget",
@@ -159,7 +158,8 @@ RULES: list[dict[str, Any]] = [
        "the ad is set for Instagram placements: in Ads Manager press 'Use Facebook Page' for this Page "
        "(or connect an Instagram account), then run Check plan again; or choose Manual Facebook-only placements"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
-       "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
+       "website conversions need a pixel: choose it in the Pixel field of this campaign "
+       "(Automatic works only when the ad account has exactly one)", sel=".cb-pixel-select",
        applies="website"),
     _r("form_active", "Instant Form of the Page", ERROR, "server",
        "pick an ACTIVE form of this Page (Refresh forms)", sel=".cb-form-select", level="ad",
@@ -200,7 +200,7 @@ RULES: list[dict[str, Any]] = [
        "the file is missing, empty or unreadable: choose another file",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_limits", "Media within Meta limits", ERROR, "server",
-       "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
+       "file type, size (image 30 MB, video 4096 MB) or video length is over the limit",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 or square Stories / Reels file: without one Facebook crops the picture itself",
@@ -215,8 +215,6 @@ RULES: list[dict[str, Any]] = [
     _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
        "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
-       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
     _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
        _wp.MSG_TEXTS_DYNAMIC_SET,
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -228,9 +226,11 @@ RULES: list[dict[str, Any]] = [
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline_len", "Headline up to 40 characters", WARNING, "client",
        "a longer headline may be cut off", sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("feed_texts", "Several texts or a Stories / Reels file need a headline", ERROR, "client",
-       "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); "
-       "add a headline, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("feed_texts", "Several texts or a Stories / Reels file: headline", ERROR, "client",
+       "Website ad: a headline-less ad with several texts or a Stories / Reels file is not verified yet, so it is "
+       "blocked: add a headline, or use one text and one file. Instant Form ad: this is only a warning, the ad "
+       "goes out with no headline (Meta shows none)",
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_len", "Text visible in full (up to 125)", WARNING, "client",
        "after 125 characters the text is folded behind 'See more'",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -255,8 +255,8 @@ RULES: list[dict[str, Any]] = [
     _r("schedule_valid", "Ad schedule", ERROR, "client",
        "a schedule needs a lifetime budget and at least one selected hour",
        sel='[name$="_schedule"]', level="campaign"),
-    _r("ad_names_unique", "Ad names are unique", ERROR, "client",
-       "give the ads different creatives or texts: their names must differ inside a campaign",
+    _r("ad_names_unique", "Ad names are unique", WARNING, "client",
+       "ads with the same creative file and the same text get '2', '3'... added to their names",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("adset_names_unique", "Ad set names are unique", ERROR, "client",
        "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
@@ -325,6 +325,19 @@ def _feed_missing_text(a: dict) -> bool:
         return False
     has_title = bool(_s(a.get("headline"))) or bool(_distinct(a.get("headlines")))
     return not has_title
+
+
+def _feed_texts_verdict(inp: dict) -> dict[str, Any]:
+    """ACL-2584: без заголовка Website-объявление с несколькими текстами - ошибка, Instant Form - предупреждение.
+
+    Instant Form уходит с одним пустым заголовком, как у Ads Manager (HAR владельца); Website без заголовка не проверен.
+    """
+    rows = [(n, _dest_of(st) == "instant_form") for _si, n, st, ad in _numbered(inp) if _feed_missing_text(ad)]
+    if not rows:
+        return _v("feed_texts", OK)
+    ads = [n for n, _form in rows]
+    status = WARNING if all(form for _n, form in rows) else ERROR
+    return _v("feed_texts", status, "Ad " + ", ".join(map(str, ads)), ads)
 
 
 def _s(v: Any) -> str:
@@ -479,11 +492,11 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "texts_limit":
             out.append(_per_ad(rid, inp, lambda a, st: any(
                 len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
-        elif rid == "texts_vertical":
-            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
         elif rid == "texts_dynamic":
+            # ACL-2584: only a Website ad set runs several texts as Dynamic Creative (one ad per set); an
+            # Instant Form ad set uses placement rules (Ads Manager shape) and takes as many ads as Meta allows.
             out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and not _s(a.get("vertical_file"))
-                                      and len(st.get("ads") or []) > 1))
+                                      and _dest_of(st) != "instant_form" and len(st.get("ads") or []) > 1))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body")), WARNING))
         elif rid == "headline":
@@ -491,7 +504,7 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "headline_len":
             out.append(_per_ad(rid, inp, lambda a, st: not a.get("shared_headline") and len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "feed_texts":
-            out.append(_per_ad(rid, inp, lambda a, st: _feed_missing_text(a)))
+            out.append(_feed_texts_verdict(inp))
         elif rid == "primary_len":
             out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
@@ -571,14 +584,27 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 return ""
             out.append(_per_set(rid, inp, start_bad))
         elif rid == "ad_names_unique":
-            # Имена объявлений различаются внутри набора (так создатель ищет и сверяет их).
-            bad: list[int] = []
+            # ACL-2538: the same file + same text twice is not an error: the creator names the
+            # later ads "Name 2", "Name 3"... (inside a set), so this is a note, not a block.
+            later: list[int] = []
+            notes: list[str] = []
             for si, st in enumerate(sets, start=1):
-                nums = [(n, _s(ad.get("name"))) for s1, n, _s2, ad in _numbered(inp) if s1 == si]
-                names = [nm for _n, nm in nums]
-                dup = {nm for nm in names if nm and names.count(nm) > 1}
-                bad += [n for n, nm in nums if nm in dup]
-            out.append(_v(rid, ERROR if bad else OK, ("Ad " + ", ".join(map(str, bad))) if bad else "", bad))
+                first: dict[str, int] = {}
+                counts: dict[str, int] = {}
+                for s1, n, _s2, ad in _numbered(inp):
+                    if s1 != si:
+                        continue
+                    nm = _s(ad.get("name"))
+                    if not nm:
+                        continue
+                    if nm not in first:
+                        first[nm] = n
+                        continue
+                    counts[nm] = counts.get(nm, 1) + 1
+                    later.append(n)
+                    notes.append(f"Ad {n} will be named '{nm} {counts[nm]}' because Ad {first[nm]} has the "
+                                 "same creative and text")
+            out.append(_v(rid, WARNING if later else OK, "; ".join(notes), later))
         elif rid == "adset_names_unique":
             names = [_s(st.get("name")).casefold() for st in sets]
             bad_sets = [i + 1 for i, nm in enumerate(names) if nm and names.count(nm) > 1]
@@ -862,7 +888,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     for s in plan.ad_sets:
         for ad in s.ads:
             ext = Path(ad.path).suffix.lower()
-            if ext not in cr.IMAGE_EXT and ext not in cr.VIDEO_EXT:
+            if ext not in cr.IMAGE_EXT and ext not in cr.VIDEO_EXT and ext not in cr._imgconv.CONVERTIBLE_EXT:
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file type {ext or '(none)'} is not an image or video Meta accepts"))
             try:
                 data = (files or {}).get(ad.path)
@@ -874,7 +900,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             if not data:
                 problems["media_readable"].append((ad.index, f"Ad {ad.index}: creative file is empty"))
                 continue
-            limit = cr.VIDEO_MAX_BYTES if ad.kind == "video" else cr.IMAGE_MAX_BYTES
+            limit = cr.video_limit_bytes() if ad.kind == "video" else cr.IMAGE_MAX_BYTES
             if len(data) > limit:
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
@@ -888,7 +914,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 except OSError as exc:
                     problems["media_readable"].append((ad.index, f"Ad {ad.index}: Stories / Reels file cannot be read ({exc})"))
                     vdata = b""
-                vlimit = cr.VIDEO_MAX_BYTES if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
+                vlimit = cr.video_limit_bytes() if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
                 if vdata and len(vdata) > vlimit:
                     problems["media_limits"].append((ad.index, f"Ad {ad.index}: Stories / Reels file is larger than {vlimit // (1024 * 1024)} MB"))
                 if vdata and ad.vertical_kind != ad.kind:

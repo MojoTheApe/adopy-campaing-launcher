@@ -40,6 +40,8 @@ def machine(monkeypatch, tmp_path):
     monkeypatch.setattr(links, "get_ad_account_map_path", lambda: str(map_csv))
     monkeypatch.setattr(links, "get_local_config_dir", lambda: str(tmp_path))
     monkeypatch.setattr("src.web.buyer.get_selected_cm", lambda: BUYER)
+    # Rows without a buyer tag belong to the default buyer, i.e. this one.
+    monkeypatch.setenv("MY_CM_NAME", BUYER)
     monkeypatch.setattr(
         "src.analysis_agent.gsheet_accounts.fetch_account_rows",
         lambda *a, **k: [{"account_label": "FacebookDoc30", "account_status": "Active"},

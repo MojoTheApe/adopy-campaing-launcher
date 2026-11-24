@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -205,7 +206,8 @@ def test_policy_still_forbids_terms_acceptance_anywhere():
 def test_page_policy_describes_the_only_allowed_place():
     pol = wp.policy_for_page(ACT)
     assert pol["lead_form"] == {"key": "lead_gen_form_id", "edge": "adcreatives",
-                                "formats": ["link_data", "video_data"], "id_re": "^[0-9]{5,25}$"}
+                                "formats": ["link_data", "video_data"], "id_re": "^[0-9]{5,25}$",
+                                "feed_key": "call_to_actions"}
     assert "lead_gen_form_id" in pol["forbidden"]
 
 
@@ -466,7 +468,7 @@ def test_instant_form_needs_no_pixel_on_the_account(tmp_path):
     web_dir = tmp_path / "w"
     web_dir.mkdir()
     out2, _ = _run(meta2, _draft(web_dir))
-    assert "pixels/datasets" in out2.error, "сайтовому пути пиксель по-прежнему нужен"
+    assert "no pixel/dataset" in out2.error, "сайтовому пути пиксель по-прежнему нужен"
 
 
 def test_readback_checks_the_form_ownership_and_the_ad_set_destination(tmp_path):
@@ -688,6 +690,9 @@ def test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator(
     assert flags == [{"object": "ad set MX Leads 1", "field": "dynamic_creative",
                       "expected": False, "actual": False, "ok": True, "not_read": False}]
     assert got != want, "creative identity and safety verification must be present"
+    # ACL-2744: the video steps now carry size, time and speed: compare them without that tail.
+    got["steps"] = [re.sub(r"^(.*video (?:uploaded|already in the ad account)) \(.*\)$", r"\1", st)
+                    for st in got["steps"]]
     unchanged = _without_multi_advertiser(_without_instagram(got))
     unchanged["readback_checks"] = [c for c in unchanged["readback_checks"] if c not in flags]
     assert unchanged == want

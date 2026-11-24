@@ -71,6 +71,9 @@ and *Step N of 7*. Nothing is published during setup, and no campaign is touched
    each: *Team library: connected (N targets, M texts)* and *BI: connected (last
    data date …)*. Click **Next**. You may skip this step and do it later in the
    dashboard (**Connections**). A red line gives its reason; see the table below.
+   If you skip it and have no Stats workbook, the dashboard opens on a **No data
+   file** page saying *BI is not connected on this computer*. Click **Sign in with
+   Google** on that page (then **Check again** if needed); no restart is needed.
 4. **Your name.** Type it exactly as in the CM column (or as BI knows you). ACL
    finds your ad accounts by this name. Click **Next**.
 5. **Local files.** Fill in both, then click **Next**. ACL opens the workbook
@@ -199,8 +202,7 @@ The messages in the middle column are what ACL shows, word for word.
 | Accounts | *Token saved, but connection could not be verified.* | Open Multilogin Desktop, sign in, and try again. |
 | Accounts | *Multilogin token expired at … Profiles cannot start until you sign in again.* or *Multilogin token (…) expires at … Sign in again to renew it.* (red or amber banner at the top of the dashboard) | Your Multilogin sign-in has expired or is about to. Open **Accounts**, click **Connect Multilogin** and sign in again with your Multilogin email and password. |
 | Update | No **Update** button in the header | Nothing is waiting: you are on the newest version, or the dashboard could not check (offline, or it was not started from the desktop shortcut). Start ACL from the desktop shortcut and reload the page later. |
-| Update | *Update not started: … campaign job(s) still running…*, *Wait for campaign jobs to finish before updating.* or *Campaign jobs started during the download; try again when they finish.* | A campaign run is in progress. Wait until it finishes, then click **Update** again. |
-| Update | *Update not started: Wait for browser reading to finish before updating.* | ACL is reading from a browser profile. Wait a few minutes and try again. |
+| Update | *Update starts after publishing finishes* (the button stays greyed out) | A campaign run is in progress. Nothing to do: the update starts by itself when the run finishes, and the page reloads by itself. An account read does not hold the update back; it runs again after the restart. |
 | Update | *Update not started: An update is already in progress.* | Someone already clicked **Update** (maybe in another tab). Wait for the page to reload by itself. |
 | Update | *Update not started: GitHub is unreachable: …*, *The update could not be downloaded: …* or *GitHub answered HTTP …* | No internet, or GitHub did not answer. Check your connection and try again in a few minutes. ACL keeps running on the current version. |
 | Update | *Update not started: The update channel refused access: the build's release token is missing or expired.* or *No published release was found in the update channel.* | This installation can no longer read the release. Tell Evgeni; you may need a newer installer. |

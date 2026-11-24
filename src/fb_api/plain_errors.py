@@ -14,7 +14,7 @@ from src.fb_api import error_catalog as _catalog
 from src.fb_api import mlx_session as _mlx
 from src.fb_api import telemetry as _tm
 from src.fb_api.graph import (
-    REJECTION_SUBCODES, CallBudget, Checkpoint, GraphError, GraphStop, LoggedOut, PageUnresponsive,
+    REJECTION_SUBCODES, AuthRequired, CallBudget, Checkpoint, GraphError, GraphStop, LoggedOut, PageUnresponsive,
     PolicyBlocked, RateLimited, WriteUnknown, WritesBlocked,
 )
 
@@ -38,9 +38,16 @@ class Plain:
     retry: str = "after_fix"     # after_fix | later | never | now
 
 
+AUTH_REQUIRED_SHORT = "Meta asks to authenticate this account"
+AUTH_REQUIRED_NEXT = "open the profile in Multilogin, pass the check, then Publish again"
+#: A campaign that was never begun because its account is waiting for that check.
+AUTH_NOT_STARTED = "Not started: account needs authentication. Nothing was created for it."
+
 TABLE: dict[str, Plain] = {
     "logged_out": Plain("Account logged out", "log in and republish"),
     "checkpoint": Plain("Facebook asks to confirm this account", "open the profile, finish the check and republish"),
+    # ACL-2595: Meta 31/3858385 "Please authenticate your account"; one sentence pair, joined with ". ".
+    "auth_required": Plain(AUTH_REQUIRED_SHORT, AUTH_REQUIRED_NEXT, "hold", "after_fix"),
     "targeting_merged": Plain("Targeting options were merged by Meta", "replace the interests and republish"),
     "targeting_term": Plain("Meta did not accept a targeting term{names}", "replace it and republish"),
     "page_unavailable": Plain("The Facebook Page is not available for this ad account",
@@ -51,27 +58,31 @@ TABLE: dict[str, Plain] = {
     "account_blocked": Plain("This ad account cannot run ads right now (disabled, restricted or at its spending limit)",
                              "check it in Ads Manager"),
     "profile_locked": Plain("The Multilogin profile is busy or locked",
-                            "wait for the other action or close the window, then republish", "hold", "later"),
+                            "close the other window or action that uses it, then Publish again", "hold", "later"),
+    # ACL-2820: closed before or during an action is not a lock; the next Open/Retry opens it again.
+    "profile_closed": Plain("The profile was closed", "press Open (or Retry) to open it again", "hold", "later"),
     "profile_not_started": Plain("The Multilogin profile did not start", "open it in Multilogin, then republish",
                                  "blocking", "later"),
     "mlx_token_rejected": Plain("", "", "blocking", "after_fix"),  # text comes from mlx_session
     "tab_unresponsive": Plain("The Ads Manager tab stopped answering",
-                              "wait {wait}, then republish", "hold", "later"),
+                              "Publish again", "hold", "later"),
     "proxy_error": Plain("The profile's proxy or secure connection failed",
                          "check the proxy of this profile in Multilogin and republish"),
-    "graph_read_timeout": Plain("Meta did not answer in time{stage}", "nothing was changed, republish in a few minutes",
+    "graph_read_timeout": Plain("Meta did not answer in time{stage}", "nothing was changed, Publish again",
                                 "blocking", "later"),
     "graph_write_unconfirmed": Plain("Meta did not confirm this step{stage}",
                                      "check the campaign in Ads Manager, then republish (it will not duplicate)",
                                      "blocking", "later"),
-    "rate_limited": Plain("Meta is limiting requests", "wait {wait} and republish", "hold", "later"),
-    "policy_block": Plain("Meta temporarily blocked this action", "wait before trying again, do not retry now",
+    "rate_limited": Plain("Meta is limiting requests", "Publish again", "hold", "later"),
+    "policy_block": Plain("Meta temporarily blocked this action", "check this account in Ads Manager, then Publish again",
                           "blocking", "never"),
     # ACL-2400: the same words as warm.MEMORY_HOLD_MESSAGE, so the two can never show different texts.
     "memory_hold": Plain("Not enough free memory", "close a profile and retry", "blocking", "later"),
-    "account_hold": Plain("Another action is still running", "wait for it to finish and republish", "hold",
+    "account_hold": Plain("Another action is still running", "Publish again when it has finished", "hold",
                           "later"),
-    "creative_file": Plain("A creative file cannot be used{ad}", "replace the file and republish"),
+    "file_type_refused": Plain("Meta refused the file{adn}{file}: " + "The type of file is not supported",
+                               "convert it to JPG or PNG and republish (re-publishing reuses what was created)"),
+    "creative_file": Plain("A creative file cannot be used{ad}{file}", "replace the file and republish"),
     "unknown": Plain("Meta refused this step{stage}", WHERE),
 }
 
@@ -110,7 +121,8 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
     names = ctx.get("names") or []
     ad = ctx.get("ad")
     fill = {"names": (": " + ", ".join(f'"{n}"' for n in names[:3])) if names else "",
-            "ad": f": ad {ad}" if ad else "", "stage": f" ({ctx['stage']})" if ctx.get("stage") else "",
+            "ad": f": ad {ad}" if ad else "",
+            "adn": f" of ad {ad}" if ad else "", "file": f" ({ctx['file']})" if ctx.get("file") else "", "stage": f" ({ctx['stage']})" if ctx.get("stage") else "",
             "wait": f"about {ctx['minutes']} min" if ctx.get("minutes") else "a few minutes"}
     short, nxt = plain.short, plain.next_step
     for k, v in fill.items():
@@ -120,6 +132,16 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
         short = str(ctx.get("text") or _mlx.SESSION_LOST_MESSAGE)
     return Failure(key=key, short=short, next_step=nxt, severity=plain.severity, retry=plain.retry,
                    stage=str(ctx.get("stage") or ""), **over)
+
+
+FILE_REFUSED_REASON = "The type of file is not supported"
+
+
+def file_refused(ad: str, file_name: str, exc: BaseException | None = None) -> Failure:
+    """ACL-2575: Meta refused the uploaded file of ad `ad` (a definite answer, not an unknown result)."""
+    details = build_details(exc, kind="graph_error", extra={"stage": "while uploading ad %s creative" % ad,
+                                                           "file": file_name})
+    return _make("file_type_refused", {"ad": ad, "file": file_name, "stage": ""}, details=details)
 
 
 # ───────────────────────── details (scrubbed) ─────────────────────────
@@ -165,13 +187,14 @@ _CODE_KEYS = {
 _POLICY_CODES = {368}
 #: Codes WE put on ApiPublishError / WarmError / GraphStop.kind (not Meta codes).
 _API_CODE_KEYS = {
-    "page_unresponsive": "tab_unresponsive", "profile_closed": "profile_locked", "profile_locked": "profile_locked",
+    "page_unresponsive": "tab_unresponsive", "profile_closed": "profile_closed", "profile_locked": "profile_locked",
     "gate_wait": "account_hold", "below_reserve": "memory_hold", "memory_low": "memory_hold",
     "limit": "account_hold", "cdp": "profile_not_started", "launch": "profile_not_started",
     "cdp_timeout": "graph_read_timeout",
     # GraphStop.kind carried by ApiPublishError (publish_api._halt)
     "rate_limited": "rate_limited", "call_budget": "rate_limited", "policy_block": "policy_block",
     "page_failed": "unknown", "logged_out": "logged_out", "checkpoint": "checkpoint",
+    "auth_required": "auth_required",
 }
 
 _SNIFFERS: list[tuple[re.Pattern, str]] = [
@@ -189,7 +212,7 @@ _SNIFFERS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"earlier write has an unknown result|write result is unknown|readback", re.I),
      "graph_write_unconfirmed"),
     (re.compile(r"timed out|timeout", re.I), "graph_read_timeout"),
-    (re.compile(r"profile .*(locked|already used)|Multilogin profile .*busy", re.I), "profile_locked"),
+    (re.compile(r"profile .*(locked|already used)|Multilogin profile .*busy|can.?t lock profile|cannot lock profile", re.I), "profile_locked"),
     (re.compile(r"could not be opened with automation|profile .*did not start", re.I), "profile_not_started"),
 ]
 #: Own-text exceptions (PlanError, ApiPublishError, ...) carry user data (interest, ad set, Page names), so they are
@@ -215,6 +238,14 @@ _OWN_TEXT = ("PlanError", "ApiPublishError", "CreationStopped", "ProfileLeaseErr
 _QUOTED = re.compile(r"'([^']{1,60})'")
 
 
+def _meta_said(exc: BaseException | None) -> str:
+    """ACL-2814: Meta's own title/message of a non-transient refusal (scrubbed); empty if it gave none."""
+    det = getattr(exc, "details", None)
+    if not isinstance(det, dict) or str(det.get("is_transient", "")).lower() != "false":
+        return ""
+    return _tm.scrub(str(det.get("error_user_title") or det.get("error_user_msg") or "")).strip()
+
+
 def _by_text(text: str, ctx: dict, *, own: bool = False) -> str:
     """Last-resort free-text match. `own`: our message with user data inside: quoted parts removed, phrases only."""
     if own:
@@ -227,6 +258,15 @@ def _by_text(text: str, ctx: dict, *, own: bool = False) -> str:
         if pat.search(text):
             return key
     return ""
+
+
+def _pixel_gone(sub: Any, ctx: dict, x: Any) -> tuple[str, str]:
+    """ACL-2814: 1784033 names the pixel the plan used (name, else id); no pixel known -> the catalog text."""
+    pixel = str(ctx.get("pixel") or "").strip()
+    if sub == 1784033 and pixel:
+        return (f"Meta: pixel {pixel} is no longer available to this ad account -",
+                "activate it or check access in Events Manager, or choose a different pixel in the builder, then Publish again.")
+    return x.message_en, x.action_en
 
 
 def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | None = None) -> Failure:
@@ -243,7 +283,9 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
                             extra={**(ctx.pop("details", None) or {}), **({"stage": stage} if stage else {})})
     key = getattr(exc, "key", "") or ""
     code, sub = getattr(exc, "code", None), getattr(exc, "subcode", None)
-    if not key and isinstance(exc, Checkpoint):
+    if not key and isinstance(exc, AuthRequired):
+        key = "auth_required"
+    elif not key and isinstance(exc, Checkpoint):
         key = "checkpoint"
     elif not key and isinstance(exc, LoggedOut):
         key = "logged_out"
@@ -274,7 +316,7 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
         # The catalog (Meta's own code) wins over any free-text match: error_user_title is Meta/user data.
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
-            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+            return Failure("catalog", *_pixel_gone(sub, ctx, x), sep=" ", details=details, stage=stage)
     if not key and raw and "TargetingUnresolved" not in names:
         key = _by_text(raw, ctx, own=own)
     if key in ("tab_unresponsive", "rate_limited") and not ctx.get("minutes"):
@@ -283,6 +325,8 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
             ctx["minutes"] = m.group(1)
     if key == "targeting_term" and not ctx.get("names"):
         ctx["names"] = _QUOTED.findall(raw)[:3]
+    if key == "creative_file" and not ctx.get("file") and getattr(exc, "file_name", ""):
+        ctx["file"] = exc.file_name  # ACL-2575: a file that cannot be converted is named
     if key == "creative_file" and not ctx.get("ad"):
         m = re.search(r"\bad (\d+)\b", raw, re.I)
         ctx["ad"] = m.group(1) if m else ""
@@ -295,7 +339,11 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
     if isinstance(exc, (GraphError, GraphStop)) or isinstance(code, int):
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
-            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+            return Failure("catalog", *_pixel_gone(sub, ctx, x), sep=" ", details=details, stage=stage)
+        said = _meta_said(exc)
+        if said:  # ACL-2814: a definite refusal with Meta's own words: show them
+            return Failure("meta_refusal", "Meta: " + said.rstrip("."), "Fix it in the draft, then Publish again.",
+                           details=details, stage=stage)
         return _make("unknown", ctx, details=details)
     if exc is not None and raw and own:
         return Failure("plan_text", _tm.scrub(raw).strip().rstrip("."), details=details, stage=stage)
@@ -340,7 +388,9 @@ def left_in_meta(*, campaign: bool, adsets: int = 0, ads: int = 0, empty_note: b
         parts.append(f"{adsets} ad set{'s' if adsets != 1 else ''}")
     if ads:
         parts.append(f"{ads} ad{'s' if ads != 1 else ''}")
-    again = (f'otherwise the new one is published as "{name}_2"' if name else "otherwise a new one is published")
+    # ACL-2578: the real naming is the ACL-2250 copy counter ("X copy 1", then the next free number), never "_2".
+    again = (f'otherwise the new one is published as a new copy, "{name} copy 1" (or the next free number)'
+             if name else "otherwise a new one is published as a new copy")
     text = ("Left in Meta: " + ", ".join(parts)
             + f". Publishing again reuses it if its settings match; {again}.")
     if not_created:

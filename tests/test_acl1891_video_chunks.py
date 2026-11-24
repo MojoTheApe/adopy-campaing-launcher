@@ -31,7 +31,7 @@ from tests.test_acl1761_api_create import ACT, FakeMeta, _draft  # noqa: E402
 
 MB = 1024 * 1024
 #: Настоящий потолок куска, снятый до мутаций.
-REAL_CHUNK_MAX = wp.UPLOAD_CHUNK_MAX
+REAL_CHUNK_MAX = wp.UPLOAD_STAGED_CHUNK_MAX   # ACL-2629: bytes (staged) path; a served chunk has its own cap
 PATH = f"/{ACT}/advideos"
 
 
@@ -168,11 +168,11 @@ _CASES = {
     "neg_offset": {"params": {**TRANSFER, "start_offset": "-3"}, "chunk": 4},
     "no_chunk": {"params": TRANSFER, "chunk": None},
     "wrong_field": {"params": TRANSFER, "chunk": 4, "field": "source"},
-    "big_chunk": {"params": TRANSFER, "chunk": wp.UPLOAD_CHUNK_MAX + 1},
+    "big_chunk": {"params": TRANSFER, "chunk": wp.UPLOAD_STAGED_CHUNK_MAX + 1},
     "empty_chunk": {"params": TRANSFER, "chunk": 0},
     "finish_file": {"params": FINISH, "chunk": 4},
     "finish_extra": {"params": {**FINISH, "source": "x"}, "chunk": None},
-    "max_chunk": {"params": TRANSFER, "chunk": wp.UPLOAD_CHUNK_MAX},
+    "max_chunk": {"params": TRANSFER, "chunk": wp.UPLOAD_STAGED_CHUNK_MAX},
     # 17.10: Meta 1363049 «A waterfall ID is required» — id загрузки во всех фазах.
     "start_waterfall": {"params": {**START, "waterfall_id": "0" * 32}, "chunk": None},
     "transfer_waterfall": {"params": {**TRANSFER, "waterfall_id": "ab" * 16}, "chunk": 4},
@@ -305,6 +305,8 @@ def small(monkeypatch):
     monkeypatch.setattr(cr, "VIDEO_SINGLE_MAX_BYTES", MB)
     monkeypatch.setattr(cr, "VIDEO_CHUNK_MAX", MB)
     monkeypatch.setattr(wp, "UPLOAD_CHUNK_MAX", MB)
+    monkeypatch.setattr(cr, "VIDEO_CHUNK_STAGED_MAX", MB)       # ACL-2629: the old (staged) path keeps its own caps
+    monkeypatch.setattr(wp, "UPLOAD_STAGED_CHUNK_MAX", MB)
 
 
 def _big_draft(tmp_path, size=3 * MB + 500_000):
@@ -476,12 +478,16 @@ def test_an_impossible_offset_from_meta_stops_before_finish(small, tmp_path):
 
 def test_the_limit_is_what_the_chunked_path_supports():
     assert cr.VIDEO_SINGLE_MAX_BYTES == 200 * MB
-    assert cr.VIDEO_MAX_BYTES == wp.UPLOAD_FILE_MAX == 1536 * MB
-    assert cr.VIDEO_CHUNK_MAX == wp.UPLOAD_CHUNK_MAX == 8 * MB
+    # ACL-2629: the worker path takes the original up to Meta's 4 GB in 64 MB chunks; the old path (compression
+    # fallback) keeps 1536 MB and 8 MB.
+    assert cr.VIDEO_MAX_BYTES == wp.UPLOAD_FILE_MAX == 4096 * MB
+    assert cr.VIDEO_CHUNK_MAX == wp.UPLOAD_CHUNK_MAX == 64 * MB
+    assert cr.VIDEO_MAX_BYTES_STAGED == wp.UPLOAD_FILE_STAGED_MAX == 1536 * MB
+    assert cr.VIDEO_CHUNK_STAGED_MAX == wp.UPLOAD_STAGED_CHUNK_MAX == 8 * MB
 
 
 def test_a_file_above_the_limit_is_refused_with_a_clear_message(small, monkeypatch, tmp_path):
-    monkeypatch.setattr(cr, "VIDEO_MAX_BYTES", 2 * MB)
+    monkeypatch.setattr(cr, "VIDEO_MAX_BYTES_STAGED", 2 * MB)
     d, f = _big_draft(tmp_path)
     meta = ChunkMeta()
     out, _ = _run(meta, d)
@@ -498,14 +504,15 @@ def test_preflight_rule_allows_big_videos_and_refuses_above_the_new_limit(small,
     monkeypatch.setattr(cr, "VIDEO_MAX_BYTES", 2 * MB)
     got = _by(_audit(AuditMeta(), d))
     assert got["media_limits"]["status"] == "error" and "larger than 2 MB" in got["media_limits"]["detail"]
-    assert "video 1536 MB" in (ROOT / "src/fb_api/preflight_rules.json").read_text(encoding="utf-8")
+    assert "video 4096 MB" in (ROOT / "src/fb_api/preflight_rules.json").read_text(encoding="utf-8")
 
 
 def test_chunk_calls_are_counted_per_file_size():
     # Файл ровно на пороге - один запрос, без кусков; больше - куски по 8 МБ плюс start/finish/запас.
-    assert cr.upload_calls(cr.VIDEO_SINGLE_MAX_BYTES) == 0
-    assert cr.upload_calls(cr.VIDEO_SINGLE_MAX_BYTES + 1) == -(-(cr.VIDEO_SINGLE_MAX_BYTES + 1) // cr.VIDEO_CHUNK_MAX) + cr.CALLS_UPLOAD_FIXED
-    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) == 192 + cr.CALLS_UPLOAD_FIXED
+    # (the old path: `worker=False`; the worker path is in tests/test_acl2629_worker_upload.py)
+    assert cr.upload_calls(cr.VIDEO_SINGLE_MAX_BYTES, worker=False) == 0
+    assert cr.upload_calls(cr.VIDEO_SINGLE_MAX_BYTES + 1, worker=False) == -(-(cr.VIDEO_SINGLE_MAX_BYTES + 1) // cr.VIDEO_CHUNK_STAGED_MAX) + cr.CALLS_UPLOAD_FIXED
+    assert cr.upload_calls(cr.VIDEO_MAX_BYTES_STAGED, worker=False) == 192 + cr.CALLS_UPLOAD_FIXED
 
 
 def test_a_plan_that_cannot_fit_the_call_budget_is_refused_up_front(small, tmp_path):
@@ -522,7 +529,7 @@ def test_chunks_and_the_rest_of_the_plan_share_one_budget_and_the_refusal_comes_
     d, f = _big_draft(tmp_path)
     monkeypatch.setattr(cr, "CALLS_RESERVE_OTHER", 0)       # прежняя проверка (куски + запас) пропустила бы
     meta = ChunkMeta()
-    chunks = cr.upload_calls(f.stat().st_size)
+    chunks = cr.upload_calls(f.stat().st_size, worker=False)
     rest = cr.estimate_create_calls(cr.plan_from_draft(d))
     out, _ = _run(meta, d, max_calls=chunks + rest - 1)
     assert out.stop_kind == "plan" and "rest of the campaign" in out.error and meta.posts == []
@@ -541,8 +548,8 @@ def test_the_default_budget_fits_a_typical_big_video_and_the_largest(tmp_path):
     assert refusal == ""
     # 247 МБ = 31 кусок + 3: влезает. ACL-2370: самый большой файл (1,5 ГБ = 195 вызовов) тоже принимается
     # по умолчанию - куски входят в бюджет плана; отказ - для двух таких видео сразу (test_acl2370_chunk_budget).
-    assert cr.upload_calls(247 * 1024 * 1024) + rest <= budget
-    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) + rest <= publish_api.DEFAULT_CREATE_MAX_CALLS + 90
+    assert cr.upload_calls(247 * 1024 * 1024, worker=False) + rest <= budget
+    assert cr.upload_calls(cr.VIDEO_MAX_BYTES_STAGED, worker=False) + rest <= publish_api.DEFAULT_CREATE_MAX_CALLS + 90
 
 
 # ───────────────────────── мутации: охранники обязаны падать ─────────────────────────
@@ -556,7 +563,7 @@ def test_mutation_allowing_a_wrong_phase_is_caught(monkeypatch):
 
 
 def test_mutation_allowing_an_oversized_chunk_is_caught(monkeypatch):
-    monkeypatch.setattr(wp, "UPLOAD_CHUNK_MAX", 1 << 40)
+    monkeypatch.setattr(wp, "UPLOAD_STAGED_CHUNK_MAX", 1 << 40)
     with pytest.raises(BaseException) as caught:
         _guard_chunk()
     assert "DID NOT RAISE" in str(caught.value) or isinstance(caught.value, (AssertionError, pytest.fail.Exception))

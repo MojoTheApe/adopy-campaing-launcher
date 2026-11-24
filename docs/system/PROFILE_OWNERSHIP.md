@@ -99,4 +99,5 @@ commands, Check plan, Page/forms reads. A new automatic reader must not set it.
 
 On the dashboard a closed profile is a failed row attempt, not a new state: the last saved list stays on screen
 with the row note "profile is closed ... Press Retry", Retry (the person's action) opens the profile and reads.
-`recently_failed` keeps the automatic refresh from asking again within an hour, and there is no timer.
+There is no one-hour wait after a failed read (ACL-2668 #26): expanding the account reads it again, and the
+next 08/13/18 window reads it again; only a held profile (ACL-2091) is skipped by automatic reads.

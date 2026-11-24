@@ -93,7 +93,9 @@ def test_signin_with_a_token_saves_it_and_reports_no_problem(monkeypatch):
 
     assert body["token_saved"] is True
     assert body["token_error"] == ""
-    assert saved == [{"MULTILOGIN_AUTOMATION_TOKEN_A": "automation-xyz"}]
+    # No workspace claim: stale name and id are blanked together with the token write.
+    assert saved == [{"MULTILOGIN_AUTOMATION_TOKEN_A": "automation-xyz",
+                      "MULTILOGIN_WORKSPACE_ID_A": "", "MULTILOGIN_WORKSPACE_A": ""}]
 
 
 def test_the_two_multilogin_accounts_are_named_not_lettered():

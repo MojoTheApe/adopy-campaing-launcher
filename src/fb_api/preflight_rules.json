@@ -137,9 +137,9 @@
       "applies": "website",
       "field": {
         "level": "campaign",
-        "sel": ""
+        "sel": ".cb-pixel-select"
       },
-      "hint": "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
+      "hint": "website conversions need a pixel: choose it in the Pixel field of this campaign (Automatic works only when the ad account has exactly one)",
       "id": "pixel_ok",
       "label": "Pixel for conversions",
       "severity": "error",
@@ -349,7 +349,7 @@
         "level": "ad",
         "sel": ".cb-creative-search"
       },
-      "hint": "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
+      "hint": "file type, size (image 30 MB, video 4096 MB) or video length is over the limit",
       "id": "media_limits",
       "label": "Media within Meta limits",
       "severity": "error",
@@ -417,20 +417,6 @@
       "applies": "always",
       "field": {
         "level": "ad",
-        "sel": ".cb-vertical-search"
-      },
-      "hint": "Several primary texts and a Stories/Reels file can't be combined: Meta applies one text per placement group. Use several texts without the vertical file, or one text with it.",
-      "id": "texts_vertical",
-      "label": "Several texts and a Stories / Reels file",
-      "severity": "error",
-      "side": "client",
-      "topic": "creative",
-      "unit": "ad"
-    },
-    {
-      "applies": "always",
-      "field": {
-        "level": "ad",
         "sel": ".cb-adtitle-search"
       },
       "hint": "An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an ad set: move the other ads of this ad set to a separate ad set",
@@ -489,9 +475,9 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); add a headline, or use one text and one file",
+      "hint": "Website ad: a headline-less ad with several texts or a Stories / Reels file is not verified yet, so it is blocked: add a headline, or use one text and one file. Instant Form ad: this is only a warning, the ad goes out with no headline (Meta shows none)",
       "id": "feed_texts",
-      "label": "Several texts or a Stories / Reels file need a headline",
+      "label": "Several texts or a Stories / Reels file: headline",
       "severity": "error",
       "side": "client",
       "topic": "creative",
@@ -629,10 +615,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "give the ads different creatives or texts: their names must differ inside a campaign",
+      "hint": "ads with the same creative file and the same text get '2', '3'... added to their names",
       "id": "ad_names_unique",
       "label": "Ad names are unique",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "names",
       "unit": "ad"

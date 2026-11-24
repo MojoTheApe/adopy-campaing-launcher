@@ -39,6 +39,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from src.fb_api import error_catalog as _catalog
 from src.fb_api import plain_errors as _plain
 from src.fb_api import facts_cache as _facts_cache
+from src.fb_api import form_cover_store as _cover_store
 from src.fb_api import form_create as _fc
 from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
@@ -49,10 +50,14 @@ from src.fb_api import write_policy as _wpol
 from src.fb_api import team_time as _tt
 
 from src.fb_api import creative_recovery as _cr
+from src.fb_api import image_convert as _imgconv
 from src.fb_api import name_receipt as _nr
+from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
-from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
+from src.fb_api.telemetry import mask_id as _mask_id, scrub
+from src.fb_api.graph import AuthRequired, FormPhotoRefused, GraphClient, GraphError, GraphStop, NotSent, PageFailed, RuploadLost, WritesBlocked, WriteUnknown, is_auth_required, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
+from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
 log = logging.getLogger(__name__)
 
@@ -136,9 +141,68 @@ VIDEO_EXT = frozenset({".mp4", ".mov", ".m4v", ".avi", ".wmv", ".mkv", ".webm"})
 IMAGE_MAX_BYTES = 30 * 1024 * 1024
 #: Видео до этого размера уходит одним запросом (как раньше); больше - кусками (ACL-1891).
 VIDEO_SINGLE_MAX_BYTES = 200 * 1024 * 1024
-#: Потолок видео на пути кусками: в памяти только кусок. Meta сама принимает до 4 ГБ.
+#: ACL-2629: путь воркера - исходный файл до лимита Meta (4 ГБ), куски до 64 МБ.
 VIDEO_MAX_BYTES = _wpol.UPLOAD_FILE_MAX
 VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
+#: Старый путь (base64 через CDP, сжатие ffmpeg - запасной): прежние потолки.
+VIDEO_MAX_BYTES_STAGED = _wpol.UPLOAD_FILE_STAGED_MAX
+VIDEO_CHUNK_STAGED_MAX = _wpol.UPLOAD_STAGED_CHUNK_MAX
+#: На пути воркера в один запрос идёт только небольшое видео: файл целиком кладётся в страницу как раньше
+#: (atob на главном потоке), а это замораживало вкладку на сотнях МБ (ACL-2000).
+VIDEO_SINGLE_MAX_BYTES_WORKER = 16 * 1024 * 1024
+#: Выключатель пути воркера: `ACL_VIDEO_WORKER_UPLOAD=0|false|no|off` (по умолчанию включён).
+WORKER_UPLOAD_FLAG = "ACL_VIDEO_WORKER_UPLOAD"
+
+
+def worker_upload_enabled(env: dict | None = None) -> bool:
+    """ACL-2629: видео грузится из Web Worker вкладки без сжатия. Выключается только явным `0/false/no/off`."""
+    raw = (env if env is not None else os.environ).get(WORKER_UPLOAD_FLAG, "")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+#: ACL-2639: the Ads Manager "file API" upload of large videos. OFF by default (live: the service refuses the whole-file
+#: POST with HTTP 400); on only when explicitly set (`ACL_VIDEO_RESUMABLE_UPLOAD=1|true|yes|on`). The code is kept.
+#: Off: large videos go up with the chunked advideos protocol (compressed first when they would not fit the run).
+RESUMABLE_UPLOAD_FLAG = "ACL_VIDEO_RESUMABLE_UPLOAD"
+
+
+def resumable_upload_enabled(env: dict | None = None) -> bool:
+    raw = (env if env is not None else os.environ).get(RESUMABLE_UPLOAD_FLAG, "")
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+#: ACL-2639: at most this many resumes of one resumable upload (each one = an offset read of the service + a POST).
+RESUMABLE_MAX_RESUMES = 5
+#: Graph calls of one resumable upload: start, transfer, finish, one status read (an earlier run continued, or a lost
+#: finish answer). The bytes go to the page's resumable service, which is not Graph and not counted.
+RESUMABLE_FIXED_CALLS = 4
+
+
+def resumable_calls() -> int:
+    """Graph calls of a resumable upload without resumes: constant (the size only changes the service POSTs)."""
+    return RESUMABLE_FIXED_CALLS
+
+
+def _already_finished(exc: Exception) -> bool:
+    """A definite "this video is already finished/published" answer to a repeated finish."""
+    msg = str(exc).lower()
+    return isinstance(exc, GraphError) and "already" in msg and ("finish" in msg or "publish" in msg)
+
+
+class _ResumableRefused(Exception):
+    """ACL-2639: the resumable upload could not be used; nothing of it was finished (the chunked path takes over)."""
+
+
+def video_limit_bytes(worker: bool | None = None) -> int:
+    """Largest video accepted: Meta's 4 GB on the worker path, 1536 MB on the old (compressing) path."""
+    worker = worker_upload_enabled() if worker is None else worker
+    return VIDEO_MAX_BYTES if worker else VIDEO_MAX_BYTES_STAGED
+
+
+def single_request_max(worker: bool | None = None) -> int:
+    """Видео не больше этого уходит одним запросом; больше - кусками."""
+    worker = worker_upload_enabled() if worker is None else worker
+    return VIDEO_SINGLE_MAX_BYTES_WORKER if worker else VIDEO_SINGLE_MAX_BYTES
 #: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
 CALLS_UPLOAD_FIXED = 3
 
@@ -154,16 +218,66 @@ def _disk_size(path: str) -> int:
         return 0
 
 
-def upload_calls(size: int) -> int:
-    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом."""
-    if size <= VIDEO_SINGLE_MAX_BYTES:
-        return 0
-    return -(-size // VIDEO_CHUNK_MAX) + CALLS_UPLOAD_FIXED
+#: ACL-2639: the upload window Meta really offers on the chunked path (1 MB, then a steady 5 MB in every live run so
+#: far); the plan assumes this, not the 64 MB ceiling, whenever the chunked path may be used.
+CHUNK_WINDOW_LIVE = 5 * 1024 * 1024
 
-#: Ожидание обработки видео — с потолком по времени и по числу вызовов.
-VIDEO_WAIT_S = 300.0
+
+#: ACL-2639: emergency switch of the compress-to-fit fallback (`ACL_VIDEO_COMPRESS_FALLBACK=0|false|no|off`); on by default.
+COMPRESS_FALLBACK_FLAG = "ACL_VIDEO_COMPRESS_FALLBACK"
+#: The compressed copy is never aimed above this many MB, and at this share of what fits (x264 2-pass lands within a few %).
+COMPRESS_FALLBACK_CAP_MB = 500
+COMPRESS_FALLBACK_SHARE = 0.9
+
+
+def compress_fallback_enabled(env: dict | None = None) -> bool:
+    raw = (env if env is not None else os.environ).get(COMPRESS_FALLBACK_FLAG, "")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def chunked_fit_mb(spare: int, cap_mb: int = COMPRESS_FALLBACK_CAP_MB) -> int:
+    """The largest size in whole MB (up to `cap_mb`) whose chunked upload, at Meta's real 5 MB windows and with the retry
+    slack, fits into `spare` Graph calls. 0: nothing fits."""
+    best = 0
+    for mb in range(1, int(cap_mb) + 1):
+        # (a small file still goes through the chunked path here: start, transfer and finish are calls too)
+        calls = max(upload_calls(mb * 1024 * 1024, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
+        if calls + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * calls)) <= spare:
+            best = mb
+        else:
+            break
+    return best
+
+
+def upload_calls(size: int, worker: bool | None = None, *, chunked: bool = False) -> int:
+    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом.
+
+    ACL-2629: путь воркера (по умолчанию) считает исходный размер и куски по 64 МБ; запасной путь -
+    куски по 8 МБ (`worker=False`).
+    """
+    worker = worker_upload_enabled() if worker is None else worker
+    if size <= single_request_max(worker):
+        return 0
+    if worker and not chunked and resumable_upload_enabled():
+        return resumable_calls()          # ACL-2639: the file-API upload is the primary path (a few Graph calls)
+    # Chunked path: Meta's windows are about 5 MB in practice, not the 64 MB ceiling (ACL-2639, live 15.11).
+    chunks = -(-size // (min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker else VIDEO_CHUNK_STAGED_MAX))
+    # ACL-2637: on the worker path Meta's windows may start at 1 MB and grow; a doubling ramp to 64 MB costs about
+    # this many calls more than 64 MB windows from the first byte (only when the file has that many chunks at all).
+    ramp = min(CALLS_UPLOAD_WINDOW_RAMP, chunks) if worker and chunks > 1 else 0
+    return chunks + ramp + CALLS_UPLOAD_FIXED
+
+
+#: ACL-2637: calls reserved for a growing upload window (1, 2, 4 ... 64 MB) on the worker path.
+CALLS_UPLOAD_WINDOW_RAMP = 6
+
+#: Ожидание обработки видео (ACL-2668, решение 16): без потолка - публикация не останавливается, пока Meta
+#: обрабатывает видео; стоп только по ошибке обработки. Опрос раз в 15 с, после `VIDEO_POLL_SLOW_AFTER`
+#: опросов - раз в `VIDEO_POLL_MAX_S` (большие видео обрабатываются десятки минут). Отмена задания работает всегда.
 VIDEO_POLL_S = 15.0
-VIDEO_MAX_POLLS = 20
+VIDEO_POLL_MAX_S = 60.0
+VIDEO_POLL_SLOW_AFTER = 20
+VIDEO_CANCEL_SLICE_S = 1.0      # пауза опроса режется на куски: отмена слышна за секунду
 
 #: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
 #: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
@@ -207,12 +321,46 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
         total += CALLS_PER_VIDEO_POLLS * sum(1 for a in ad_set.ads if a.kind == "video")
     if any(x.instant for x in plan.ad_sets):
         total += CALLS_INSTANT_FORM
+        # ACL-2571: one upload of the template's picture to the campaign's Page per such template.
+        total += len({a.form_template["id"] for x in plan.ad_sets for a in x.ads
+                      if a.form_template and a.form_template.get("cover_local_sha256")})
     return total
 
 
 #: ACL-2370: запас на повторы кусков (ACL-2000, докачка со смещения): 5% кусков, не меньше двух вызовов.
 CHUNK_RETRY_SLACK_FRACTION = 0.05
 CHUNK_RETRY_SLACK_MIN = 2
+#: ACL-2637: Meta picks every upload window itself ("We send you new offsets for each chunk", Business Creative
+#: Asset Management guide) - a small first window (1 MB seen live 2026-11-14) may grow on later transfer answers.
+#: So a small window is judged only after this many transfer answers; until then only the hard cap stops.
+UPLOAD_WINDOW_PROBE_TRANSFERS = 3
+#: How fast a growing window is assumed to keep growing when the rest of the calls is projected (at most doubling).
+UPLOAD_WINDOW_GROWTH_MAX = 2.0
+
+
+def project_upload_calls(remaining: int, windows: list[int], cap: int, *, limit: int = 100_000) -> int:
+    """ACL-2637: transfer calls still needed for `remaining` bytes, from the windows Meta offered so far.
+
+    Steady or shrinking windows: remaining / last window. Growing windows: the last growth ratio (at most doubling)
+    is assumed to go on up to `cap`, the chunk ceiling of this path. Counting stops at `limit` (the caller compares).
+    """
+    if remaining <= 0:
+        return 0
+    last = max(1, min(windows[-1] if windows else 1, cap))
+    prev = max(1, min(windows[-2], cap)) if len(windows) >= 2 else last
+    growth = min(UPLOAD_WINDOW_GROWTH_MAX, last / prev)
+    if growth <= 1.0 or last >= cap:
+        return -(-remaining // last)
+    n, w = 0, float(last)
+    while remaining > 0 and n < limit:
+        remaining -= int(min(w, cap))
+        n += 1
+        w = min(float(cap), w * growth)
+    return n
+
+
+def _mb(n: int) -> str:
+    return f"{n / (1024 * 1024):.0f} MB" if n >= 10 * 1024 * 1024 else f"{n / (1024 * 1024):.1f} MB"
 
 
 def video_files_of(plan: "CampaignPlan") -> list[str]:
@@ -231,15 +379,111 @@ def video_files_of(plan: "CampaignPlan") -> list[str]:
     return list(seen)
 
 
-def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
+def video_compress_limit_mb() -> float:
+    """Compression threshold in MB: `ACL_VIDEO_COMPRESS_ABOVE_MB` or the compressor's default."""
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    limit = _cc.DEFAULT_LIMIT_MB
+    raw = os.environ.get("ACL_VIDEO_COMPRESS_ABOVE_MB", "").strip()
+    try:
+        if raw and float(raw) > 0:
+            limit = float(raw)
+    except ValueError:
+        pass
+    return limit
+
+
+def planned_upload_size(path: str, original: int) -> int:
+    """ACL-2621: размер файла, который реально уйдёт в Meta (байты).
+
+    Видео выше порога `_video_for_upload` сжимает (ACL-2000). Уже есть детерминированная копия в кэше -
+    берём её размер; иначе, если сжиматель сработает (есть ffmpeg), берём сам порог (копия не больше него);
+    исходный размер - только когда сжимать нечем.
+    """
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    if worker_upload_enabled():
+        return original       # ACL-2629: the original goes up from the worker, nothing is compressed
+    limit = video_compress_limit_mb()
+    if original <= limit * 1048576:
+        return original
+    try:
+        copy = _cc.cache_path(path, _cc.DEFAULT_TARGET_MB)
+        cached = _disk_size(str(copy)) if copy.is_file() else 0
+        if 0 < cached <= min(limit * 1048576, original):
+            return cached
+        if _cc.ffmpeg_exe():
+            return int(limit * 1048576)
+    except Exception:  # noqa: BLE001 - оценка не должна ронять проверку плана
+        pass
+    return original
+
+
+def video_upload_calls(size: int, compressed: bool = False, worker: bool | None = None) -> int:
+    """THE count of Graph calls for uploading one video of `size` bytes (no retry slack): the plan (`publish_api`, via
+    `estimate_upload_calls`), `_prepare` and the chunked allowance all use this one. A compressed copy is always
+    uploaded in chunks, so at least start + transfer + finish."""
+    if compressed:
+        return max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
+    return upload_calls(size, worker)
+
+
+def _chunked_cost(size: int, compressed: bool = False) -> int:
+    """`video_upload_calls` of the chunked path with the retry slack (the compress planning compares this with a spare)."""
+    calls = video_upload_calls(size, True, True) if compressed else upload_calls(size, True, chunked=True)
+    return calls + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * calls)) if calls else 0
+
+
+def plan_upload_sizes(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None,
+                      spare: int | None = None) -> dict[str, tuple[int, bool]]:
+    """ACL-2639: path -> (planned upload bytes, will be compressed) of every video of the plan.
+
+    The planned size is the original unless the chunked upload (5 MB windows) of all large videos together would not fit
+    `spare` Graph calls and the compress fallback is on: then ONE size cap C (MB, at most COMPRESS_FALLBACK_CAP_MB) is
+    chosen - the largest for which everything fits - and every video above C is planned at C * 0.9 (the size
+    `_fit_for_chunks` aims at). Only on the chunked primary path (the fast upload off), the worker path, and a known
+    spare; otherwise the originals are planned, as before."""
+    size_of = size_of or _disk_size
+    sizes = {p: planned_upload_size(p, size_of(p)) for p in video_files_of(plan)}
+    result = {p: (s, False) for p, s in sizes.items()}
+    if (spare is None or not worker_upload_enabled() or resumable_upload_enabled()
+            or not compress_fallback_enabled()):
+        return result
+    large = [p for p, s in sizes.items() if upload_calls(s, True, chunked=True)]
+    if not large or sum(_chunked_cost(sizes[p]) for p in large) <= spare:
+        return result
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    if not _cc.ffmpeg_exe():
+        return result                                      # nothing to compress with: the originals are planned (and refused)
+    best = 0
+    for cap in range(1, COMPRESS_FALLBACK_CAP_MB + 1):
+        total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576
+                    else _chunked_cost(int(cap * COMPRESS_FALLBACK_SHARE * 1048576), True) for p in large)
+        if total > spare:
+            break
+        best = cap
+    if best:
+        for p in large:
+            if sizes[p] > best * 1048576:
+                result[p] = (int(best * COMPRESS_FALLBACK_SHARE * 1048576), True)
+    return result
+
+
+def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None,
+                          spare: int | None = None) -> int:
     """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
 
     Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
-    `estimate_create_calls`). Верхняя оценка: проверка плана читает исходный файл, а запуск может
-    сжать его до загрузки.
+    `estimate_create_calls`). ACL-2621: считаем размер того, что реально уйдёт (`planned_upload_size`),
+    а не исходника: запуск сжимает тяжёлое видео до загрузки. ACL-2639: с известным `spare` (вызовов, которые
+    потолок прогона оставляет загрузкам) видео, не влезающие кусками, считаются по размеру сжатой копии.
     """
     size_of = size_of or _disk_size
-    chunks = sum(upload_calls(size_of(path)) for path in video_files_of(plan))
+    planned = plan_upload_sizes(plan, size_of, spare)
+    chunks = 0
+    for _path, (size, compressed) in planned.items():
+        chunks += video_upload_calls(size, compressed)
     if not chunks:
         return 0
     return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
@@ -268,8 +512,11 @@ CREATIVE_LOOKUP_PAGES = 3
 STALE_WARNING = "An earlier creative with other media was found and not reused; a new creative was created."
 STALE_WARNING_REUSED = ("An earlier creative with other media was found and not reused; "
                         "a matching creative was used instead.")
+GONE_WARNING = ("A creative remembered from an earlier run no longer exists in Meta; "
+                "it was dropped and a new creative was created.")
+GONE_WARNING_REUSED = ("A creative remembered from an earlier run no longer exists in Meta; "
+                       "a matching creative was used instead.")
 ORDER_WARNING = "The creative carries the same files in another order; accepted."
-RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
@@ -290,6 +537,20 @@ SUPPORTED_OBJECTIVES = frozenset({"leads"})
 #: ACL-2250: повтор имени получает счётчик в конце: `<имя> copy <n>` (у кампании и всех её наборов).
 COPY_WORD = " copy "
 #: Остановки выбора имени: в Check plan это ERROR правила имени, а не сбой плана.
+#: ACL-2583 / ACL-2578 (owner decision): a read by id that keeps failing is never a stop. It is retried (about 30 s in
+#: total: one try plus three pauses), and if Meta still does not answer the publish continues as a NEW operation under a
+#: distinct `<name> copy <n>` name. A possible duplicate is accepted; the same name is never reused.
+TRANSIENT_READ_WAITS_S = (10.0, 10.0, 10.0)
+MSG_CONTINUED_AS_COPY = ('Meta did not answer when ACL checked the earlier campaign of this publish, so this publish '
+                         'continues as a new campaign named "{name}". If the earlier campaign is still in Ads Manager, '
+                         "it is left as it is.")
+MSG_CAMPAIGN_REWRITTEN = ('The earlier attempt to create the campaign "{old}" got no answer from Meta, and ACL could not '
+                          'find it afterwards. This publish created a new campaign named "{name}". A possible '
+                          'duplicate "{old}" (PAUSED) may exist in Ads Manager; it is left as it is.')
+MSG_CAMPAIGN_UNKNOWN_STOP = ('Meta did not answer the campaign write several times in a row, and ACL could not find the '
+                             'campaign "{name}" afterwards. Nothing else was written. Check the campaigns of this '
+                             'ad account in Ads Manager (possible PAUSED duplicates) before publishing again.')
+MAX_CAMPAIGN_REWRITES = 5
 NAME_STOPS = ("name_taken", "name_unsure", "name_too_long", "name_receipt")
 #: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
 #: копий за её пределами могло не быть видно - тогда ищем точнее.
@@ -343,10 +604,14 @@ class CreationStopped(RuntimeError):
     """Создание кампании остановлено; что уже создано — в `created`."""
 
     def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped",
-                 failure: Any = None):
+                 failure: Any = None, not_found: bool = False, run_continues: bool = False):
         super().__init__(message)
+        #: Unknown result that stays unknown after the re-send: only this campaign stops, the run goes on.
+        self.run_continues = run_continues
         self.created = dict(created or {})
         self.kind = kind
+        #: ACL-1856: an unknown write that the readback looked for and did not find (not "could not look").
+        self.not_found = not_found
         #: ACL-2392: the plain text for the buyer (`plain_errors.Failure`); None -> classified from the message.
         self.failure = failure
 
@@ -435,8 +700,14 @@ class AdSetPlan:
 
     @property
     def dynamic(self) -> bool:
-        """Набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774)."""
-        return any(a.multi_text for a in self.ads)
+        """Website-набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774).
+
+        ACL-2584: Instant Form не Dynamic Creative: несколько текстов идут лентой с правилами площадок (форма
+        Ads Manager), набор обычный и берёт объявлений сколько позволит Meta.
+        """
+        # ACL-2611: несколько текстов + вертикальный файл - лента с метками и правилами (форма Ads Manager),
+        # не Dynamic Creative: набор обычный.
+        return not self.instant and any(a.multi_text and not a.vertical_path for a in self.ads)
 
 
 @dataclass
@@ -602,12 +873,15 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         if warnings is not None:
             warnings.append(f"Ad {i}: the same file was selected as main and Stories / Reels; "
                             "it will be used once as the main file.")
-    if plan_ad.multi_text and vertical:
-        # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
-        # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
-        problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
-    if plan_ad.bodies and not plan_ad.body:
-        problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
+    if vertical and plan_ad.multi_text and not plan_set.instant and not plan_ad.titles:
+        # Website без заголовка с лентой текстов не проверен (политика откажет при записи) - говорим сразу.
+        problems.append(f"Ad {i}: several texts with a Stories / Reels file need a headline on a Website ad; "
+                        "add a headline or switch the ad set to Instant Form")
+    # ACL-2611: несколько текстов + вертикальный файл больше не отказ. Живой прогон 2026-10-14 (ACL-1774): Meta
+    # отказала ленте с НЕразмеченными текстами и двумя правилами; ACL-2584 (12.11): тексты с метками правил принят.
+    # Все тексты идут на основной файл, первый текст каждого вида - ещё и на Stories/Reels (`feed_spec`).
+    # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 never blocks. `bodies` already
+    # holds only the non-empty texts in order; with none, the ad goes without a primary text (warning only).
     if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
         problems.append(f"Ad {i}: the Stories / Reels file was not found")
     if vertical:
@@ -618,10 +892,6 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         elif plan_ad.vertical_kind != plan_ad.kind:
             problems.append(f"Ad {i}: the main file is {plan_ad.kind} and the Stories / Reels file is "
                             f"{plan_ad.vertical_kind}; use two images or two videos")
-    if plan_ad.uses_feed and plan_set.instant:
-        problems.append(f"Ad {i}: several texts and a Stories / Reels file work only with a Website ad set "
-                        "for now (Instant Form with an asset feed is not verified on Meta yet); "
-                        "use one text and one file, or switch the ad set to Website")
 
 
 def placement_targeting(placements: dict | None) -> dict:
@@ -865,6 +1135,13 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                     elif not main_pos or not vert_pos:
                         # Один тип площадок не требует непроверенных правил для пустой второй группы.
                         problems.append(f"Ad {i}: the current app mapping for a two-file pair needs both Feed and Stories / Reels placements; clear the unused file and use the required file as main")
+            if (plan_set.instant and planned_ad.uses_feed and plan_set.placements is not None
+                    and plan_set.placements.get("mode") == "manual"):
+                # The main rule is an empty catch-all now: test the real placement groups.
+                feed_pos, vert_pos = CampaignCreator.rule_positions(plan_set.placements)
+                if not feed_pos or not vert_pos:
+                    problems.append(f"Ad {i}: several texts on an Instant Form use two placement rules (Feed and "
+                                    "Stories / Reels); select both Feed and Stories / Reels placements, or use one text")
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
             if template_id and plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: choose either an existing form or a template, not both")
@@ -879,6 +1156,11 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                         problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
                                         + "; ".join(errs))
                     else:
+                        if clean.get("cover_local_sha256") and not _cover_store.exists(clean["id"], clean["cover_local_sha256"]):
+                            # ACL-2571: the picture file is on another computer. Never a wrong Page's photo:
+                            # this form is created (or found) as the same template without a background.
+                            warnings.append(f"Ad {i}: {_fc.MSG_COVER_ON_OTHER_COMPUTER.format(name=clean['name'])}")
+                            clean = {k: v for k, v in clean.items() if k != "cover_local_sha256"}
                         try:   # ACL-2180: Auto -> код из языка и страны, до любой записи
                             clean, note = _fl.resolve_template(
                                 clean, str(getattr(draft, "language", "") or ""), str(draft.country or ""))
@@ -899,11 +1181,29 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     for dup in sorted({x.name for x in ad_sets if set_names.count(x.name.casefold()) > 1}):
         problems.append(f"Two ad sets are named {dup!r}; ad set names in a campaign must differ")
     for x in ad_sets:
-        names = [a.name for a in x.ads]
-        for dup in sorted({n for n in names if names.count(n) > 1}):
-            idx = ", ".join(str(a.index) for a in x.ads if a.name == dup)
-            problems.append(f"Ads {idx} would all be named {dup!r}; give them different creatives "
-                            "or ad texts (names must differ inside a campaign)")
+        # ACL-2538: the same file with the same text twice is not a buyer error:
+        # the later ads get " 2", " 3"... and Check plan shows a note.
+        seen: dict[str, int] = {}
+        for a in x.ads:
+            if a.name not in seen:
+                seen[a.name] = a.index
+        used = set(seen)
+        counts: dict[str, int] = {}
+        for a in x.ads:
+            first = seen[a.name]
+            if a.index == first:
+                continue
+            base = a.name
+            n = counts.get(base, 1)
+            while True:
+                n += 1
+                cand = f"{base} {n}"
+                if cand not in used:
+                    break
+            counts[base] = n
+            used.add(cand)
+            a.name = cand
+            warnings.append(f"Ad {a.index} named {cand!r} because Ad {first} has the same creative and text")
     if problems:
         raise PlanError("; ".join(problems))
     name = str(draft.name).strip()
@@ -955,6 +1255,8 @@ class AccountFacts:
     #: Минимальный дневной бюджет кабинета в мелких единицах (`min_daily_budget` Meta); None - не прочитан (ACL-1443).
     min_daily_budget: int | None = None
     page_names: dict[str, str] = field(default_factory=dict)
+    #: ACL-2814: имена пикселей кабинета (уже прочитаны в preflight, без нового запроса) - для текста отказа Meta.
+    pixel_names: dict[str, str] = field(default_factory=dict)
     # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
     page_sources: dict[str, str] = field(default_factory=dict)
     profile_loader: Callable[["AccountFacts"], None] | None = field(default=None, repr=False, compare=False)
@@ -1002,6 +1304,8 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
         offset = None
     facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                          pixels=[str(p.get("id")) for p in pixels if p.get("id")],
+                         pixel_names={str(p.get("id")): str(p.get("name") or "").strip() for p in pixels
+                                      if p.get("id") and str(p.get("name") or "").strip()},
                          pages=[], page_names={}, page_sources={},
                          utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip(),
                          min_daily_budget=_minor_or_none(acc.get("min_daily_budget")))
@@ -1091,15 +1395,19 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
-                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.", key="pixel_unavailable")
+                            f"({len(facts.pixels)} found). Choose another pixel in the Pixel field "
+                            "instead of letting another one be picked.", key="pixel_unavailable")
     elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
         return
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
     else:
-        raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
-                        "the API backend needs exactly one", key="pixel_unavailable")
+        if facts.pixels:
+            raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets. "
+                            "Choose one in the Pixel field of the campaign, then Check again.", key="pixel_unavailable")
+        raise PlanError("The ad account has no pixel/dataset. Website ad sets need one: create a pixel "
+                        "in Events Manager, then Refresh pixels in the Pixel field.", key="pixel_unavailable")
 
 
 def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
@@ -1463,15 +1771,49 @@ def _md5(data: "bytes | LargeFile") -> str:
     return hashlib.md5(data).hexdigest()  # noqa: S324 — только имя/поиск, не защита
 
 
-def image_name(path: str, data: bytes) -> str:
-    """Имя картинки в библиотеке кабинета: `acl-<md5[:16]><ext>` (помощник его не меняет)."""
-    ext = Path(path).suffix.lower()
+def image_name(path: str, data: bytes, ext: str = "") -> str:
+    """Имя картинки в библиотеке кабинета: `acl-<md5[:16]><ext>` (помощник его не меняет).
+
+    `ext` (ACL-2575): расширение после локальной конвертации WebP -> PNG/JPEG; иначе - от исходного файла."""
+    ext = ext or Path(path).suffix.lower()
     ext = ext if ext in IMAGE_EXT else ".jpg"
     return f"acl-{_md5(data)[:16]}{ext}"
 
 
+_STORED_SUFFIX = re.compile(r"(?:_\d+)+$")
+
+
+def stored_image_name(expected: str, actual: str) -> str:
+    """ACL-2578: Meta may append `_<digits>` to the library name of an uploaded image (`acl-<md5>.png_105`).
+
+    Uploading the same image twice can add the suffix again (`acl-<md5>.png_105_105`). It is still our file: the
+    suffixes alone are not a difference. Any other name stays as Meta returned it.
+    """
+    text = str(actual or "")
+    if text != expected and _STORED_SUFFIX.sub("", text, count=1) == expected:
+        return expected
+    return text
+
+
 def video_title(tag: str, data: bytes) -> str:
     return f"acl-{tag}-{_md5(data)[:12]}"
+
+
+def video_title_matches(title: str, content: str) -> bool:
+    """Our video title (`acl-<tag>-<md5[:12]>`) of any campaign with this content hash."""
+    return bool(content) and title.startswith("acl-") and title.endswith(f"-{content}")
+
+
+def throughput_mb_s(size: int, seconds: float) -> float | None:
+    return round(size / 1048576 / seconds, 2) if seconds > 0 and size > 0 else None
+
+
+def _speed_text(size: int, seconds: float) -> str:
+    """'180 MB, 2m 05s, 1.4 MB/s' - the size and speed of one upload, so a slow proxy is visible."""
+    secs = int(round(seconds))
+    span = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+    rate = throughput_mb_s(size, seconds)
+    return f"{_mb(size)}, {span}" + (f", {rate:.1f} MB/s" if rate is not None else "")
 
 
 @dataclass
@@ -1490,6 +1832,8 @@ class Outcome:
     readback: dict = field(default_factory=dict)
     error: str = ""
     stop_kind: str = ""
+    #: The stop is an unknown write result that stays unresolved after the re-send: the next campaigns still publish.
+    run_continues: bool = False
     #: Объявление → что мы ему дали: creative_id, image_hash / video_id (для сверки, B2).
     ad_media: dict = field(default_factory=dict)
     #: Пробный запуск: что было бы создано (ни одной записи).
@@ -1510,10 +1854,39 @@ class Outcome:
     name_receipt_done: tuple = ()
     #: ACL-2250: номер счётчика в имени (0 - имя из билдера); в строку телеметрии.
     copy_number: int = 0
+    #: ACL-1856: сводка журнала операции (id, состояния этапов, подтверждённые id); пусто без журнала.
+    operation: dict = field(default_factory=dict)
 
     @property
     def mismatches(self) -> list[dict]:
         return list(self.readback.get("mismatches") or [])
+
+
+class _AliveUnknown(Exception):
+    """ACL-2583: the journal's campaign could not be read after the retries; `copy_number` is its name's counter."""
+
+    def __init__(self, copy_number: int, campaign_id: str) -> None:
+        super().__init__(campaign_id)
+        self.copy_number = copy_number
+        self.campaign_id = campaign_id
+
+
+class _SwitchCopy(Exception):
+    """ACL-2583: the journal's operation already wrote (or may have written) the campaign under copy name `n`, but the
+    name choice lags behind Meta's search and picked a lower counter. The run continues under copy `n`."""
+
+    def __init__(self, copy_number: int) -> None:
+        super().__init__("switch copy")
+        self.copy_number = copy_number
+
+
+class _CampaignRewrite(Exception):
+    """ACL-2583: the campaign write's result stayed unknown and the readbacks found nothing. The name search is exactly
+    what lags behind Meta, so the caller must not write the campaign again under the SAME name."""
+
+    def __init__(self, copy_number: int) -> None:
+        super().__init__("campaign rewrite")
+        self.copy_number = copy_number
 
 
 @dataclass
@@ -1533,6 +1906,41 @@ class NameChoice:
     @property
     def renamed(self) -> bool:
         return self.copy_number > 0
+
+
+#: Pages of `/act_X/advideos` the resume check reads to see that a video belongs to this ad account.
+RESUME_VIDEO_LIST_PAGES = 3
+
+
+def resume_verify_calls(stages: "list[tuple[str, dict]]") -> int:
+    """Upper bound of the Graph reads `_verify_resume` makes for these confirmed stages."""
+    kinds = [st["kind"] for _k, st in stages]
+    reads = sum(1 for k in kinds if k in ("campaign", "creative", "image", "video"))
+    if "video" in kinds:
+        reads += RESUME_VIDEO_LIST_PAGES     # the ad account's video listing, read once (ACL-2618)
+    sets, ads = kinds.count("adset"), kinds.count("ad")
+    if sets or ads:
+        reads += 2                           # the ad set listing (two pages at most)
+    if ads:
+        reads += 2 * (sets + 1)              # one ad listing per ad set (two pages at most)
+    return reads
+
+
+def plan_copy_number(plan: CampaignPlan, submitted_view: dict) -> int:
+    """Copy number of the chosen plan against the name that was submitted (0 = the builder's own name)."""
+    base = str(submitted_view.get("name") or "")
+    prefix = f"{base}{COPY_WORD}"
+    if plan.name.startswith(prefix) and plan.name[len(prefix):].isdigit():
+        return int(plan.name[len(prefix):])
+    return 0
+
+
+def name_copy_number(name: str, base: str) -> int:
+    """Copy number carried by `name` against the builder's `base` name (0 = the base itself or an unrelated name)."""
+    prefix = f"{base}{COPY_WORD}"
+    if base and name.startswith(prefix) and name[len(prefix):].isdigit():
+        return int(name[len(prefix):])
+    return 0
 
 
 def copy_name(base: str, n: int) -> str:
@@ -1567,11 +1975,66 @@ def family_rows(base: str, rows: list[dict]) -> dict[int, list[dict]]:
     return fam
 
 
-#: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
-#: page aborts its own request at a deadline, so `network_timeout` means the first request is finished): after two empty
-#: readbacks it is sent once more (a file upload never is). `cdp_timeout` (a tab frozen for the whole CDP wait: a queued
-#: POST may still start later), `context_stale` and `page_closed` only name the cause and stop.
-RESEND_REASONS = frozenset({"network", "network_timeout"})
+#: ACL-1856: тексты остановок по журналу операции (English, для человека).
+MSG_JOURNAL = ("Progress could not be saved on this computer, so nothing was written to Meta. "
+               "Free some disk space or check the folder permissions, then publish again.")
+MSG_UNEXPECTED = ("Something unexpected went wrong. What was already created stays in Meta (campaign PAUSED). "
+                  "Publish again to continue; nothing will be created twice.")
+MSG_MISMATCH = ('"{name}" was changed or removed in Ads Manager after it was created. '
+                "Fix or delete it there, then publish again.")
+MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campaign. '
+                     "Delete or move it, then publish again.")
+def video_error_reason(status: dict) -> str:
+    """Причина Meta из `status` видео с ошибкой обработки (ACL-2668): тексты ошибок фаз, иначе пусто."""
+    texts: list[str] = []
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        for err in part.get("errors") or []:
+            text = str((err or {}).get("message") or "").strip() if isinstance(err, dict) else str(err).strip()
+            if text and text not in texts:
+                texts.append(text)
+    err = status.get("error")
+    text = str(err.get("message") or "").strip() if isinstance(err, dict) else str(err or "").strip()
+    if text and text not in texts:
+        texts.append(text)
+    return "; ".join(texts)
+
+
+def video_failed(status: dict, state: str) -> bool:
+    """Конечное состояние без готовности (ACL-2668): `error`, `expired` или ошибка любой фазы - ждать дальше нечего."""
+    if state in ("error", "expired"):
+        return True
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        if str(part.get("status") or "").lower() in ("error", "expired"):
+            return True
+    return False
+
+
+def video_progress_text(status: dict) -> str:
+    """` (45%)` по `processing_progress` Meta, если она его дала; иначе пусто."""
+    try:
+        pct = int(status.get("processing_progress"))
+    except (TypeError, ValueError):
+        return ""
+    return f" ({max(0, min(100, pct))}%)"
+
+
+def _wait_span(seconds: float) -> str:
+    s = max(0, int(seconds))
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60:02d} s"
+
+
+MSG_VIDEO_NOT_READY = ("Meta could not process the video for {name}. Replace the video, then publish again.")
+MSG_BUSY = ("Another run is creating {what} right now. Publish again when it is done. "
+            "Nothing was created twice.")
+MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
+                  "is no longer in Ads Manager; this is a new publish.")
+MSG_SUPERSEDED_RENAMED = ("The earlier campaign was renamed in Ads Manager and is left as it is; "
+                          "a new campaign is created for this publish.")
+#: Вид объекта по ребру записи (для журнала).
+_EDGE_KIND = {"campaigns": "campaign", "adsets": "adset", "ads": "ad", "adcreatives": "creative",
+              "adimages": "image", "advideos": "video"}
 
 
 class CampaignCreator:
@@ -1584,16 +2047,26 @@ class CampaignCreator:
                  read_range: Callable[[str, int, int], bytes] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
-                 video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
-                 video_max_polls: int = VIDEO_MAX_POLLS,
+                 video_poll_s: float = VIDEO_POLL_S, video_poll_max_s: float = VIDEO_POLL_MAX_S,
                  reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None,
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  live_progress: Callable[[str], None] = lambda _s: None,
-                 compress_video: Callable[[str], Any] | None = None):
+                 compress_video: Callable[[str], Any] | None = None,
+                 compress_to_fit: Callable[[str, float, float], Any] | None = None,
+                 journal: "_oj.OperationJournal | None" = None, request_key: str = "", slot: int = 0):
         self.client = client
+        #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
+        self.journal = journal
+        #: ACL-1856: the submit key of the page (bound per campaign); the journal refuses its reuse for another plan.
+        self.request_key = request_key
+        #: ACL-1856: position of the draft in its submit; part of the operation identity (two identical drafts = two).
+        self.slot = int(slot)
+        self._op: "_oj.Operation | None" = None
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
+        #: ACL-2639: `fn(path, limit_mb, target_mb) -> Prepared` for the compress-to-fit fallback; None - the real compressor.
+        self.compress_to_fit = compress_to_fit
         #: ACL-2353: снимок ревью задания (имя кампании -> fp, Page, пиксель); None - без ревью.
         self.reviewed: dict | None = None
         self.facts = facts
@@ -1605,9 +2078,8 @@ class CampaignCreator:
         self.read_range = read_range
         self.sleep = sleep
         self.clock = clock
-        self.video_wait_s = video_wait_s
         self.video_poll_s = video_poll_s
-        self.video_max_polls = video_max_polls
+        self.video_poll_max_s = max(video_poll_s, video_poll_max_s)
         self.reconcile_wait_s = RECONCILE_WAIT_S if reconcile_wait_s is None else reconcile_wait_s
         #: Имя → id наших креативов (список кабинета читается раз на кампанию).
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
@@ -1619,6 +2091,8 @@ class CampaignCreator:
         #: Шаблоны форм плана -> что с ними будет (ACL-1776); читается в `_check_forms`.
         self._form_steps: dict[str, _fc.FormStep] = {}
         self._form_warnings: list[str] = []
+        #: ACL-2571: template id -> photo id of its local picture uploaded to this plan's Page (before any write).
+        self._cover_ids: dict[str, str] = {}
         self.progress = progress
         self.now = now
         #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
@@ -1709,6 +2183,8 @@ class CampaignCreator:
                                     "metric": "video_upload", "mode": mode, "bytes": len(data),
                                     "md5": _md5(data)[:12],
                                     "upload_s": round(float(self.clock() - began), 1)}
+            if mode != "found":
+                diag["mb_s"] = throughput_mb_s(len(data), float(self.clock() - began))
             if error is not None:
                 details = getattr(error, "details", None) or {}
                 diag.update(error=type(error).__name__, kind=getattr(error, "kind", ""),
@@ -1721,7 +2197,7 @@ class CampaignCreator:
     def _page_timeout(exc: BaseException) -> bool:
         """Страница не приняла кусок вовремя: файл не лёг в неё, к Meta ничего не ушло."""
         text = str(exc)
-        return "(no_file" in text and ("did not answer" in text or "timed out" in text)
+        return "(no_file" in text and ("did not answer" in text or "timed out" in text or "worker" in text)
 
     def _check_cancel(self, out: Outcome) -> None:
         if self.cancelled():
@@ -1750,6 +2226,387 @@ class CampaignCreator:
             self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
         return show
 
+    # -- ACL-1856: журнал операции
+    @staticmethod
+    def _journal_event(event: str, **diag: Any) -> None:
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            run_telemetry.record(event, True, diag={"source": "api", **diag})
+        except Exception:  # noqa: BLE001 - телеметрия не должна ронять запись
+            pass
+
+    def _journaled(self, out: Outcome, what: str, kind: str, send: Callable[[], str],
+                   find: Callable[[], str | None], *, name: str = "", content_md5: str = "") -> str:
+        """Протокол журнала вокруг одной записи (спека §2.1): `sent` ДО отправки, итог - после.
+
+        Без журнала - просто `send()`. Этап, оставшийся `sent`/`unknown` с прошлого запуска, сначала ищется
+        чтением: нашли - принимаем; не нашли - повторное чтение через ~30 с, затем запись заново (без стопа по времени).
+
+        ACL-2583: only the CAMPAIGN name is protected. A campaign stage that is still not found after the second read
+        raises `_CampaignRewrite` (the caller continues under the next "<name> copy N"), because the name search is the
+        part of Meta that lags. Ad sets and ads written again inside our own campaign keep their names (a duplicate
+        is acceptable; the owner rule protects campaign names).
+        """
+        op = self._op
+        if op is None:
+            return send()
+        self._check_cancel(out)
+        op.refresh()                  # another process may have moved this stage since the operation was opened
+        old = op.stage(what)
+        if (old and old["state"] == _oj.CONFIRMED and old["object_id"] and kind != "creative"
+                and old.get("owner") and old["owner"] != op.owner):
+            self._step(out, f"{what}: already created by another run")
+            return str(old["object_id"])
+        if old and old["state"] in (_oj.SENT, _oj.UNKNOWN):
+            found = find()
+            if found:
+                self._step(out, f"{what}: found by readback from an earlier run")
+                self._journal_event("unknown_adopted", what=what)
+                self._journal_confirm(out, what, str(found))
+                return str(found)
+            # Looked and found nothing. ACL-2583 owner rule: no time-based stop. When the outcome is really unknown
+            # (a stage left `sent`, or an unknown one the readback could not settle) read back once more after the
+            # same ~30 s pause as a transient read; still nothing -> write again (a duplicate is acceptable, the
+            # objects are PAUSED and the name is never reused). A campaign stage is never sent again under its name, settled or not.
+            settled = old["state"] == _oj.UNKNOWN and old.get("note") == _oj.NOT_FOUND_NOTE
+            if kind == "campaign" and settled:
+                # "Settled as not found" is only the first run's own name search, which is the part of Meta that lags.
+                raise _CampaignRewrite(int(op.data.get("copy_number") or 0))
+            if not settled:
+                self._step(out, f"{what}: result of the earlier write is unknown, reading it back once more")
+                self._pause(sum(TRANSIENT_READ_WAITS_S))
+                if hasattr(self.client, "max_calls"):
+                    self.client.max_calls += 1
+                found = find()
+                if found:
+                    self._step(out, f"{what}: found by the second readback")
+                    self._journal_event("unknown_adopted", what=what)
+                    self._journal_confirm(out, what, str(found))
+                    return str(found)
+                if kind == "campaign":
+                    # Only the campaign NAME is protected (owner rule): the caller continues as a new operation under
+                    # the next "<name> copy N". Ad sets and ads written again inside our own campaign keep their names.
+                    raise _CampaignRewrite(int(op.data.get("copy_number") or 0))
+                self._step(out, f"{what}: not found, writing it again (a duplicate is possible; objects are PAUSED)")
+                self._journal_event("unknown_rewritten", what=what)
+        try:
+            op.begin(what, kind, name=name, content_md5=content_md5, supersede=(kind == "creative"))
+        except _oj.StageBusy as exc:
+            raise CreationStopped(MSG_BUSY.format(what=what), created=out.created, kind="busy") from exc
+        except _oj.JournalError as exc:
+            self._journal_event("journal_save_failed", what=what, phase="sent", error=type(exc).__name__)
+            raise CreationStopped(MSG_JOURNAL, created=out.created, kind="journal") from exc
+        try:
+            got = send()
+        except CreationStopped as exc:
+            state = {"unknown": _oj.UNKNOWN, "cancelled": _oj.CANCELLED}.get(exc.kind, "")
+            self._journal_mark(what, state, _oj.NOT_FOUND_NOTE if exc.not_found else exc.kind)
+            raise
+        except WritesBlocked:
+            self._journal_mark(what, _oj.NOT_SENT, "blocked")      # политика не пустила: в Meta не уходило
+            raise
+        except GraphError as exc:
+            self._journal_mark(what, _oj.REJECTED, type(exc).__name__)
+            raise
+        self._journal_confirm(out, what, str(got))
+        return str(got)
+
+    def _journal_confirm(self, out: Outcome, what: str, object_id: str) -> None:
+        """Подтверждение после записи: объект уже в Meta, потеря строки журнала - только предупреждение."""
+        try:
+            self._op.confirm(what, object_id)
+        except _oj.JournalError as exc:
+            self._journal_event("journal_save_failed", what=what, phase="confirmed", error=type(exc).__name__)
+            self._step(out, f"{what}: created, but the progress record could not be saved "
+                            "(the next run finds it by its tag)")
+
+    def _journal_mark(self, what: str, state: str, note: str = "") -> None:
+        if not state:
+            return
+        try:
+            self._op.mark(what, state, note)
+        except _oj.JournalError:
+            self._journal_event("journal_save_failed", what=what, phase=state)
+
+    def _finish_operation(self, out: Outcome, state: str, note: str = "") -> None:
+        if self._op is None:
+            return
+        try:
+            self._op.finish(state, note)
+        except _oj.JournalError:
+            self._journal_event("journal_save_failed", what="operation", phase=state)
+
+    def _snapshot_operation(self, out: Outcome) -> None:
+        if self._op is not None:
+            out.operation = self._op.summary()
+
+    def _plan_view(self, plan: CampaignPlan) -> dict:
+        """План для отпечатка: без предупреждений, пути файлов - только имена (кэш сжатого видео не меняет отпечаток)."""
+        from dataclasses import asdict
+
+        def norm(v: Any) -> Any:
+            if isinstance(v, dict):
+                return {k: (Path(x).name if k in ("path", "vertical_path") and isinstance(x, str) else norm(x))
+                        for k, x in v.items()}
+            if isinstance(v, (list, tuple)):
+                return [norm(x) for x in v]
+            return v
+        return norm(asdict(plan))
+
+    def _pause(self, left: float) -> None:
+        """Pause through the injected `sleep` in 5 s slices, keeping the run alive (heartbeat)."""
+        while left > 0:
+            step = min(5.0, left)
+            self.sleep(step)
+            left -= step
+            beat = getattr(self.client, "_beat", None)
+            if callable(beat):
+                beat()
+
+    def _get_retrying(self, path: str, params: dict) -> dict:
+        """Read by id; a transient failure (not "does not exist") is retried after short pauses (ACL-2583).
+
+        Rate limits and other Graph stops are not GraphError: they leave at once and stay a stop. The last GraphError
+        is raised when every try failed. The pause goes through the injected `sleep`, in slices that keep the run alive.
+        """
+        waits = TRANSIENT_READ_WAITS_S
+        for attempt in range(len(waits) + 1):
+            try:
+                return self.client.get(path, params)
+            except GraphError as exc:
+                if _object_gone(exc) or attempt == len(waits):
+                    raise
+                if hasattr(self.client, "max_calls"):
+                    self.client.max_calls += 1          # the retry read is part of this run's call budget
+                self._pause(float(waits[attempt]))
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _campaign_alive(self, campaign_id: str) -> "tuple[bool | None, str]":
+        """(still in Ads Manager - readable and not deleted/archived, its live name). Read only.
+
+        `None` = Meta did not answer after the retries: nothing is known about the campaign (ACL-2583).
+        """
+        try:
+            row = self._get_retrying(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
+        except GraphError as exc:
+            # ACL-2583 (Doc284): "does not exist / missing permissions" (100/33) is also what Meta answers for a live
+            # campaign it cannot load right now. For a campaign THIS draft recorded it never frees the name: unknown.
+            self._log_read_decision("alive_unknown", campaign_id, exc)
+            return None, ""
+        if not isinstance(row, dict) or str(row.get("id") or campaign_id) != campaign_id:
+            return None, ""
+        gone = ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
+                & {"DELETED", "ARCHIVED"})
+        if gone:
+            self._log_read_decision("gone_read", campaign_id, None, status=",".join(sorted(gone)))
+        return (not gone), str(row.get("name") or "")
+
+    def _log_read_decision(self, decision: str, campaign_id: str, exc: "GraphError | None", **extra: Any) -> None:
+        """ACL-2583: Graph code, subcode and message (ids masked) behind every gone/unknown decision about a campaign."""
+        diag: dict[str, Any] = {"decision": decision, "campaign": _mask_id(campaign_id), **extra}
+        if exc is not None:
+            diag.update(graph_code=exc.code, graph_subcode=exc.subcode,
+                        graph_message=str(exc).replace(campaign_id, _mask_id(campaign_id))[:300])
+        log.warning("campaign read decision: %s", json.dumps(diag, ensure_ascii=False, default=str))
+        self._journal_event("campaign_read_decision", **diag)
+
+    def _open_operation(self, plan: CampaignPlan, out: Outcome, files: dict, *,
+                        submitted: "tuple[dict, str] | None" = None, existing_id: str = "") -> str:
+        """Open the journal before the first write of the run.
+
+        The identity is the plan AS SUBMITTED (`submitted` = its view and tag, taken before name choice and any start
+        move) plus the draft slot, so it does not depend on what Meta holds or on the clock. The name chosen for this
+        run (`plan`, after the ACL-2250 choice) is kept in the record. An earlier record whose campaign is gone from
+        Ads Manager (the read by id fails, or DELETED/ARCHIVED), or that published under another name, is set aside and a
+        NEW operation starts. "Gone" is decided ONLY by that read by id, never by the name search missing the campaign.
+        Returns the id of a live campaign with the recorded name that the name search did not list: the caller
+        resumes into it (`_verify_resume` checks it) instead of creating a second one; otherwise "".
+        """
+        if self.journal is None:
+            return ""
+        adopt = ""
+        view, requested_tag = submitted if submitted is not None else (self._plan_view(plan), plan.tag)
+        md5s: dict[str, list[str]] = {}
+        for s_ in plan.ad_sets:
+            for ad in s_.ads:
+                md5s[str(ad.index)] = [_md5(files[p]) if p in files else ""
+                                       for p in (ad.path, ad.vertical_path) if p]
+        fp = _oj.plan_fingerprint(view, md5s, self.slot)
+        try:
+            op = self.journal.open(plan.act, requested_tag, fp, str(view.get("name") or plan.name),
+                                   request_id=self.request_key)
+            camp = op.campaign_id()
+            # ACL-2583: a name this operation itself recorded (campaign stage while unresolved, else the published
+            # name) is never a buyer rename and never goes back to a lower counter: continue under that copy plan.
+            cst0 = op.stage("campaign") or {}
+            rec_name = (str(cst0.get("name") or "") if cst0.get("state") in (_oj.SENT, _oj.UNKNOWN)
+                        else op.published_name) or ""
+            rec_n = name_copy_number(rec_name, str(view.get("name") or ""))
+            if rec_n > plan_copy_number(plan, view) and (camp or cst0.get("state") in (_oj.SENT, _oj.UNKNOWN)):
+                raise _SwitchCopy(rec_n)
+            same_name = not op.published_name or op.published_name == plan.name
+            if camp and (not same_name or camp != existing_id):
+                if same_name:
+                    alive, live_name = self._campaign_alive(camp)
+                    if alive is None:
+                        # ACL-2583: Meta does not answer. Neither stop nor reuse of the name: the caller continues
+                        # under a new copy name, which makes the new operation distinct from this one.
+                        raise _AliveUnknown(int(op.data.get("copy_number") or 0), camp)
+                    # ACL-2583 owner rule: a campaign alive by id with the recorded name is always ours; no time
+                    # window. A campaign renamed in Ads Manager is taken over by the buyer (new operation).
+                    if alive and (not live_name or live_name == op.published_name):
+                        adopt = camp         # alive with the recorded name, only the name search misses it: resume
+                if not adopt:
+                    op = self.journal.supersede(op, request_id=self.request_key)
+                    if same_name:
+                        op.warnings.append(MSG_SUPERSEDED if not alive else MSG_SUPERSEDED_RENAMED)
+            n_open = plan_copy_number(plan, view)
+            cst = op.stage("campaign") or {}
+            if cst.get("state") in (_oj.SENT, _oj.UNKNOWN):
+                # ACL-2583: a name this operation may already have written is never reused - the counter only
+                # goes up while the campaign stage is unresolved (name choice may lag behind Meta's search).
+                n_open = max(n_open, int(op.data.get("copy_number") or 0),
+                             name_copy_number(str(cst.get("name") or ""), str(view.get("name") or "")))
+            op.set_published(plan.name, n_open)
+        except _oj.RequestConflict as exc:
+            raise CreationStopped(f"{exc} Nothing was created.", kind="request_conflict") from exc
+        except _oj.JournalError as exc:
+            self._journal_event("journal_save_failed", what="open", phase="open", error=type(exc).__name__)
+            raise CreationStopped(MSG_JOURNAL, kind="journal") from exc
+        self._op = op
+        out.warnings.extend(op.warnings)
+        self._snapshot_operation(out)
+        return adopt
+
+    @staticmethod
+    def _snapshot_operation_of(op: "_oj.Operation", out: Outcome) -> None:
+        out.operation = op.summary()
+
+    def _verify_resume(self, plan: CampaignPlan, out: Outcome, campaign_id: str = "") -> None:
+        """Подтверждённые этапы прошлых запусков - сверка чтением ДО первой записи (спека §2.1).
+
+        Файл говорит, что проверить; верить ему без чтения нельзя. Расхождение = стоп `resume_mismatch`, ни одной записи.
+        """
+        op = self._op
+        if op is None:
+            return
+        stages = op.confirmed_stages()
+        if not stages:
+            return
+        acct = normalize_act(plan.act).removeprefix("act_")
+        # The reads of this check come out of the budget of the run: the allowance follows the confirmed objects
+        # (one read each, the ad set listing and one ad listing per ad set), not a flat number (ACL-1856).
+        self.client.max_calls += resume_verify_calls(stages)
+
+        def mismatch(name: str, text: str = MSG_MISMATCH) -> CreationStopped:
+            self._snapshot_operation(out)
+            return CreationStopped(text.format(name=name), created=out.created, kind="resume_mismatch")
+
+        def refused(exc: GraphError, what: str) -> None:
+            """ACL-2614: отказ чтения из-за незавершённой проверки подлинности - это стоп `checkpoint`, а не расхождение."""
+            title = str((exc.details or {}).get("error_user_title") or "")
+            if is_auth_required(exc.code, exc.subcode, title):
+                # Защитная ветка: клиент сам бросает AuthRequired; `_stop` держит `client.stopped` согласованным.
+                raise self.client._stop(AuthRequired(
+                    f"Meta asks to authenticate this account ({exc.code}/{exc.subcode}): {exc}",
+                    code=exc.code, subcode=exc.subcode)) from exc
+            # Только код/подкод и вид объекта: ни номеров кабинета/объекта, ни токенов в журнал не идёт.
+            log.warning("resume check: read of %s refused (code=%s subcode=%s status=%s)",
+                        what, exc.code, exc.subcode, exc.status)
+
+        def read(oid: str, fields: str, what: str = "object") -> dict | None:
+            try:
+                row = self.client.get(f"/{oid}", {"fields": fields})
+            except GraphError as exc:
+                refused(exc, what)
+                return None                      # объекта нет / не читается: расхождение, а не сбой запуска
+            return row if isinstance(row, dict) and str(row.get("id") or oid) == oid else None
+
+        def other_account(row: dict) -> bool:
+            got = str(row.get("account_id") or "").removeprefix("act_")
+            return bool(got) and got != acct
+
+        adset_names: dict[str, str] = {}
+        ad_names: dict[str, str] = {}
+        video_ids: tuple[set[str], bool] | None = None
+        for key, st in stages:
+            oid, name, kind = st["object_id"], st["name"], st["kind"]
+            if kind == "campaign":
+                row = read(oid, "id,name,status,account_id,adlabels{name}", "campaign")
+                if row is None or str(row.get("name") or "").strip() != plan.name:
+                    raise mismatch(name or plan.name)
+                if other_account(row):
+                    raise mismatch(name or plan.name, MSG_OTHER_ACCOUNT)
+                if str(row.get("status") or "").upper() != PAUSED or plan.label not in _labels(row):
+                    raise mismatch(name or plan.name)
+            elif kind == "adset":
+                adset_names[oid] = name
+            elif kind == "ad":
+                ad_names[oid] = name
+            elif kind == "creative":
+                row = read(oid, "id,name,account_id", "creative")
+                if row is None:
+                    raise mismatch(name or key)
+                if other_account(row):
+                    raise mismatch(name or key, MSG_OTHER_ACCOUNT)
+            elif kind == "image":
+                try:
+                    rows = self.client.get_all(f"/{plan.act}/adimages", {"hashes": [oid], "fields": "hash"}, max_pages=1)
+                except GraphError as exc:
+                    refused(exc, "image")
+                    raise
+                if not any(str(r.get("hash")) == oid for r in rows):
+                    raise mismatch(key)
+            elif kind == "video":
+                # ACL-2618: the Video/AdVideo node has no `account_id` (Meta answers (#100)), so ownership
+                # is read from the account's own video listing instead.
+                row = read(oid, "id,title,status", "video")
+                if row is None or (name and row.get("title") is not None and str(row["title"]) != name):
+                    raise mismatch(key)
+                if video_ids is None:
+                    cut = len(self.client.truncated)
+                    try:
+                        listed = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id", "limit": 100},
+                                                     max_pages=RESUME_VIDEO_LIST_PAGES)
+                    except GraphError as exc:
+                        refused(exc, "video")
+                        raise
+                    video_ids = ({str(r.get("id")) for r in listed}, len(self.client.truncated) == cut)
+                if oid not in video_ids[0] and video_ids[1]:     # complete listing and the video is not in it
+                    raise mismatch(key, MSG_OTHER_ACCOUNT)
+                status = row.get("status") if isinstance(row.get("status"), dict) else {}
+                # ACL-2668 (решение 16): видео, которое Meta ещё обрабатывает, - не стоп: его дождётся `_wait_video`.
+                # Стоп только по ошибке обработки.
+                if str(status.get("video_status") or "").lower() == "error":
+                    reason = video_error_reason(status).replace("{", "{{").replace("}", "}}")
+                    raise mismatch(key, MSG_VIDEO_NOT_READY + (f" Meta's reason: {reason}" if reason else ""))
+        if adset_names or ad_names:
+            # Кампания: найденная выбором имени, иначе подтверждённая в журнале (запись о ней могла не сохраниться).
+            campaign_id = campaign_id or next((st["object_id"] for _k, st in stages if st["kind"] == "campaign"), "")
+            def children(parent: str, edge: str) -> list[dict]:
+                try:
+                    return self._children(parent, edge, "id,name")
+                except GraphError as exc:
+                    refused(exc, edge)
+                    raise
+
+            seen_sets = {str(r["id"]): str(r.get("name") or "").strip()
+                         for r in children(campaign_id, "adsets")} if campaign_id else {}
+            for oid, name in adset_names.items():
+                if seen_sets.get(oid) != name:
+                    raise mismatch(name)
+            seen_ads: dict[str, str] = {}
+            if ad_names:
+                for set_id in seen_sets:
+                    for r in children(set_id, "ads"):
+                        seen_ads[str(r["id"])] = str(r.get("name") or "").strip()
+            for oid, name in ad_names.items():
+                if seen_ads.get(oid) != name:
+                    raise mismatch(name)
+        self._journal_event("resume_verify", stages=len(stages), ok=True)
+        self._step(out, f"earlier progress checked in Meta: {len(stages)} object(s) match")
+
     def _write(self, out: Outcome, what: str, *args: Any, **kwargs: Any) -> str:
         """ACL-2392: `_write_inner` plus the plain-words stage on whatever stops it ("while creating ad set ...")."""
         try:
@@ -1760,14 +2617,26 @@ class CampaignCreator:
             raise
 
     def _write_inner(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
-                     *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-                     on_ad: bool = False, children_active: bool = False, form_page: str = "",
-                     upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
+                     *, files: dict | None = None, **kw: Any) -> str:
+        """Одна запись под журналом операции (ACL-1856); без журнала - прежняя `_write_raw`. Стадию для ошибки ставит `_write` (ACL-2392)."""
+        if self._op is None:
+            return self._write_raw(out, what, path, params, find, files=files, **kw)
+        kind = _EDGE_KIND.get(path.rsplit("/", 1)[-1], "form")
+        md5 = _md5(next(iter(files.values()))) if files else ""
+        return self._journaled(
+            out, what, kind, lambda: self._write_raw(out, what, path, params, find, files=files, **kw), find,
+            name=str(params.get("name") or ""), content_md5=md5)
+
+    def _write_raw(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
+                   *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
+                   on_ad: bool = False, children_active: bool = False, form_page: str = "",
+                   upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
-        ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
-        объект, запись без файла отправляется ОДИН раз повторно. Записи с файлом и ответы Meta
-        вроде 5xx/кода 1-2 по-прежнему только сверяются и стоп.
+        Owner rule 12.11 («публикация важнее блокировки»; ACL-2301/2338/2748): если результат неизвестен (нет ответа
+        любой причины, ответ без причины - 5xx, код 1-2, не JSON, без id) и сверка дважды не нашла объект, запись,
+        в том числе с файлом, отправляется ОДИН раз повторно (дубль допустим). Если и повтор неизвестен - стоп только
+        этой кампании (`run_continues`). Детерминированный отказ Meta (`_REJECTION_SUBCODES`) не повторяется.
 
         `upload` = (номер объявления, «video»/«image») - запись с файлом: без срока,
         с показом процента и Stop; неизвестный результат сверяется несколько раз.
@@ -1809,14 +2678,14 @@ class CampaignCreator:
                     if upload and not stopped and self.cancelled():
                         raise CreationStopped(
                             f"Stopped by the user while checking the {what} result. Meta may still be "
-                            "processing the upload: wait a few minutes before publishing again.",
+                            "processing the upload; publish again to check it first.",
                             created=out.created, kind="cancelled")
                     if wait > 0:
                         self.sleep(wait)
                     if upload and not stopped and self.cancelled():
                         raise CreationStopped(
                             f"Stopped by the user while checking the {what} result. Meta may still be "
-                            "processing the upload: wait a few minutes before publishing again.",
+                            "processing the upload; publish again to check it first.",
                             created=out.created, kind="cancelled")
                     # Повторные чтения дешевле: свежий файл в первых страницах списка.
                     found = find(pages=UPLOAD_RECONCILE_PAGES) if (upload and n > 0) else find()
@@ -1834,9 +2703,9 @@ class CampaignCreator:
                 if stopped:
                     raise CreationStopped("Stopped by the user during the upload; nothing was found "
                                           "in the ad account yet. Meta may still be processing the "
-                                          "upload: wait a few minutes before publishing again.",
+                                          "upload; publish again to check it first.",
                                           created=out.created, kind="cancelled") from exc
-                if exc.reason in RESEND_REASONS and not files and not upload and not _resent:
+                if not _resent and exc.subcode not in _REJECTION_SUBCODES:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
                     self._beat()
                     if self.reconcile_wait_s > 0:
@@ -1853,14 +2722,23 @@ class CampaignCreator:
                             "Nothing else was written; reconcile the existing object in Ads Manager before retrying.",
                             created=out.created, kind="unknown") from rexc
                     self._note_unknown_write(what, exc, began, first=False, second=bool(found))
+                    if not found and what == "campaign" and self._op is not None:
+                        # ACL-2583 owner rule: the same campaign name is never written twice. The name search lags, so
+                        # the caller continues under the next "<name> copy N" (a duplicate is acceptable).
+                        self.client.reconciled(path)
+                        raise _CampaignRewrite(int(self._op.data.get("copy_number") or 0))
                     if not found:
                         self.client.reconciled(path)
                         self._step(out, f"{what}: not found by readback after {exc.reason} - sending once more")
-                        return self._write(out, what, path, params, find, files=files, filename=filename,
-                                           id_of=id_of, on_ad=on_ad, children_active=children_active,
-                                           form_page=form_page, upload=upload, _resent=True)
+                        return self._write_raw(out, what, path, params, find, files=files, filename=filename,
+                                               id_of=id_of, on_ad=on_ad, children_active=children_active,
+                                               form_page=form_page, upload=upload, _resent=True)
                 else:
+                    resent_again = _resent and exc.subcode not in _REJECTION_SUBCODES
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
+                    if resent_again:
+                        # The re-send got no answer either: this campaign stops, the next ones of the run still publish.
+                        self.client.reconciled(path)
                     # ACL-2392: a known Meta rejection (subcode 1870226) is CLASSIFIED as a rejection for the text
                     # only; the stop stays "unknown" so the gating (blocked job, unreconciled path) is unchanged.
                     rejection = (_plain.classify(exc, kind="unknown", ctx={"stage": _plain.stage_of(what)})
@@ -1868,7 +2746,8 @@ class CampaignCreator:
                     raise CreationStopped(
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
-                        created=out.created, kind="unknown", failure=rejection) from exc
+                        created=out.created, kind="unknown", failure=rejection,
+                        not_found=not (files or upload), run_continues=resent_again) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
@@ -1878,8 +2757,18 @@ class CampaignCreator:
             self.client.unreconciled = path
             found = find()
             if not found:
+                # Owner rule 12.11: no answer to rely on and nothing found: send once more (a duplicate is acceptable).
+                self.client.reconciled(path)
+                if not _resent:
+                    if what == "campaign" and self._op is not None:
+                        raise _CampaignRewrite(int(self._op.data.get("copy_number") or 0))
+                    self._step(out, f"{what}: answered without an id and not found by readback - sending once more")
+                    return self._write_raw(out, what, path, params, find, files=files, filename=filename,
+                                           id_of=id_of, on_ad=on_ad, children_active=children_active,
+                                           form_page=form_page, upload=upload, _resent=True)
                 raise CreationStopped(f"{what}: Graph answered without an id and nothing was found "
-                                      "by readback.", created=out.created, kind="unknown")
+                                      "by readback.", created=out.created, kind="unknown",
+                                      not_found=not (files or upload), run_continues=True)
             self.client.reconciled(path)
             return str(found)
         return str(got)
@@ -1911,6 +2800,20 @@ class CampaignCreator:
                 "created by ACL. Nothing was created; rename the draft or remove the old campaign.",
                 kind="name_taken")
         return None
+
+    def _campaign_finder(self, plan: CampaignPlan, base_plan: CampaignPlan) -> Callable[[], str | None]:
+        """Readback of the campaign write. ACL-2583: while the journal's campaign stage is sent/unknown it holds the
+        name that was really written; that name is searched, not the current plan name."""
+        def find() -> str | None:
+            target = plan
+            st = (self._op.stage("campaign") if self._op is not None else None) or {}
+            rec = str(st.get("name") or "")
+            if st.get("state") in (_oj.SENT, _oj.UNKNOWN) and rec and rec != plan.name:
+                n = name_copy_number(rec, base_plan.name)
+                if n > 0 or rec == base_plan.name:
+                    target = copy_plan(base_plan, n)
+            return (self._find_campaign(target, after_unknown=True) or {}).get("id")
+        return find
 
     def _campaign_rows(self, act: str, name: str) -> list[dict]:
         """Живые кампании кабинета, чьё имя содержит `name` (одно чтение, максимум 2 страницы)."""
@@ -1968,7 +2871,7 @@ class CampaignCreator:
         want = set() if manual else {ad.name for s in cand.ad_sets for ad in s.ads}
         if {str(r.get("name") or "").strip() for r in ads} - want:
             return found_sets, False, ["it is a campaign with other ads"]
-        bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
+        bad = self._existing_differences(cand, targetings, campaign_id, found_sets, has_ads=bool(ads))
         if bad:
             return found_sets, False, [f"{f['object']}: " + "; ".join(f["differences"]) for f in bad]
         have: dict[str, set[str]] = {}
@@ -1979,36 +2882,50 @@ class CampaignCreator:
             for s, h in zip(cand.ad_sets, found_sets)))
         return found_sets, partial, []
 
-    def _receipt_choice(self, plan: CampaignPlan, targetings: list[dict], receipt: dict) -> NameChoice | None:
+    def _receipt_choice(self, plan: CampaignPlan, targetings: list[dict], receipt: dict
+                        ) -> tuple[NameChoice | None, tuple[int, dict, list[str]] | None]:
         """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
 
-        Любое сомнение (нет кампании, ошибка Meta на чтении по id, не наша, не живая, расходится) - квитанция
-        не используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
+        Возвращает (выбор, остаток). ACL-2583: «id не существует» (100/33) имя НЕ освобождает - как нет ответа. Не живая (прочитана DELETED/ARCHIVED), переименована - квитанция не
+        используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
+        ACL-2578: (1) чтение по id упало по другой причине (не «не существует») - 2-3 повтора за ~30 с; всё ещё без ответа -
+        имя считается занятым (второй элемент без причин), идём новой кампанией со следующим `copy N`, не стоп; (2) живая кампания с ТОЧНЫМ именем занимает его, чья бы она ни была
+        (метка не важна); (3) наша, но расходится с билдером - не дописывается. В (2) и (3) она возвращается вторым
+        элементом (номер, строка, причины): имя занято, даже если листинг Meta её сейчас не показал.
+        Не обнаружить: квитанции нет и листинг промахнулся - тогда о кампании ничего не известно.
         """
         n = receipt.get("n")
         if not isinstance(n, int) or n < 0:
-            return None
+            return None, None
         cand = copy_plan(plan, n)
         if receipt.get("name") != cand.name:
-            return None
+            return None, None
         campaign_id = str(receipt.get("campaign_id") or "")
         if campaign_id:
             try:
-                row = self.client.get(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
-            except GraphError:
-                return None
+                row = self._get_retrying(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
+            except GraphError as exc:
+                # ACL-2583 (Doc284): "does not exist" (100/33) does not free the name either: the receipt names a
+                # campaign this draft created, and Meta answers the same for a live one it cannot load. Only a row
+                # read with a non-live status (below) lets the base name go.
+                self._log_read_decision("receipt_unknown", campaign_id, exc)
+                # ACL-2578 / owner decision: Meta still does not answer after the retries. The earlier campaign may
+                # exist, so its name is held (never reused): the caller takes the next copy number, as a new campaign.
+                return None, (n, {"id": campaign_id, "name": cand.name}, None)
             row = {**row, "id": campaign_id} if isinstance(row, dict) else None
         else:
             hits = family_rows(plan.name, self._family_rows(plan)).get(n, [])
             row = next((r for r in hits if cand.label in _labels(r)), None)
-        if not row or str(row.get("name") or "").strip() != cand.name or cand.label not in _labels(row):
-            return None
+        if not row or str(row.get("name") or "").strip() != cand.name:
+            return None, None
         if str(row.get("effective_status") or row.get("status") or "") not in LIVE_STATES:
-            return None
+            return None, None
+        if cand.label not in _labels(row):
+            return None, (n, row, ["it was not created by ACL (no ACL tag)"])
         found_sets, _partial, why = self._resume_state(cand, targetings, str(row["id"]))
         if why:
-            return None
-        return NameChoice(cand, row, found_sets, n, n)
+            return None, (n, row, why)
+        return NameChoice(cand, row, found_sets, n, n), None
 
     def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
         """ACL-2250 (ACL-1902): имя кампании до любой записи - и в боевом запуске, и в Check plan.
@@ -2021,11 +2938,19 @@ class CampaignCreator:
         """
         base = plan.name
         receipt = self._read_name_receipt(plan)
+        leftover = None
         if receipt:
-            chosen = self._receipt_choice(plan, targetings, receipt)
+            chosen, leftover = self._receipt_choice(plan, targetings, receipt)
             if chosen:
                 return chosen
         fam = family_rows(base, self._family_rows(plan))
+        if leftover:
+            # ACL-2578: our own left-over campaign (known by id from the receipt) holds its name even when the
+            # Meta listing does not show it (search lag): the new one must never take the same name.
+            n_left, row_left, _why = leftover
+            known = fam.setdefault(n_left, [])
+            if str(row_left.get("id")) not in {str(r.get("id")) for r in known}:
+                known.append(row_left)
         if not fam:
             self._check_name_length(plan)
             return NameChoice(plan, None, [None] * len(plan.ad_sets))
@@ -2034,7 +2959,11 @@ class CampaignCreator:
         ours = next((r for r in fam[top] if cand.label in _labels(r)), None)
         notes: list[str] = []
         if ours:
-            found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
+            if (leftover and leftover[2] is not None and top == leftover[0]
+                    and str(ours.get("id")) == str(leftover[1].get("id"))):
+                found_sets, partial, why = None, False, leftover[2]        # already read by the receipt check
+            else:
+                found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
             if partial and not why:
                 return NameChoice(cand, ours, found_sets, top, len(fam) - 1)
             if why:
@@ -2186,7 +3115,8 @@ class CampaignCreator:
         rows = self._creative_listing(plan, fresh=fresh)
         # Explicit ownership by another ACL campaign is not our orphan. A name
         # suffix alone is not ownership: untagged legacy creatives still reconcile.
-        same = [r for r in rows if _cr.same_ad(r.get("name"), stem)
+        # ACL-2589: a DELETED creative is never a candidate (a resume or replacement must not reuse a deleted twin).
+        same = [r for r in rows if _cr.same_ad(r.get("name"), stem) and not self._creative_gone(row=r)
                 and not any(label.startswith("acl-") and label != plan.label
                             for label in _labels(r))]
         # A creative of an earlier repeat that the listing returned only partly is not stopped on (that blocked
@@ -2197,6 +3127,8 @@ class CampaignCreator:
         for r in same:
             if not (str(r.get("account_id") or "") == plan.act.removeprefix("act_") and _cr.complete(params, r)):
                 r = self._reread_creative(r)
+                if r and self._creative_gone(row=r):
+                    continue
                 if not (r and str(r.get("account_id") or "") == plan.act.removeprefix("act_")
                         and _cr.complete(params, r)):
                     continue
@@ -2210,6 +3142,23 @@ class CampaignCreator:
         except Exception:
             return None
         return full if isinstance(full, dict) and str(full.get("id") or "") == str(row["id"]) else None
+
+    @staticmethod
+    def _creative_gone(exc: Exception | None = None, row: Any = None) -> bool:
+        """ACL-2589: Meta says the creative does not exist (Graph 100 / subcode 33) or returns it as DELETED.
+
+        Only these two answers mean "stale receipt". Rate limits, 5xx, timeouts and every other code are not:
+        they keep the ordinary handling (the caller re-raises)."""
+        if exc is not None:
+            return isinstance(exc, GraphError) and exc.code == 100 and exc.subcode == 33
+        return isinstance(row, dict) and str(row.get("status") or "").upper() == "DELETED"
+
+    def _log_creative_gone(self, creative_id: str, exc: Exception | None, row: Any = None) -> None:
+        code = getattr(exc, "code", None)
+        sub = getattr(exc, "subcode", None)
+        msg = scrub(str(exc)) if exc is not None else f"status={scrub(str((row or {}).get('status')))}"
+        log.warning("stale creative receipt: creative %s not found or not accessible in Meta (code=%s subcode=%s): %s",
+                    _mask_id(creative_id), code, sub, msg)
 
     def _recoverable_creative(self, out: Outcome, plan: CampaignPlan, ad: AdPlan,
                              ad_set: AdSetPlan, media: dict, name: str) -> tuple[str, bool]:
@@ -2233,11 +3182,9 @@ class CampaignCreator:
                     creative_id = candidates()
                     if creative_id:
                         receipt.save(creative_id)
-                    elif receipt.data and receipt.age_s() < RECEIPT_UNKNOWN_S:
-                        raise CreationStopped("An earlier creative write has an unknown result. "
-                                              "No new creative was sent. Reconcile the existing object first.",
-                                              kind="creative_unknown")
                     else:
+                        # Owner decision 17.11 ("убирай 15 минут"): an earlier unknown write of this creative is
+                        # reconciled by the readback above; not found -> written again (a duplicate is acceptable).
                         self._check_cancel(out)
                         receipt.save()
                         creative_id = self._write(out, f"ad {ad.index}: creative",
@@ -2248,13 +3195,17 @@ class CampaignCreator:
                         receipt.save(creative_id)
                         created = True
                 replaced = False
+                gone = False
 
                 def finish(cid: str, verified: bool) -> tuple[str, bool]:
                     # ACL-2284: the warning is added only once a replacement has passed the full content check,
                     # and it says "new" only when the creative really is one written in this run.
                     if replaced:
-                        out.warnings.append(STALE_WARNING if cid in out.created.get("creatives", [])
-                                            else STALE_WARNING_REUSED)
+                        fresh = cid in out.created.get("creatives", [])
+                        if gone:
+                            out.warnings.append(GONE_WARNING if fresh else GONE_WARNING_REUSED)
+                        else:
+                            out.warnings.append(STALE_WARNING if fresh else STALE_WARNING_REUSED)
                     return cid, verified
 
                 while True:
@@ -2274,7 +3225,25 @@ class CampaignCreator:
                                 raise
                             label_failure = exc
                             self._missing_creative_tag = True
-                    row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
+                    gone_exc = None
+                    try:
+                        row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
+                    except GraphError as exc:
+                        # ACL-2589: the receipt points at a creative that no longer exists in Meta. Not for a
+                        # creative written in this run, and only once; any other error keeps today's handling.
+                        if created or replaced or not self._creative_gone(exc):
+                            raise
+                        row, gone_exc = None, exc
+                    if gone_exc is not None or (not created and not replaced and self._creative_gone(row=row)):
+                        self._log_creative_gone(creative_id, gone_exc, row)
+                        replaced = gone = True
+                        self._step(out, "The creative remembered from an earlier run no longer exists in Meta; "
+                                        "creating a new one")
+                        creative_id, created = self._replace_stale_creative(
+                            out, plan, ad, ad_set, params, receipt, creative_id, candidates)
+                        if not created:
+                            return finish(creative_id, True)
+                        continue
                     kind = _cr.media_diff(plan.act, params, row)
                     content_ok = kind in ("same", "order")
                     if kind == "order" and ORDER_WARNING not in out.warnings:
@@ -2401,9 +3370,20 @@ class CampaignCreator:
             return None
 
         # Имя в библиотеке несёт md5 файла: по нему сверка узнаёт картинку и при повторе.
-        got = self._write(out, f"{who}: image upload", f"/{plan.act}/adimages", {}, find,
-                          files={"filename": data}, filename=image_name(path, data), id_of=hash_of,
-                          upload=(ad.index, f"{role.strip()} image".strip()))
+        try:
+            got = self._write(out, f"{who}: image upload", f"/{plan.act}/adimages", {}, find,
+                              files={"filename": data}, filename=image_name(path, data, self._converted_ext(path)),
+                              id_of=hash_of, upload=(ad.index, f"{role.strip()} image".strip()))
+        except GraphError as exc:
+            if exc.subcode not in _FILE_REFUSAL_SUBCODES:
+                raise
+            # ACL-2575: Meta's definite answer (FileTypeNotSupported, not transient) is a refusal of THIS file,
+            # not an unknown result: no "check Ads Manager" advice; the objects already created are listed.
+            ad_label = f"{ad.index}{role}"
+            failure = _plain.file_refused(ad_label, Path(path).name, exc)
+            raise CreationStopped(
+                f"Meta refused the file of ad {ad_label} ({Path(path).name}): {_plain.FILE_REFUSED_REASON}.",
+                created=out.created, kind="graph_error", failure=failure) from exc
         out.created.setdefault("images", []).append(got)
         self._step(out, f"{who}: image uploaded")
         return got
@@ -2411,6 +3391,7 @@ class CampaignCreator:
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
                path: str = "", role: str = "") -> tuple[str, str]:
         title = video_title(plan.video_tag, data)
+        content = _md5(data)[:12]
         path = path or ad.path
         who = f"ad {ad.index}{role}"
 
@@ -2418,12 +3399,20 @@ class CampaignCreator:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
                                        max_pages=pages)
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
+            if hit is None:
+                # The same content under another campaign's tag is the same video of this ad account.
+                hit = next((r for r in rows if video_title_matches(str(r.get("title") or ""), content)), None)
             return str(hit["id"]) if hit else None
 
         began = self.clock()
-        vid = find()
+        # ACL-2639: the same file in several ads of this run goes up once (a resumable upload is named only after its
+        # finish, and Meta's list may lag behind the name).
+        seen = getattr(self, "_videos_this_run", None)
+        if seen is None:
+            seen = self._videos_this_run = {}
+        vid = seen.get(content) or find()
         if vid:
-            self._step(out, f"{who}: video already in the ad account")
+            self._step(out, f"{who}: video already in the ad account ({_mb(len(data))}, same content, not uploaded again)")
             self._video_row(plan, who, data, "found", began)
         else:
             mode = "chunked" if isinstance(data, LargeFile) else "whole"
@@ -2431,7 +3420,10 @@ class CampaignCreator:
             self._waiting("video_upload")
             try:
                 if mode == "chunked":
-                    vid = self._video_chunked(out, plan, data, title, find, who)
+                    vid = self._journaled(
+                        out, f"{who}: video upload", "video",
+                        lambda: self._video_large(out, plan, data, title, find, who), find,
+                        name=title, content_md5=_md5(data))
                 else:
                     vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
                                       {"name": title, "title": title}, find, files={"source": data},
@@ -2443,7 +3435,9 @@ class CampaignCreator:
             finally:
                 self._waiting("")
             out.created.setdefault("videos", []).append(vid)
-            self._step(out, f"{who}: video uploaded")
+            seen[content] = vid
+            took = max(0.0, float(self.clock() - began))
+            self._step(out, f"{who}: video uploaded ({_speed_text(len(data), took)})")
             self._video_row(plan, who, data, mode, began)
         return vid, self._wait_video(out, ad, vid, who=who)
 
@@ -2473,12 +3467,560 @@ class CampaignCreator:
                 f"{what}: the write result is unknown ({exc}). Publish again later: a finished video "
                 "is found by its tag and is not uploaded twice.", created=out.created, kind="unknown") from exc
 
+    def _video_large(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                     find: Callable[[], str | None], who: str) -> str:
+        """Upload-phase writes are counted apart from the campaign's own writes (the fallback's reserve needs that)."""
+        client = self.client
+        w0 = getattr(client, "writes", 0)
+        pend = getattr(self, "_large_pending", None)
+        if pend:                                   # this video leaves the list of those still to come
+            sizes_ = [o for o, _c in pend]
+            pend.pop(sizes_.index(len(big)) if len(big) in sizes_ else 0)
+        self._video_w0 = w0
+        try:
+            return self._video_large_inner(out, plan, big, title, find, who)
+        finally:
+            self._upload_writes = getattr(self, "_upload_writes", 0) + max(0, getattr(client, "writes", 0) - w0)
+
+    def _video_large_inner(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                           find: Callable[[], str | None], who: str) -> str:
+        """ACL-2639: a large original from the profile goes up with Meta's resumable protocol (a few calls); the
+        chunked advideos protocol is the fallback when the resumable one is refused or cannot move a single byte."""
+        if self.worker_path and resumable_upload_enabled():
+            before = getattr(self.client, "calls", 0)
+            try:
+                return self._video_resumable(out, plan, big, who, title)
+            except _ResumableRefused as exc:
+                why = str(exc)
+                # The next run must not repeat attempts that moved nothing: the unfinished session is forgotten.
+                self._forget_pending_video(f"{who}: video upload")
+                # N1: the calls the failed attempt spent come on top of the run budget (the chunked plan is unchanged).
+                if isinstance(getattr(self.client, "max_calls", None), int):
+                    self.client.max_calls += max(0, getattr(self.client, "calls", 0) - before)
+                self._step(out, f"{who}: resumable upload not used ({why}); uploading in chunks instead")
+                out.warnings.append(f"Ad video: the resumable upload was not used ({why}); uploading in chunks instead.")
+        big = self._fit_for_chunks(out, plan, big, who)
+        return self._video_chunked(out, plan, big, title, find, who)
+
+    def _chunk_spare(self, plan: CampaignPlan) -> int | None:
+        """ACL-2639: the Graph calls a chunked upload of THIS video may use: the run budget left, minus what the rest of
+        the campaign still needs (campaign-object writes only, plus the fast-path uploads of the large videos still to
+        come). None: no run budget to compare with (or not the worker path)."""
+        budget = getattr(self.client, "max_calls", None)
+        if not (self.worker_path and isinstance(budget, int)):
+            return None
+        camp_done = max(0, getattr(self, "_video_w0", getattr(self.client, "writes", 0))
+                        - getattr(self, "_writes_base", 0) - getattr(self, "_upload_writes", 0))
+        later = sum(c for _o, c in (getattr(self, "_large_pending", None) or []))
+        reserve = max(0, estimate_create_calls(plan) - camp_done) + later
+        return max(0, budget - getattr(self.client, "calls", 0) - reserve)
+
+    def _fit_for_chunks(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str) -> "LargeFile":
+        """ACL-2639 (owner's fallback): the fast upload is not available/refused and the original would not fit the run's
+        spare chunked budget -> compress it locally (the ACL-2000 ffmpeg 2-pass x264 compressor: resolution, aspect
+        ratio and duration untouched) to a size that fits at 5 MB windows (never above COMPRESS_FALLBACK_CAP_MB) and
+        upload THAT through the chunked path. The video keeps its ACL tag title (of the original), so a republish
+        finds it. Not compressible (no ffmpeg, bitrate would be unusable, failure): the original goes on and the
+        chunked pre-check stops with its clear message. `ACL_VIDEO_COMPRESS_FALLBACK=0` turns it off."""
+        self._compress_note = ""
+        if not compress_fallback_enabled():
+            return big
+        spare = self._chunk_spare(plan)
+        if spare is None:
+            return big
+        size = len(big)
+        label = f"{who[:1].upper()}{who[1:]}"
+        planned = (getattr(self, "_video_plan", None) or {}).get(big.path)
+        if planned and planned[1] and planned[0] < size:
+            target = max(1.0, planned[0] / (1024 * 1024))   # the plan already decided (and budgeted) this compression
+        else:
+            need = upload_calls(size, True, chunked=True)
+            if need + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * need)) <= spare:
+                return big                                 # the original fits: nothing to do
+            fit_mb = chunked_fit_mb(spare)
+            if fit_mb < 1:
+                self._step(out, f"{who}: no spare Meta calls to upload even a compressed copy ({spare} left)")
+                return big
+            target = max(1.0, fit_mb * COMPRESS_FALLBACK_SHARE)
+        original_mb = size / (1024 * 1024)
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        try:
+            eta = _cc.eta_text(_cc.duration_s(big.path))
+        except Exception:  # noqa: BLE001 - the estimate is a courtesy
+            eta = ""
+        self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target:.0f} MB to fit this run"
+                        f" ({eta or 'this can take several minutes'})")
+
+        fn = self.compress_to_fit or (lambda p, limit, tgt: _cc.ensure_uploadable(p, limit_mb=limit, target_mb=tgt))
+        shown = [-100]
+
+        def on_progress(pct: int) -> None:
+            # a step line every 10 points (and the run's heartbeat is beaten by the compressor's wait loop itself)
+            if pct - shown[0] >= 10:
+                shown[0] = pct
+                self._step(out, f"compressing {who} video: {pct}%")
+
+        try:
+            with _cc.observe_progress(on_progress):
+                prepared = fn(big.path, target, target * 0.95)
+        except Exception as exc:  # noqa: BLE001 - a failed compression is a fallback to the clear stop, not a crash
+            if type(exc).__name__ == "JobCancelled":
+                raise
+            self._compress_note = f"compression failed ({type(exc).__name__})"
+            self._step(out, f"{who}: compression failed ({type(exc).__name__}); the original goes on")
+            return big
+        if not getattr(prepared, "compressed", False):
+            why = getattr(prepared, "reason", "") or "unknown reason"
+            self._compress_note = f"compression was not possible: {why}"
+            self._step(out, f"{who}: not compressed ({why})")
+            return big
+        new_size = self.size_of(prepared.path) or 0
+        if not new_size or new_size >= size:
+            self._step(out, f"{who}: the compressed copy is not smaller; the original goes on")
+            return big
+        self._step(out, f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to fit this run")
+        out.warnings.append(f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to "
+                            "fit this run's Meta call budget (resolution and aspect ratio are unchanged).")
+        return LargeFile(prepared.path, new_size, self.read_range)
+
+    def _video_resumable(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str, title: str = "") -> str:
+        """ACL-2639: the upload protocol of Ads Manager itself ("file API"), from the profile tab.
+
+        advideos start (waterfall_id, one whole-file partition) -> the bytes go to the resumable service of the page
+        (`rupload-...up` or the generic host, session cookies; NOT Graph, not counted in the call budget): ONE POST with
+        the whole remainder from the `offset` the service holds (streamed piece by piece from the file, never a copy
+        in the page); the answer carries the file handle -> advideos transfer by that handle (Meta must answer that it
+        holds the whole file) -> advideos finish with the ACL tag as the title (a later search by the title finds it
+        like a chunked upload). A dropped POST resumes from the offset the service reports (GET), never from zero and
+        never as a second video; a resume that made progress is free, one without progress counts against
+        RESUMABLE_MAX_RESUMES; a service that keeps no byte of a broken POST twice in a row is refused (nothing finished,
+        the chunked path is safe). The ids are kept in the journal right
+        after the start (and `transferred` after the transfer): a run that stopped (or crashed) before the finish is
+        continued by the next one. Graph calls per video: start, transfer, finish (+ one status read when an earlier run
+        is continued or a finish answer is lost). `_ResumableRefused` - nothing was finished, the caller may use the
+        chunked path (an unfinished video of this upload stays at Meta, never published).
+        """
+        path = f"/{plan.act}/advideos"
+        size = len(big)
+        what = f"{who}: video upload"
+        if not title:
+            raise _ResumableRefused("the video has no ACL tag title")
+        ready, why_not = self.client.upload_service_ready()
+        if not ready:
+            raise _ResumableRefused(why_not or "upload service address not available on this page")
+        if why_not:
+            self._step(out, f"{who}: resumable upload via the generic upload host")
+        calls_before = getattr(self.client, "calls", 0)
+        planned = upload_calls(size, True)
+        # start, transfer, finish + the status reads of a continuation (worst case ~8); once the transfer is confirmed
+        # the finish and its status read are never refused by this cap.
+        allowance = RESUMABLE_FIXED_CALLS + 4
+        vid = sid = waterfall = ""
+        offset = 0
+        resumes = 0
+        moved = False                       # the service has confirmed at least one byte of this upload
+        transferred = False                 # Meta took the file by its handle (journal: a continuation only finishes)
+        last_title = ""                     # the title of the video at the last status read
+        get_handle = ""                     # a file handle the service returned to a GET (once the upload is complete)
+        streak = 0                          # consecutive 4xx answers of the service
+        refreshed = False
+        host_kind = ""                      # "generic" | "regional": the host kind of this upload (pinned, journaled)
+        mb_total = max(size // (1024 * 1024), 1)
+
+        def room(n: int) -> None:
+            if transferred:
+                return                       # Meta holds the file: the finish (and its status read) must not be cut off
+            used = getattr(self.client, "calls", 0) - calls_before
+            if used + n > allowance:
+                raise CreationStopped(
+                    f"{what}: the upload needs more Meta calls than planned for this video ({allowance}); stopped "
+                    "before sending more. Nothing was duplicated and the unfinished upload is not used.",
+                    created=out.created, kind="video_error")
+
+        def status() -> dict:
+            nonlocal last_title
+            room(1)
+            self._check_cancel(out)
+            row = self.client.get(f"/{vid}", {"fields": "status,title"})
+            last_title = str(row.get("title") or "") if isinstance(row, dict) else ""
+            st = row.get("status") if isinstance(row, dict) else None
+            return st if isinstance(st, dict) else {}
+
+        def published(st: dict) -> bool:
+            pub = st.get("publishing_phase") if isinstance(st.get("publishing_phase"), dict) else {}
+            return str(st.get("video_status") or "") in ("processing", "ready") or pub.get("status") == "complete"
+
+        def service_path() -> str:
+            return _wpol.rupload_path(waterfall, size)
+
+        def svc(method: str, **kw) -> dict:
+            """One request to the resumable service. A request the Python policy or the page refused BEFORE sending:
+            while nothing moved it is a refusal of this path (the chunked path takes over), afterwards a stop."""
+            nonlocal host_kind
+            if host_kind:
+                kw["host_kind"] = host_kind
+            try:
+                got = self.client.rupload(method, service_path(), **kw)
+                hk = got.get("host_kind")
+                if hk in ("generic", "regional") and hk != host_kind:
+                    host_kind = hk                         # kept, so a continuation uses the same host kind
+                    self._remember_pending_video(what, vid, sid, waterfall, size, transferred=transferred,
+                                                 host_kind=hk)
+                return got
+            except NotSent as exc:
+                self.client.release_optional_stop(exc)
+                if "(no_file" in str(exc):
+                    raise RuploadLost("the file piece did not reach the page", reason="no_file") from exc
+                if "(retired" in str(exc):
+                    raise CreationStopped(f"{what}: the page helper was retired ({str(exc)[:120]}); stopped before "
+                                          "sending more. Nothing was duplicated and the unfinished upload is not used.",
+                                          created=out.created, kind="video_error") from exc
+                if not moved:
+                    raise _ResumableRefused(f"the page refused the upload service request ({str(exc)[:120]})") from exc
+                raise CreationStopped(f"{what}: the page refused an upload service request ({str(exc)[:120]}); "
+                                      "stopped before sending more. Nothing was duplicated and the unfinished upload "
+                                      "is not used.", created=out.created, kind="video_error") from exc
+
+        def held() -> int | None:
+            """How many bytes the service holds of THIS upload (one GET of the service; not a Graph call). None: no
+            usable answer. A file handle in the answer (the service may give it once complete) is kept."""
+            nonlocal get_handle
+            self._check_cancel(out)
+            try:
+                got = svc("GET")
+            except RuploadLost:
+                return None
+            h = _wpol.file_handle(got["body"])
+            if h:
+                get_handle = h
+            raw = got["body"].get("offset")
+            n = raw if isinstance(raw, int) and not isinstance(raw, bool) else (
+                int(raw) if isinstance(raw, str) and raw.isdigit() and len(raw) <= 13 else None)
+            if not 200 <= got["status"] < 300 or n is None or n < 0 or n > size:
+                return None
+            return n
+
+        def shape(body: dict) -> str:
+            """Key names and value lengths only (never values) of an answer."""
+            parts = []
+            for k, v in list(body.items())[:12]:
+                ln = len(v) if isinstance(v, (str, list, dict)) else type(v).__name__
+                parts.append(f"{re.sub(r'[^A-Za-z0-9_]', '_', str(k))[:30]}:{ln}")
+            return ", ".join(parts) or "empty answer"
+
+        def resume(why: str, known: int | None = None) -> None:
+            nonlocal offset, resumes, moved
+            got = known if known is not None else held()
+            if got is None or got <= offset:
+                # Only a resume without progress counts: a GET that shows more bytes than we had is free.
+                resumes += 1
+                if resumes > RESUMABLE_MAX_RESUMES:
+                    raise CreationStopped(f"{what}: the upload kept breaking ({why}); stopped after "
+                                          f"{RESUMABLE_MAX_RESUMES} resumes without progress. Nothing was duplicated "
+                                          "and the unfinished upload is not used.", created=out.created,
+                                          kind="video_error")
+            if got is None:
+                if not moved:
+                    raise _ResumableRefused(f"the upload service did not tell its offset ({why})")
+                raise CreationStopped(f"{what}: the upload service did not tell how much of the video it holds "
+                                      f"({why}); stopped before sending more. Nothing was duplicated and the "
+                                      "unfinished upload is not used.", created=out.created, kind="video_error")
+            if got < offset and moved:
+                raise CreationStopped(f"{what}: Meta reported fewer bytes than it had confirmed ({got} < {offset}); "
+                                      "stopped before sending more", created=out.created, kind="video_error")
+            if got > 0:
+                moved = True
+            elif not moved and resumes >= 2:
+                # Not a single byte arrived twice in a row: the service is not usable from this profile (CORS, proxy,
+                # the session refused). Nothing is finished, so the chunked path is safe.
+                raise _ResumableRefused(f"no byte reached Meta ({why})")
+            self._step(out, f"{who}: resuming the upload at {got // (1024 * 1024)}/{mb_total} MB ({why})")
+            offset = got
+
+        def finish_params() -> dict:
+            return {"upload_phase": "finish", "upload_session_id": sid, "video_id": vid, "title": title}
+
+        def adopt_finish() -> str:
+            """A pending video of an earlier run: `processing/ready` alone never counts as finished. The finish with
+            the title is sent ONCE. "ok": success (or, as a secondary signal, an "already finished" answer);
+            "refused": Meta definitely refused; "unclear": anything else."""
+            room(1)
+            self._check_cancel(out)
+            try:
+                done = self.client.post(path, finish_params())
+            except GraphError as exc:
+                if _already_finished(exc):
+                    return "ok"
+                self._step(out, f"{who}: Meta did not take the finish of an earlier run's video ({str(exc)[:100]})")
+                return "refused"
+            except WriteUnknown:
+                self.client.reconciled(path)
+                status()
+                if last_title == title:
+                    self._step(out, f"{what}: finish reconciled by the title")
+                    return "ok"
+                raise CreationStopped(f"{what}: the result of finishing the upload is unknown and the video is not "
+                                      "published yet. Publish again later: the upload is continued, not repeated.",
+                                      created=out.created, kind="unknown")
+            except PageFailed as exc:
+                if not self.client.resume_after_unsent(exc):
+                    raise
+                return "unclear"
+            return "ok" if done.get("success") is True else "unclear"
+
+        # -- an upload this operation started earlier (stopped or crashed before its finish) is continued
+        pending = self._pending_video(what, size)
+        if pending:
+            vid, sid, waterfall, transferred, host_kind = pending
+            try:
+                st = status()
+            except GraphError as exc:
+                if not _object_gone(exc):
+                    # Not "gone" (a transient or a permission error): the earlier upload may be finished already, so
+                    # a new start could duplicate it. Stop; the next run asks again.
+                    raise CreationStopped(f"{what}: the upload of an earlier run could not be read ({str(exc)[:120]}). "
+                                          "Publish again later: it is continued, not repeated.",
+                                          created=out.created, kind="unknown") from exc
+                # N7: the video of the earlier run no longer exists: forget it and start a new upload.
+                self._step(out, f"{who}: the upload of an earlier run is not available ({str(exc)[:80]}); "
+                                "starting a new one")
+                self._forget_pending_video(what)
+                pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
+            else:
+                if last_title == title:
+                    # The finish of an earlier run took: the video carries our tag. Adopted without any write.
+                    self._step(out, f"{who}: the video uploaded by an earlier run is used")
+                    return vid
+                if transferred or published(st):
+                    # `processing/ready` alone is not proof (and the title is absent): the finish is sent once.
+                    verdict = adopt_finish()
+                    if verdict == "ok":
+                        self._step(out, f"{who}: the video uploaded by an earlier run is used")
+                        return vid
+                    if verdict == "refused":
+                        # Meta definitely refused: forget this entry; the title search that runs first on every
+                        # publish protects from a duplicate, so it is not a stop forever.
+                        self._step(out, f"{who}: Meta refused to finish the upload of an earlier run; "
+                                        "starting a new one")
+                        self._forget_pending_video(what)
+                        pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
+                    else:
+                        raise CreationStopped(f"{what}: the result of finishing the upload of an earlier run is "
+                                              "unknown. Publish again later: it is continued, not repeated.",
+                                              created=out.created, kind="unknown")
+                if pending:
+                    got = held()
+                    if got is not None and got >= size and get_handle:
+                        # Every byte is in and the service gave the handle again: straight to the transfer.
+                        self._step(out, f"{who}: continuing the upload of an earlier run: all bytes are in")
+                        offset, moved = size, True
+                    elif got is None or got >= size:
+                        # Nothing to continue from: the service lost it, or every byte is in and the file handle (the
+                        # answer to the last POST) is gone. The unfinished video is left; a new one is found by its title.
+                        self._step(out, f"{who}: the upload of an earlier run cannot be continued; starting a new one")
+                        self._forget_pending_video(what)
+                        pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
+                    else:
+                        self._step(out, f"{who}: continuing the upload of an earlier run at "
+                                        f"{got // (1024 * 1024)}/{mb_total} MB")
+                        offset, moved = got, got > 0
+        if not pending:
+            self._check_cancel(out)
+            waterfall = uuid.uuid4().hex
+            params = {"upload_phase": "start", "file_size": str(size), "file_extension": "mp4",
+                      "waterfall_id": waterfall, "supports_chunking": "true", "supports_file_api": "true",
+                      "partition_start_offset": "0", "partition_end_offset": str(size)}
+            try:
+                started = self.client.post(path, params)
+            except GraphError as exc:
+                raise _ResumableRefused(f"Meta refused the start: {str(exc)[:160]}") from exc
+            except WriteUnknown as exc:
+                self.client.reconciled(path)     # an unfinished session without its id is never used
+                raise _ResumableRefused(f"the start answer was lost ({str(exc)[:80]})") from exc
+            except PageFailed as exc:
+                if not self.client.resume_after_unsent(exc):
+                    raise
+                raise _ResumableRefused(f"the page did not send the start ({str(exc)[:120]})") from exc
+            vid, sid = str(started.get("video_id") or ""), str(started.get("upload_session_id") or "")
+            if not (vid.isdigit() and sid.isdigit()) or str(started.get("start_offset", "0")) != "0":
+                raise _ResumableRefused("Meta's start answer has no usable video id and upload session")
+            self._remember_pending_video(what, vid, sid, waterfall, size)
+            self._step(out, f"{who}: resumable upload started ({size // (1024 * 1024)} MB)")
+
+        # -- the bytes, to the service of the page; the answer to the POST carries the file handle
+        handle = ""
+        while not handle:
+            if offset >= size:
+                if get_handle:
+                    handle = get_handle
+                    break
+                raise _ResumableRefused("the upload service has every byte but no file handle")
+            n = size - offset                  # the whole remainder in ONE POST (Ads Manager sends a partition so)
+            if self.size_of(big.path) != size:
+                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                      kind="video_error")
+            headers = {"offset": str(offset), "X-Entity-Length": str(size), "X-Entity-Type": _wpol.RUPLOAD_TYPE}
+            self._check_cancel(out)
+            self._step(out, f"{who}: uploading {n // (1024 * 1024)} MB in one request")
+            try:
+                got = svc("POST", headers=headers, chunk=_wpol.ServedChunk(big, offset, n),
+                          progress=lambda _s: self._beat(), cancelled=self.cancelled)
+            except RuploadLost as exc:
+                if exc.reason == "stream_rejected":
+                    self._step(out, f"{who}: the streamed upload was rejected before any byte (not HTTP/2, CORS or network)")
+                # No answer: ask what the service holds (all of it with a handle: transfer; part: send the rest from
+                # there; nothing: send again from the offset, bounded by the resume cap).
+                resume(f"the answer was lost: {exc.reason or 'network'}")
+                continue
+            if not 200 <= got["status"] < 300:
+                # B2: only an explicit success counts: the service answers a refusal with a 4xx/5xx.
+                if 400 <= got["status"] < 500:
+                    streak += 1
+                    if streak >= 2 and not refreshed:
+                        refreshed = True                       # once: take the service address and token again
+                        self._step(out, f"{who}: reading the upload service address again")
+                        self.client.refresh_upload_service()
+                resume(f"the upload service refused (HTTP {got['status']})")
+                continue
+            streak = 0
+            moved = True
+            self._beat()
+            handle = _wpol.file_handle(got["body"])
+            if handle:
+                offset = size
+                break
+            now = held()                                   # no handle: ask once what the service holds
+            if get_handle:
+                handle, offset = get_handle, size
+                break
+            self._step(out, f"{who}: the upload service answered without a file handle ({shape(got['body'])})")
+            if now is not None and now < size:
+                resume("the service holds only part of the bytes", known=now)
+                continue
+            raise _ResumableRefused("the upload service took the bytes but gave no file handle")
+
+        # -- transfer: Meta takes the file by its handle and must hold the whole of it (a lost answer: asked once more).
+        # Nothing is finished yet, so a failure here is a refusal (the chunked path runs; the unfinished video stays).
+        tparams = {"upload_phase": "transfer", "upload_session_id": sid, "video_id": vid, "start_offset": "0",
+                   "end_offset": str(size), "partition_start_offset": "0", "partition_end_offset": str(size),
+                   "fbuploader_video_file_chunk": handle}
+        body: dict = {}
+        for attempt in (1, 2):
+            room(2)                                         # the transfer and the finish
+            self._check_cancel(out)
+            try:
+                body = self.client.post(path, tparams)
+                break
+            except WriteUnknown as exc:
+                self.client.reconciled(path)
+                if attempt == 1:
+                    self._step(out, f"{who}: the answer to the transfer was lost; asking once more")
+                    continue
+                raise _ResumableRefused(f"the transfer answer was lost twice ({str(exc)[:80]})") from exc
+            except GraphError as exc:
+                raise _ResumableRefused(f"Meta refused the transfer: {str(exc)[:160]}") from exc
+            except PageFailed as exc:
+                if not self.client.resume_after_unsent(exc):
+                    raise
+                raise _ResumableRefused(f"the page did not send the transfer ({str(exc)[:120]})") from exc
+        s_raw, e_raw = str(body.get("start_offset", "")), str(body.get("end_offset", ""))
+        if not (s_raw == str(size) and e_raw == str(size)):
+            raise _ResumableRefused(f"Meta did not take all the bytes ({s_raw or '?'}-{e_raw or '?'} of {size})")
+        transferred = True
+        self._remember_pending_video(what, vid, sid, waterfall, size, transferred=True, host_kind=host_kind)
+
+        # -- finish with the ACL tag as the title (a lost answer: sent once more, then the status decides)
+        fparams = finish_params()
+        for attempt in (1, 2):
+            room(1)
+            self._check_cancel(out)
+            try:
+                done = self.client.post(path, fparams)
+            except WriteUnknown:
+                self.client.reconciled(path)
+                if attempt == 1:
+                    self._step(out, f"{what}: the answer to the finish was lost; sending the finish once more")
+                    continue
+                if published(status()):
+                    self._step(out, f"{what}: finish reconciled by a status read")
+                    break
+                raise CreationStopped(f"{what}: the result of finishing the upload is unknown and the video is not "
+                                      "published yet. Publish again later: the upload is continued, not repeated.",
+                                      created=out.created, kind="unknown")
+            if done.get("success") is not True:
+                # The file is at Meta (transfer confirmed): the result of the finish is unknown, not "not used".
+                raise CreationStopped(f"{what}: Meta did not confirm the finish of the upload, so the video may be "
+                                      "finished. Publish again later: it is continued, not repeated.",
+                                      created=out.created, kind="unknown")
+            break
+        self._step(out, f"{who}: resumable upload finished ({resumes} resumes)")
+        return vid
+
+    def _forget_pending_video(self, what: str) -> None:
+        op = self._op
+        if op is None:
+            return
+        try:
+            op.clear_pending(what)
+        except _oj.JournalError:
+            self._journal_event("journal_save_failed", what=what, phase="pending_clear", error="JournalError")
+
+    def _pending_video(self, what: str, size: int) -> tuple[str, str, str, bool, str] | None:
+        """ACL-2639: (video_id, upload_session_id, waterfall_id, transferred) of a resumable upload this operation
+        started for the same file, if any. A continuation needs the three ids and the same file; otherwise it is
+        forgotten (a new start). `transferred`: Meta already took the file by its handle - only the finish is left."""
+        op = self._op
+        st = op.stage(what) if op is not None else None
+        if not st or st.get("state") == _oj.CONFIRMED:
+            return None
+        vid, info = str(st.get("pending_id") or ""), st.get("pending") or {}
+        sid, waterfall = str(info.get("upload_session_id") or ""), str(info.get("waterfall_id") or "")
+        if (vid.isdigit() and sid.isdigit() and _wpol.UPLOAD_WATERFALL_RE.fullmatch(waterfall)
+                and info.get("size") == size and info.get("md5") == st.get("content_md5")):
+            kind = info.get("host_kind")
+            return vid, sid, waterfall, info.get("transferred") is True, kind if kind in ("generic", "regional") else ""
+        return None
+
+    def _remember_pending_video(self, what: str, vid: str, sid: str, waterfall: str, size: int,
+                                transferred: bool = False, host_kind: str = "") -> None:
+        op = self._op
+        if op is None:
+            return
+        st = op.stage(what) or {}
+        try:
+            op.set_pending(what, vid, {"upload_session_id": sid, "waterfall_id": waterfall, "size": size,
+                                       "md5": st.get("content_md5"), "transferred": transferred,
+                                       "host_kind": host_kind})
+        except _oj.JournalError:
+            self._journal_event("journal_save_failed", what=what, phase="pending", error="JournalError")
+
     def _video_chunked(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
                        find: Callable[[], str | None], who: str) -> str:
         """start -> transfer (куски от смещения Meta) -> finish. В памяти один кусок."""
         path = f"/{plan.act}/advideos"
         size = len(big)
         what = f"{who}: video upload"
+        # ACL-2639: the chunked upload is funded only from the run's SURPLUS: what is left of the run budget minus the
+        # calls the rest of the campaign still needs. No surplus for this file: stop BEFORE the start (nothing is
+        # uploaded, the campaign is never stranded half-built for lack of calls).
+        chunk_plan = upload_calls(size, True, chunked=True)
+        chunk_allowance = chunk_plan + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunk_plan))
+        spare = self._chunk_spare(plan)
+        if spare is not None:
+            if spare < chunk_plan:
+                raise CreationStopped(
+                    f"{what}: {'the fast upload was refused and ' if resumable_upload_enabled() else ''}uploading in "
+                    f"{min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) // (1024 * 1024)} MB pieces needs about {chunk_plan} "
+                    f"Meta calls; this run can spare {spare}. Nothing was uploaded."
+                    + (f" ({getattr(self, '_compress_note', '')})" if getattr(self, "_compress_note", "") else "")
+                    + " Use a smaller video file or publish fewer ads in this run.", created=out.created,
+                    kind="video_error",
+                    failure=_plain.Failure(
+                        "plan_text", f"{who[:1].upper()}{who[1:]}: the video is too large for this run's Meta call budget "
+                                     "(the file itself is fine)",
+                        "use a smaller or shorter video, or publish fewer ads in this run, then republish"))
+            chunk_allowance = min(chunk_allowance, spare)
         # Meta требует waterfall_id от токена Ads Manager (подкод 1363049); один на всю загрузку.
         waterfall = uuid.uuid4().hex
         started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size),
@@ -2489,8 +4031,48 @@ class CampaignCreator:
                                   kind="video_error")
         offset, end = self._offsets(started, size, 0, what)
         self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
+        # ACL-2629 (N4) / ACL-2637: the plan assumed 64 MB windows, but Meta decides every window and may start small
+        # and grow. The calls planned for this file are a hard cap: never send a transfer without room for it AND the
+        # finish. A small window alone does not stop: after UPLOAD_WINDOW_PROBE_TRANSFERS answers the rest is projected
+        # from the windows seen (growth included) and the upload stops only when that projection exceeds the cap.
+        calls_before = getattr(self.client, "calls", 0)
+        allowance = chunk_allowance
+        windows: list[int] = []
+        transfers = [0]
+        noted = [0]
+
+        def stop_for_windows(needed: int, left: int) -> None:
+            seen = ", ".join(_mb(w) for w in windows[:6]) + (", ..." if len(windows) > 6 else "")
+            self._step(out, f"{who}: upload windows offered by Meta: {seen}")
+            raise CreationStopped(
+                f"{what}: Meta accepts this video only in small pieces ({_mb(min(windows[-1], cap))} per call), so "
+                f"the rest of it needs about {needed} more calls but only {max(left, 0)} are planned for it. "
+                "Stopped before sending more; nothing was duplicated and the unfinished upload is not used. "
+                "Use a smaller video file (shorter, or exported at a lower bitrate).",
+                created=out.created, kind="video_error")
+
+        def check_window(at: int, window: int) -> None:
+            if not self.worker_path or window <= 0:
+                return
+            windows.append(window)
+            if noted[0] < 6 and (len(windows) == 1 or window != windows[-2]):
+                noted[0] += 1                                       # telemetry: how Meta's windows move
+                self._step(out, f"{who}: Meta upload window {_mb(window)} at {at // (1024 * 1024)} MB")
+            used = getattr(self.client, "calls", 0) - calls_before
+            left = allowance - used
+            needed = project_upload_calls(size - at, windows, cap, limit=allowance + 1) + 1   # + finish
+            if needed <= left:
+                return
+            if left < 2 or transfers[0] >= UPLOAD_WINDOW_PROBE_TRANSFERS:
+                stop_for_windows(needed, left)
+
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
-        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4 + 3 * (-(-size // VIDEO_CHUNK_MAX))
+        # ACL-2629: путь воркера - куски до 64 МБ (байты в страницу не копируются); иначе прежние 8 МБ.
+        served = bool(self.worker_path)
+        cap = VIDEO_CHUNK_MAX if served else VIDEO_CHUNK_STAGED_MAX
+        gcap = min(cap, CHUNK_WINDOW_LIVE) if served else cap        # Meta's real windows are ~5 MB, not the ceiling
+        guard = 2 * (-(-size // gcap)) + 4 + 3 * (-(-size // gcap))
+        check_window(offset, end - offset)
         failures = 0
         stalls = 0
         # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
@@ -2501,11 +4083,19 @@ class CampaignCreator:
             guard -= 1
             if guard < 0:
                 raise CreationStopped(f"{what}: upload does not progress", created=out.created, kind="video_error")
-            n = min(max(end - offset, 1), VIDEO_CHUNK_MAX, size - offset)
-            chunk = big.read_range(offset, n)
-            if len(chunk) != n:
-                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
-                                      kind="video_error")
+            n = min(max(end - offset, 1), cap, size - offset)
+            if served:
+                # The bytes are read piece by piece while the worker asks for them; a changed file is caught there
+                # (piece hash) and here (size) before the chunk is posted.
+                if self.size_of(big.path) != size:
+                    raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                          kind="video_error")
+                chunk = _wpol.ServedChunk(big, offset, n)
+            else:
+                chunk = big.read_range(offset, n)
+                if len(chunk) != n:
+                    raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                          kind="video_error")
             params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset),
                       "waterfall_id": waterfall}
             try:
@@ -2542,11 +4132,16 @@ class CampaignCreator:
                 failures += 1
                 offset, end = self._offsets(d, size, offset, what)
                 self._step(out, f"{who}: resuming the upload from offset {offset}")
+                if offset < size:
+                    check_window(offset, end - offset)      # ACL-2637: a window learned here counts as well
                 continue
             failures = 0
             stalls = 0
+            transfers[0] += 1
             self._beat()
             offset, end = self._offsets(body, size, offset, what)
+            if offset < size:
+                check_window(offset, end - offset)
             now = self.clock()
             if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
                                   or (offset - last_step_off) * 10 >= size):
@@ -2574,26 +4169,48 @@ class CampaignCreator:
         return vid
 
     def _wait_video(self, out: Outcome, ad: AdPlan, vid: str, *, who: str = "") -> str:
-        """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
+        """Ждать обработку видео до готовности (ACL-2668, решение 16): без потолка по времени и опросам.
+
+        Стоп только по ошибке обработки у Meta (с её причиной) и по отмене задания. Пока ждём - живая строка
+        статуса с процентом Meta и временем; сторож тишины видит ожидание, а не зависание. Опросы сверх запаса
+        плана (`CALLS_PER_VIDEO_POLLS`) добавляются к бюджету вызовов запуска: ожидание не упирается в бюджет.
+        """
         who = who or f"ad {ad.index}"
-        deadline = self.clock() + self.video_wait_s
+        began = self.clock()
         polls = 0
-        while True:
-            self._check_cancel(out)
-            row = self.client.get(f"/{vid}", {"fields": "status"})
-            polls += 1
-            status = row.get("status") if isinstance(row.get("status"), dict) else {}
-            state = str(status.get("video_status") or "").lower()
-            if state == "ready":
-                break
-            if state == "error":
-                raise CreationStopped(f"{who}: Meta could not process the video", created=out.created,
-                                      kind="video_error")
-            if polls >= self.video_max_polls or self.clock() + self.video_poll_s > deadline:
-                raise CreationStopped(
-                    f"{who}: the video is still processing after {int(self.video_wait_s)} s; "
-                    "publish again later (nothing is duplicated)", created=out.created, kind="video_timeout")
-            self.sleep(self.video_poll_s)
+        announced = False
+        try:
+            while True:
+                self._check_cancel(out)
+                if polls >= CALLS_PER_VIDEO_POLLS and isinstance(getattr(self.client, "max_calls", None), int):
+                    self.client.max_calls += 1          # опрос сверх запаса плана - часть бюджета этого запуска
+                row = self.client.get(f"/{vid}", {"fields": "status"})
+                polls += 1
+                status = row.get("status") if isinstance(row.get("status"), dict) else {}
+                state = str(status.get("video_status") or "").lower()
+                if state == "ready":
+                    break
+                if video_failed(status, state):
+                    reason = video_error_reason(status) or (f"video status {state}" if state else "")
+                    raise CreationStopped(
+                        f"{who}: Meta could not process the video" + (f": {reason}" if reason else ""),
+                        created=out.created, kind="video_error")
+                if not announced:
+                    self._waiting("video_processing")
+                    announced = True
+                self._beat()
+                self.live_progress(f"{who}: video processing at Meta{video_progress_text(status)}, "
+                                   f"{_wait_span(self.clock() - began)}")
+                # Пауза короткими кусками: Stop слышен за секунду, а не после полного шага опроса (до 60 с).
+                left = self.video_poll_s if polls < VIDEO_POLL_SLOW_AFTER else self.video_poll_max_s
+                while left > 0:
+                    self._check_cancel(out)
+                    piece = min(left, VIDEO_CANCEL_SLICE_S)
+                    self.sleep(piece)
+                    left -= piece
+        finally:
+            if announced:
+                self._waiting("")
         self._step(out, f"{who}: video processed")
         thumbs = self.client.get_all(f"/{vid}/thumbnails", {"fields": "uri,is_preferred"}, max_pages=1)
         pick = next((t for t in thumbs if t.get("is_preferred")), thumbs[0] if thumbs else None)
@@ -2789,6 +4406,24 @@ class CampaignCreator:
         except _tt.ShiftError as exc:
             raise PlanError(f"Ad set {ad_set.name!r}: {exc}.") from exc
 
+    def schedule_zone_note(self, ad_set: AdSetPlan) -> str:
+        """ACL-2666: Check plan называет пояс кабинета и разницу, по которой переведены часы расписания.
+
+        Разница берётся на момент старта (так её применяет `schedule_windows`). Нет расписания или
+        старта, пояс кабинета неизвестен или разница не целая - пусто (отказ покажет сама запись окон).
+        """
+        account = self.facts.timezone_name
+        if not (ad_set.schedule and ad_set.time_zone and ad_set.start_time) or _tt.load_zone(account) is None:
+            return ""
+        try:
+            start = self._start_dt(ad_set)
+            shift = _tt.whole_hour_shift(ad_set.time_zone, account, start)
+        except (PlanError, _tt.ShiftError):
+            return ""
+        off = start.astimezone(_tt.load_zone(account)).utcoffset().total_seconds() / 3600
+        return (f"Hours ticked in Israel time are converted to the ad account time zone {account} "
+                f"(UTC{off:+g}, {shift:+d} h from Israel on {start.date().isoformat()}).")
+
     def schedule_shift_warnings(self, plan: CampaignPlan) -> list[str]:
         """ACL-1448: предупреждения (не ошибки), если разница Израиль-кабинет меняется между стартом и концом."""
         account = self.facts.timezone_name
@@ -2837,7 +4472,7 @@ class CampaignCreator:
         if ad.uses_feed:
             # ACL-1774: несколько текстов и/или вертикальный файл - лента ассетов; рядом только страница.
             story: dict = {"page_id": plan.page_id}
-            extra: dict = {"asset_feed_spec": self.feed_spec(plan, ad, media)}
+            extra: dict = {"asset_feed_spec": self.feed_spec(plan, ad, media, instant=ad_set.instant)}
         else:
             story, extra = self._story(plan, ad, ad_set, media), {}
         return {"name": name, "object_story_spec": self.with_instagram(story), **extra,
@@ -2867,13 +4502,20 @@ class CampaignCreator:
         return main, vertical
 
     @staticmethod
-    def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict) -> dict:
-        """`asset_feed_spec` сайтового объявления: тексты (до 5) и один или два файла с метками.
+    def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict, *, instant: bool = False) -> dict:
+        """`asset_feed_spec` объявления: тексты (до 5) и один или два файла с метками.
+
+        ACL-2584: у Instant Form (`instant`) лента - форма Ads Manager (`instant_feed_spec`): заглушка вместо ссылки,
+        форма Страницы в кнопке ленты, `optimization_type: PLACEMENT` и два правила площадок.
 
         Один файл — без правил. Два — правило Stories/Reels на вертикальный и правило на остальные
         площадки на основной (Meta требует минимум два правила). Текстовые улучшения и Multi-advertiser
         выключены рядом, в самом креативе.
         """
+        if instant:
+            return CampaignCreator.instant_feed_spec(ad, media)
+        if ad.vertical_path and ad.multi_text:
+            return CampaignCreator.website_labelled_feed_spec(plan, ad, media)  # ACL-2611
         key = "videos" if ad.kind == "video" else "images"
 
         def item(m: dict, label: str | None) -> dict:
@@ -2886,7 +4528,8 @@ class CampaignCreator:
         spec: dict[str, Any] = {
             "titles": [{"text": t} for t in ad.titles],
             key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
-            "link_urls": [{"website_url": plan.link}], "call_to_action_types": [ad.cta],
+            "link_urls": [{"website_url": plan.link}],
+            "call_to_action_types": [ad.cta],
             "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
         if ad.bodies:  # ACL-2474: без основного текста ключ `bodies` не отправляем
             spec["bodies"] = [{"text": t} for t in ad.bodies]
@@ -2899,6 +4542,101 @@ class CampaignCreator:
             spec["asset_customization_rules"] = [
                 {"customization_spec": vert_pos, label_key: {"name": LABEL_VERTICAL}},
                 {"customization_spec": main_pos, label_key: {"name": LABEL_MAIN}}]
+        return spec
+
+    @staticmethod
+    def instant_rule_positions(placements: dict | None) -> tuple[dict, dict]:
+        """Площадки двух правил ленты Instant Form: (основное, Stories/Reels).
+
+        ACL-2584 (live 12.11): основное правило всегда пустое (catch-all, как у Ads Manager): только такой набор
+        Ads Manager показывает со всеми текстами. Доставку ограничивает таргетинг набора; вертикальное правило -
+        Stories/Reels выбранных площадок (Advantage+ - все).
+        """
+        manual = placements is not None and placements.get("mode") != "advantage_plus"
+        return {}, CampaignCreator.rule_positions(placements if manual else None)[1]
+
+    @staticmethod
+    def _labelled_texts_and_files(ad: AdPlan, media: dict, spec: dict) -> str:
+        """Тексты, файлы и их метки ленты (ACL-2584, ACL-2611); возвращает ключ файлов (`images`/`videos`).
+
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый
+        текст). Один файл несёт обе метки; два файла (ACL-2611) - основной метку основного правила, вертикальный -
+        метку вертикального.
+        """
+        def labelled(key: str, row: dict, first: bool) -> dict:
+            main, vertical = _wpol.instant_labels(key)
+            return {**row, "adlabels": [{"name": main}] + ([{"name": vertical}] if first else [])}
+
+        def file_row(m: dict) -> dict:
+            return ({"video_id": m["video_id"], "thumbnail_url": m["thumb"]} if ad.kind == "video"
+                    else {"hash": m["image_hash"]})
+
+        media_key = "videos" if ad.kind == "video" else "images"
+        for key, texts in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
+            if texts:  # ACL-2474: пустой вид текста ключ не отправляет
+                spec[key] = [labelled(key, {"text": t}, n == 0) for n, t in enumerate(texts)]
+        if "titles" not in spec:
+            # ACL-2584: без заголовка уходит ровно один пустой, как у Ads Manager (HAR владельца): Meta его сохранила.
+            spec["titles"] = [labelled("titles", {"text": ""}, True)]
+        if ad.vertical_path:
+            main_l, vert_l = _wpol.instant_labels(media_key)
+            spec[media_key] = [{**file_row(media), "adlabels": [{"name": main_l}]},
+                               {**file_row(media["vertical"]), "adlabels": [{"name": vert_l}]}]
+        else:
+            spec[media_key] = [labelled(media_key, file_row(media), True)]
+        return media_key
+
+    @staticmethod
+    def instant_feed_spec(ad: AdPlan, media: dict) -> dict:
+        """`asset_feed_spec` Instant Form с несколькими текстами: форма из HAR Ads Manager (ACL-2584, вариант A2).
+
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый текст).
+        Файл один с обеими метками (ACL-2611: с вертикальным файлом - два, по метке на файл); набор не Dynamic
+        Creative. Форма Страницы - в кнопке ленты.
+        """
+        def labelled(key: str, row: dict) -> dict:
+            main, vertical = _wpol.instant_labels(key)
+            return {**row, "adlabels": [{"name": main}, {"name": vertical}]}
+
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
+        media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
+        spec["link_urls"] = [labelled("link_urls", {"website_url": INSTANT_FORM_LINK})]
+        spec["call_to_action_types"] = [ad.cta]
+        spec["call_to_actions"] = [{"type": ad.cta, "value": {"link": INSTANT_FORM_LINK,
+                                                              "lead_gen_form_id": ad.form_id}}]
+        spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
+        present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
+        spec["asset_customization_rules"] = [
+            {"customization_spec": positions,
+             **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
+            for n, positions in enumerate((main_pos, vert_pos))]
+        return spec
+
+    @staticmethod
+    def website_labelled_feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict) -> dict:
+        """ACL-2611: Website, несколько текстов + вертикальный файл - та же размеченная лента, что у Instant Form.
+
+        Основной файл - метка основного правила, вертикальный - метка вертикального; все тексты - основная метка,
+        первый текст каждого вида - ещё и вертикальная; ссылка несёт обе метки. Площадки правил - как у Website с
+        двумя файлами (`rule_positions`). Набор не Dynamic Creative.
+        """
+        # Live 20.11 (KLD_BFL_I03): without `optimization_type: PLACEMENT` Meta takes Arabic texts for a language
+        # asset feed and refuses with 2490266 "Missing Default Rule"; Ads Manager (HAR) and the Instant Form send it.
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
+        media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
+        main_l, vert_l = _wpol.instant_labels("link_urls")
+        spec["link_urls"] = [{"website_url": plan.link, "adlabels": [{"name": main_l}, {"name": vert_l}]}]
+        spec["call_to_action_types"] = [ad.cta]
+        spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
+        present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
+        # Live 19.11: Meta refuses non-Latin (Arabic) texts here with 2490266 "Missing Default Rule in Language Asset
+        # Feed" unless the main rule is the empty catch-all, as Ads Manager sends it (HAR) and the Instant Form already does.
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
+        spec["asset_customization_rules"] = [
+            {"customization_spec": positions,
+             **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
+            for n, positions in enumerate((main_pos, vert_pos))]
         return spec
 
     @staticmethod
@@ -3087,8 +4825,12 @@ class CampaignCreator:
 
     # -- найденные кампания и группы против плана (до любой записи под ними)
     def _existing_differences(self, plan: CampaignPlan, targetings: list[dict], campaign_id: str,
-                              found_sets: list[dict | None]) -> list[dict]:
+                              found_sets: list[dict | None], *, has_ads: bool = True) -> list[dict]:
         """Что в уже существующих кампании/группах не совпадает с билдером. Только чтение.
+
+        ACL-2578: `has_ads=False` (кампания-остаток без объявлений) - агрегат `advantage_placement_state` не
+        сверяется: Meta считает его по набору с объявлениями, а площадки каждого набора сверяются отдельно ниже;
+        сам агрегат проверит сверка после записи, когда объявления уже есть.
 
         Имя, метка, campaign_id и расписание не показываем: имя и метку доказал поиск,
         остальное сверит сверка после записи. Ничего не обновляется и не удаляется.
@@ -3096,7 +4838,10 @@ class CampaignCreator:
         found: list[dict] = []
         camp = self.client.get(f"/{campaign_id}", {"fields": CAMPAIGN_FIELDS})
         self._budget_type_conflict(plan, camp)
-        diffs = _describe_diffs(self._campaign_checks(plan, camp))
+        camp_checks = self._campaign_checks(plan, camp)
+        if not has_ads:
+            camp_checks = [c for c in camp_checks if c["field"] != "advantage_placement_state"]
+        diffs = _describe_diffs(camp_checks)
         if diffs:
             found.append({"object": f"campaign {plan.name!r}", "kind": "campaign", "differences": diffs})
         for ad_set, targeting, hit in zip(plan.ad_sets, targetings, found_sets):
@@ -3145,14 +4890,21 @@ class CampaignCreator:
 
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
+        self._videos_this_run = {}
         self._recovery_rows = None
         self._missing_creative_tag = False
         self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
+        self._op = None
         try:
-            self._run(plan, out)
+            try:
+                self._run(plan, out)
+            finally:
+                self._close_upload_context(out)     # ACL-2637: never leave the separate upload tab open
+            self._finish_operation(out, _oj.OP_COMPLETE if not out.error else _oj.OP_STOPPED)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            out.run_continues = exc.run_continues
             out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
@@ -3174,6 +4926,15 @@ class CampaignCreator:
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
             out.failure = self._failure(plan, out, exc, kind="unknown")
+        except Exception as exc:  # noqa: BLE001 - ACL-1856: частичный результат не теряем из-за непредвиденного сбоя
+            log.exception("campaign creation failed unexpectedly")
+            out.error, out.stop_kind = MSG_UNEXPECTED, "unexpected"
+            self._finish_operation(out, _oj.OP_FAILED, note=type(exc).__name__)
+            self._snapshot_operation(out)
+            return out
+        if out.error:
+            self._finish_operation(out, _oj.OP_STOPPED, note=out.stop_kind)
+        self._snapshot_operation(out)
         return out
 
     def _check_reviewed_ids(self, plan: CampaignPlan) -> None:
@@ -3188,11 +4949,12 @@ class CampaignCreator:
         if problem:
             raise CreationStopped(problem, kind="review_stale")
 
-    @staticmethod
-    def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
+    def _failure(self, plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
         """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
         stage = getattr(exc, "stage", "") or CampaignCreator._stage_from_outcome(out)
-        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage})
+        pid = str(plan.pixel_id or next((s_.pixel_id for s_ in plan.ad_sets if s_.pixel_id), "") or "")
+        names = getattr(getattr(self, "facts", None), "pixel_names", None) or {}
+        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage, "pixel": names.get(pid) or pid})
         if failure.key == "targeting_merged":
             planned = [str(n) for s_ in plan.ad_sets for g in s_.interest_groups for n in g]
             hits, note = _plain.offending_note(planned, str((failure.details or {}).get("error_user_msg") or ""))
@@ -3231,6 +4993,96 @@ class CampaignCreator:
             text += " Not created: " + ", ".join(f"ad {ad.index}" for ad in todo) + "."
         return text
 
+    #: ACL-2629: the upload goes through the page's Web Worker (set by `_decide_worker_path` in `_prepare`).
+    worker_path = False
+    #: ACL-2637: why the in-profile upload is not used ('' - used, switched off or not needed), for the buyer's line.
+    _worker_why = ""
+    _worker_warning = ""
+
+    def _decide_worker_path(self, plan: CampaignPlan, out: Outcome) -> bool:
+        """ACL-2629: probe the in-profile worker data path once before any file is read or compressed.
+
+        On: the originals go up as they are (no compression). Off (switch, no big video, probe failed, a transport
+        without the path): the old staged path with compression, exactly as before. The probe is local: no call to Meta.
+        """
+        self._worker_why = self._worker_warning = ""
+        if not worker_upload_enabled():
+            self._worker_why = "switched off"
+            return False
+        if not any((self.size_of(p) or 0) > VIDEO_SINGLE_MAX_BYTES_WORKER for p in video_files_of(plan)):
+            return False
+        probe = getattr(self.client, "probe_worker", None)
+        if not callable(probe):
+            return False
+        try:
+            ok, why = probe()
+        except GraphStop:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a failed probe is a fallback, not a stop
+            ok, why = False, f"{type(exc).__name__}"
+        if ok:
+            transport = getattr(self.client, "transport", None)
+            mode = getattr(transport, "upload_mode", "") or "worker"
+            clean = getattr(transport, "upload_context", "") == "clean_tab"
+            if mode == "worker":
+                where = "a Web Worker"
+            elif clean and not why:
+                # ACL-2637: the clean tab runs no app, so its helper uploads directly - the intended mode there.
+                where = "the helper"
+            else:
+                where = "the page's helper (no worker could start)"
+            if clean:
+                where += " of a separate tab without a service worker"
+            self._step(out, f"video upload: originals go up from {where} in the profile (no compression)")
+            if why:      # inline mode: say exactly why the worker was not used (telemetry for the next live run)
+                out.warnings.append(f"Upload worker not used, continuing inline: {why}")
+            return True
+        if str(why).startswith("not supported"):
+            return False            # a transport without the worker path: the old path, nothing to tell the buyer
+        self._worker_why = str(why or "unknown reason")
+        self._worker_warning = (f"The in-profile upload worker is not available ({why or 'unknown reason'}); "
+                                "large videos are compressed and uploaded the slower way.")
+        out.warnings.append(self._worker_warning)
+        return False
+
+    def _close_upload_context(self, out: Outcome | None = None) -> None:
+        """ACL-2637: the separate upload tab (if the transport opened one) is closed when the run ends.
+
+        A close that cannot be confirmed is said (a step and a warning), never silent: the tab may still be open.
+        """
+        transport = getattr(self.client, "transport", None)
+        close = getattr(transport, "close_upload_context", None)
+        if not callable(close):
+            return
+        had = bool(getattr(transport, "upload_context", ""))
+        try:
+            ok = close()
+        except Exception:  # noqa: BLE001 - closing never fails the run
+            ok = False
+        if had and ok is False and out is not None:
+            self._step(out, "video upload: the separate upload tab could not be confirmed closed")
+            out.warnings.append("The separate upload tab of the profile may still be open; please close that tab in "
+                                "the profile browser.")
+
+    def _too_big_for_fallback(self, out: Outcome, who: str, path: str, original_mb: float, why: str) -> None:
+        """ACL-2637: the old path cannot take the file - ONE short buyer line instead of "uploading the original"
+        followed by a size refusal (and instead of the "compressed the slower way" warning). The full probe text
+        stays in the steps. Nothing has been uploaded (`run` adds "Nothing more was created.")."""
+        size = self.size_of(path) or 0
+        if size <= VIDEO_MAX_BYTES_STAGED:
+            return
+        full = self._worker_why or "not used"
+        short = full.split(" | ", 1)[0].split("; clean upload tab:", 1)[0].strip()
+        if len(short) > 120:
+            short = short[:117].rstrip() + "..."
+        if self._worker_warning in out.warnings:
+            out.warnings.remove(self._worker_warning)
+        self._step(out, f"{who}: in-profile upload not available: {full}")
+        cap = VIDEO_MAX_BYTES_STAGED // (1024 * 1024)
+        raise PlanError(f"{who}: the video is {original_mb or size / (1024 * 1024):.0f} MB; the in-profile "
+                        f"upload is not available ({short}) and the fallback upload accepts at most {cap} MB "
+                        f"({why}).", key="creative_file")
+
     def _video_for_upload(self, out: Outcome, path: str, who: str) -> str:
         """ACL-2000: тяжёлое видео сжимается тем же ffmpeg-сжимателем, что и в RPA-пути (кэш на исходник).
 
@@ -3240,25 +5092,22 @@ class CampaignCreator:
         """
         from src.fb_ads_rpa import creative_compress as _cc
 
-        limit = _cc.DEFAULT_LIMIT_MB
-        raw = os.environ.get("ACL_VIDEO_COMPRESS_ABOVE_MB", "").strip()
-        try:
-            if raw and float(raw) > 0:
-                limit = float(raw)
-        except ValueError:
-            pass
+        limit = video_compress_limit_mb()
         fn = self.compress_video or (lambda p: _cc.ensure_uploadable(p, limit_mb=limit))
         try:
             prepared = fn(path)
         except Exception as exc:  # noqa: BLE001 - сжатие не должно останавливать задание
             if type(exc).__name__ == "JobCancelled":
                 raise
+            self._too_big_for_fallback(out, who, path, 0.0, f"compression failed: {type(exc).__name__}")
             out.warnings.append(f"{who}: video compression failed ({type(exc).__name__}); uploading the original")
             return path
         if getattr(prepared, "compressed", False):
             self._step(out, f"{who}: video compressed {prepared.original_mb:.0f} MB -> {prepared.sent_mb:.1f} MB")
             return prepared.path
         if prepared.original_mb > limit:
+            self._too_big_for_fallback(out, who, path, prepared.original_mb,
+                                       f"not compressed: {prepared.reason or 'unknown reason'}")
             out.warnings.append(f"{who}: the video is {prepared.original_mb:.0f} MB and was not compressed "
                                 f"({prepared.reason or 'unknown reason'}); uploading the original, "
                                 "which can take a long time")
@@ -3268,7 +5117,7 @@ class CampaignCreator:
         """Файл объявления: видео больше 200 МБ - `LargeFile` (куски с диска), остальное - bytes."""
         if kind == "video":
             size = self.size_of(path)
-            if size and size > VIDEO_SINGLE_MAX_BYTES:
+            if size and size > single_request_max(self.worker_path):
                 return LargeFile(path, size, self.read_range)
         return self.read_file(path)
 
@@ -3295,6 +5144,27 @@ class CampaignCreator:
                             f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
                             "to the ad account in Business Manager. Nothing was created.", key="page_unavailable")
 
+    def _converted_ext(self, path: str) -> str:
+        return self.__dict__.get("_image_ext", {}).get(path, "")
+
+    def _meta_image(self, out: Outcome, path: str, data: bytes, who: str) -> bytes:
+        """ACL-2575: WebP/AVIF/HEIC -> PNG/JPEG in memory before any write (the file on disk is not touched).
+
+        The conversion is listed in the warnings; the library name keeps the new extension (`_image_ext`).
+        A file that cannot be converted stops the run here with its name and reason: nothing was created."""
+        try:
+            done = _imgconv.convert(path, data, IMAGE_MAX_BYTES, who)
+        except _imgconv.ImageConversionError as exc:
+            err = PlanError(str(exc) + " Nothing was created.", key="creative_file")
+            err.file_name = Path(path).name
+            raise err from exc
+        if done is None:
+            return data
+        self.__dict__.setdefault("_image_ext", {})[path] = done.ext
+        if done.note not in out.warnings:
+            out.warnings.append(done.note)
+        return done.data
+
     def _prepare(self, plan: CampaignPlan, out: Outcome, *,
                  writing: bool = True) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы.
@@ -3302,8 +5172,13 @@ class CampaignCreator:
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
         calls_at_start = getattr(self.client, "calls", 0)
+        self._writes_base = getattr(self.client, "writes", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
+        for ad_set in plan.ad_sets:  # ACL-2666: Check plan называет пояс кабинета и разницу часов
+            note = self.schedule_zone_note(ad_set)
+            if note and note not in out.warnings:
+                out.warnings.append(note)
         self.check_profile_page(plan)
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
@@ -3324,6 +5199,7 @@ class CampaignCreator:
         self._page_forms = None
         self._form_steps = {}
         self._form_warnings = []
+        self._cover_ids = {}
         if any(s.instant for s in plan.ad_sets):
             self._check_forms(plan)
             out.warnings += self._form_warnings
@@ -3332,35 +5208,66 @@ class CampaignCreator:
                 self._step(out, f"preflight: form will be created: {step.form_name}" if step.action == "create"
                            else f"preflight: form found on the Page, will be reused: {step.form_name}")
         files: dict[str, bytes] = {}
+        self.worker_path = self._decide_worker_path(plan, out) if writing else False
+        # Check plan does not probe: it counts the original when the worker path is switched on.
+        worker_plan = self.worker_path if writing else worker_upload_enabled()
+        video_limit = VIDEO_MAX_BYTES if worker_plan else VIDEO_MAX_BYTES_STAGED
+
+        def sent_len(path: str, data: Any) -> int:
+            # ACL-2621: Check plan does not compress; it measures what the run will upload (compressed size).
+            if not writing and isinstance(data, LargeFile):
+                return planned_upload_size(path, len(data))
+            return len(data)
+
+        def load(path: str, kind: str):
+            # Check plan does not probe the worker path, but it plans for it: a video the worker would upload in chunks
+            # is read as a large file here, so the plan can name it and count its calls.
+            if not writing and worker_plan and kind == "video":
+                size = self.size_of(path)
+                if size and size > single_request_max(True):
+                    return LargeFile(path, size, self.read_range)
+            return self.load_media(path, kind)
+
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
                     src = (self._video_for_upload(out, ad.path, f"ad {ad.index}")
-                           if writing and ad.kind == "video" else ad.path)
-                    data = self.load_media(src, ad.kind)
+                           if writing and ad.kind == "video" and not self.worker_path else ad.path)
+                    data = load(src, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
-                limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
-                if not data or len(data) > limit:
+                limit = video_limit if ad.kind == "video" else IMAGE_MAX_BYTES
+                if not data or sent_len(ad.path, data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB", key="creative_file")
+                if ad.kind != "video":
+                    data = self._meta_image(out, ad.path, data, f"ad {ad.index}")
                 files[ad.path] = data
                 if ad.vertical_path:
                     try:
                         vsrc = (self._video_for_upload(out, ad.vertical_path, f"ad {ad.index} Stories / Reels")
-                                if writing and ad.vertical_kind == "video" else ad.vertical_path)
-                        vdata = self.load_media(vsrc, ad.vertical_kind)
+                                if writing and ad.vertical_kind == "video" and not self.worker_path
+                                else ad.vertical_path)
+                        vdata = load(vsrc, ad.vertical_kind)
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
-                    vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
-                    if not vdata or len(vdata) > vlimit:
+                    vlimit = video_limit if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
+                    if not vdata or sent_len(ad.vertical_path, vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB", key="creative_file")
+                    if ad.vertical_kind != "video":
+                        vdata = self._meta_image(out, ad.vertical_path, vdata, f"ad {ad.index} Stories / Reels file")
                     if len(vdata) == len(data) and _md5(vdata) == _md5(data):
                         # ACL-2084: копия того же файла под другим именем. Meta отказывает в ленте с одним
                         # хэшем под двумя метками («All ad asset values must be unique», живой прогон
                         # 2026-11-04), поэтому файл идёт один раз - как тот же путь (ACL-2211).
                         # md5 только при равной длине: обычная пара хэширование не оплачивает.
+                        if ad.multi_text and not s.instant:
+                            # ACL-2611: с одним файлом несколько текстов Website - Dynamic Creative, а набор уже
+                            # построен как обычный (вертикальный файл был): не угадываем, отказ до записи.
+                            raise PlanError(f"ad {ad.index}: the Stories / Reels file is the same picture or video as "
+                                            "the main file; remove it (several texts then run as Dynamic Creative) "
+                                            "or choose a different Stories / Reels file", key="creative_file")
                         ad.vertical_path = ad.vertical_kind = ""
                         out.warnings.append(f"Ad {ad.index}: the same file was selected as main and Stories / Reels; "
                                             "it will be used once as the main file.")
@@ -3372,7 +5279,21 @@ class CampaignCreator:
         self._step(out, "preflight: creatives read")
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
-        chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
+        # ACL-2639: videos that would not fit the run chunked are planned (and budgeted) at the size of their compressed copy
+        self._video_plan = {}
+        if isinstance(budget, int) and worker_plan:
+            spare_total = budget - getattr(self.client, "calls", 0) - estimate_create_calls(plan)
+            self._video_plan = plan_upload_sizes(plan, lambda p: sent_len(p, files[p]) if p in files else _disk_size(p),
+                                              spare_total)
+
+        def video_calls(k: str, v: Any) -> int:
+            size, squeezed = self._video_plan.get(k, (sent_len(k, v), False))
+            return video_upload_calls(size, squeezed, worker_plan)
+
+        large = [(sent_len(k, v), video_calls(k, v)) for k, v in files.items() if isinstance(v, LargeFile)]
+        chunk_calls = sum(c for _s, c in large)        # одна оценка на файл: и для плана, и для резерва
+        self._large_pending = large
+        self._upload_writes = 0
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
         # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
@@ -3381,18 +5302,79 @@ class CampaignCreator:
         if isinstance(budget, int) and chunk_calls:
             rest = estimate_create_calls(plan)
             if chunk_calls + rest > budget:
+                from src.fb_ads_rpa import creative_compress as _cc
+
+                hint = (" ACL needs ffmpeg to compress the video (it was not found), or use a smaller file."
+                        if worker_plan and not resumable_upload_enabled() and compress_fallback_enabled()
+                        and not _cc.ffmpeg_exe() else "")
                 raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
                                 f"and the rest of the campaign about {rest}, more than "
-                                f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                                f"one run allows ({budget}). Use a smaller video or split the campaign.{hint} "
                                 "Nothing was created.")
             if not writing:
                 # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
-                sizes = [len(v) for v in files.values() if isinstance(v, LargeFile)]
-                n_chunks = sum(-(-n // VIDEO_CHUNK_MAX) for n in sizes)
-                out.warnings.append(
-                    f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
-                    f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
-                    "for this run (upper bound; the file may be compressed before upload).")
+                sizes = [self._video_plan.get(k, (sent_len(k, v), False))[0] for k, v in files.items()
+                         if isinstance(v, LargeFile)]
+                chunk_size = min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker_plan else VIDEO_CHUNK_STAGED_MAX
+                n_chunks = sum(-(-n // chunk_size) for n in sizes)
+                fast = bool(worker_plan and resumable_upload_enabled())
+                if fast:
+                    out.warnings.append(
+                        f"Large video: the fast upload takes about {chunk_calls} Meta calls, {chunk_calls + rest} of "
+                        f"{budget} calls planned for this run (the original file is uploaded without compression).")
+                    fallback = sum(upload_calls(sent_len(k, v), True, chunked=True) for k, v in files.items()
+                                   if isinstance(v, LargeFile))
+                    if fallback + rest > budget:
+                        if compress_fallback_enabled():
+                            # ACL-2639: which videos would be compressed (and to what) if the fast upload is refused
+                            spare_chk = max(budget - rest - chunk_calls, 0)
+                            fit = chunked_fit_mb(spare_chk)
+                            target_chk = max(1.0, fit * COMPRESS_FALLBACK_SHARE)
+                            labels = {a.path: a.index for s_ in plan.ad_sets for a in s_.ads}
+                            for k, v in files.items():
+                                if not isinstance(v, LargeFile):
+                                    continue
+                                mb = sent_len(k, v) / (1024 * 1024)
+                                if mb > target_chk:
+                                    out.warnings.append(
+                                        f"Ad {labels.get(k, '?')} video ({mb:.0f} MB) would be compressed to about "
+                                        f"{target_chk:.0f} MB if the fast upload is refused"
+                                        + ("" if fit >= 1 else " (this run has no spare Meta calls even for that)")
+                                        + " (resolution and aspect ratio stay the same).")
+                        else:
+                            out.warnings.append(
+                                f"If the fast upload is refused, uploading in {chunk_size // (1024 * 1024)} MB pieces "
+                                f"needs about {fallback} Meta calls and this run can give {max(budget - rest, 0)}: "
+                                "the upload would stop before it starts (nothing is uploaded). Use a smaller video "
+                                "file or publish fewer ads in this run.")
+                else:
+                    # ACL-2639: videos planned at the size of a compressed copy are named, with the size they shrink to
+                    names = {}
+                    for s_ in plan.ad_sets:
+                        for a in s_.ads:
+                            names[a.path] = f"Ad {a.index}"
+                            if a.vertical_path:
+                                names[a.vertical_path] = f"Ad {a.index} Stories / Reels"
+                    from src.fb_ads_rpa import creative_compress as _cc
+
+                    for k, v in files.items():
+                        pl = self._video_plan.get(k)
+                        if isinstance(v, LargeFile) and pl and pl[1]:
+                            try:
+                                eta = _cc.eta_text(_cc.duration_s(k))
+                            except Exception:  # noqa: BLE001
+                                eta = ""
+                            out.warnings.append(
+                                f"{names.get(k, 'A')} video ({sent_len(k, v) / 1048576:.0f} MB) will be compressed to "
+                                f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same"
+                                + (f"; {eta}" if eta else "") + ").")
+                    out.warnings.append(
+                        f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
+                        f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
+                        + ("for this run (upper bound: the original file is uploaded without compression; "
+                           "Meta may ask for smaller chunks)." if worker_plan else
+                           "for this run (upper bound; ACL compresses large videos before upload, "
+                           "so the real upload is usually smaller)."))
         self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
@@ -3453,23 +5435,51 @@ class CampaignCreator:
                                     "used); pick another form.", key="form_unavailable")
         self._form_steps = {}
         for tid, tpl in templates.items():
+            # ACL-2188: картинка чужой Страницы - стоп до поиска формы и до любой записи (строки, не числа).
+            if tpl.get("cover_photo_id") and str(tpl.get("cover_page_id") or "") != str(plan.page_id):
+                raise PlanError(_fc.MSG_COVER_OTHER_PAGE.format(name=tpl["name"]))
             existing, why = _fc.match_existing(read, tpl)
             if why:
                 raise PlanError(why + ".")
             fname = _ft.form_name(tpl)
             if existing:
+                self._refuse_existing_without_cover(plan, tpl, existing)
                 _fc.clear_pending(plan.act, plan.page_id, fname)
             elif _fc.is_pending(plan.act, plan.page_id, fname):
-                # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
-                raise PlanError(_fc.MSG_PENDING + ".")
+                # ACL-2668: прошлая запись могла дойти, но формы в списке нет - не ждём, создаём
+                # сразу; дубль допустим и называется «<шаблон> copy N · ACL <хэш>».
+                fname = _fc.next_copy_name(read, tpl)
             self._form_steps[tid] = _fc.FormStep(template_id=tid, template_name=tpl["name"],
-                                                 form_name=_ft.form_name(tpl), existing_id=existing)
+                                                 form_name=fname, existing_id=existing)
         if any(step.action == "create" for step in self._form_steps.values()):
             # Условия Lead Ads: робот их не принимает никогда; без них - остановка до записи.
             if _forms.page_terms_accepted(self.client, plan.page_id) is False:
                 raise PlanError(_fc.MSG_TERMS_STOP + ".")
             self._check_form_permission()
         self._page_forms = read
+
+    def _refuse_existing_without_cover(self, plan: CampaignPlan, tpl: dict, existing_id: str) -> None:
+        """ACL-2579: a same-name form without the template's background is NOT reused (stop before any write).
+
+        The name carries the template hash, so a form of this name may exist without a background (made by a run
+        where the picture was missing, or one Meta stored without it). Reusing it would publish ads with the wrong
+        form. Only a readable form that shows no / another picture stops; an unreadable one keeps the old
+        behaviour (reuse, with a note after the readback).
+        """
+        want = str(tpl.get("cover_photo_id") or "")
+        sha = str(tpl.get("cover_local_sha256") or "")
+        if not want and sha:
+            want = _cover_store.cached_photo(plan.page_id, sha) or ""
+        if not want and not sha:
+            return
+        if not want and not _cover_store.exists(tpl["id"], sha):
+            return      # ACL-2571: the picture is on another computer: this run makes/reuses a form without it
+        try:
+            row = self.client.get(f"/{existing_id}", {"fields": _fc.COVER_ONLY_FIELDS})
+        except GraphError:
+            return
+        if _fc.existing_cover_state(tpl, row, want) in ("missing", "different"):
+            raise PlanError(_fc.MSG_COVER_MISSING_ON_EXISTING.format(name=_ft.form_name(tpl)))
 
     def _check_form_permission(self) -> None:
         """Право `pages_manage_ads` у снятого токена: только предупреждение (ACL-1776).
@@ -3493,21 +5503,84 @@ class CampaignCreator:
             return replace(ad, form_id=placeholder)
         return ad
 
-    def _find_form_id(self, plan: CampaignPlan, tpl: dict) -> str | None:
-        """Сверка чтением списка форм Страницы: id своей формы по точному имени."""
+    def _upload_form_covers(self, out: Outcome, plan: CampaignPlan) -> None:
+        """ACL-2571: upload the local picture of every template whose form will be CREATED on this Page.
+
+        Once per Page + picture hash: a cached photo id is reused without an upload. A refusal stops the
+        campaign here, before any object is created, with Meta's own answer.
+        """
+        seen: dict[str, dict] = {}
+        for ad_set in plan.ad_sets:
+            for ad in ad_set.ads:
+                if ad.form_template and not ad.form_id:
+                    seen.setdefault(ad.form_template["id"], ad.form_template)
+        for tid, tpl in seen.items():
+            sha = str(tpl.get("cover_local_sha256") or "")
+            step = self._form_steps.get(tid)
+            if not sha or step is None or step.action != "create":
+                continue
+            cached = _cover_store.cached_photo(plan.page_id, sha)
+            if cached:
+                self._cover_ids[tid] = cached
+                self._step(out, f"form {step.form_name!r}: background picture already on this Page, reused (no upload)")
+                continue
+            data = _cover_store.read(tid, sha)
+            mime, bad = _cover_store.check_file(data or b"")
+            if data is None or bad:
+                raise CreationStopped(_fc.MSG_COVER_FILE_LOST.format(name=tpl["name"]) if data is None
+                                      else f"{bad} Nothing was created.", created=out.created, kind="form_cover_refused")
+            try:
+                got = self.client.upload_form_photo(plan.page_id, data, mime=mime)
+            except (GraphError, WriteUnknown, FormPhotoRefused) as exc:
+                raise CreationStopped(_fc.MSG_COVER_UPLOAD_REFUSED.format(name=tpl["name"], why=str(exc)[:300]),
+                                      created=out.created, kind="form_cover_refused") from exc
+            try:
+                _cover_store.remember_photo(plan.page_id, sha, got["photo_id"])
+            except OSError:
+                pass        # only a cache: the next publish to this Page uploads again
+            self._cover_ids[tid] = got["photo_id"]
+            self._step(out, f"form {step.form_name!r}: background picture uploaded to the Page")
+
+    def _find_form_id(self, plan: CampaignPlan, tpl: dict, name: str = "") -> str | None:
+        """Сверка чтением списка форм Страницы: id своей формы по точному имени (`name` - имя дубля)."""
         read = _forms.read_page_forms(self.client, plan.page_id)
         if not read.ok:
             raise GraphError(read.message)
+        if name and name != _ft.form_name(tpl):
+            hit = sorted((f for f in read.forms if f.name == name and f.usable), key=lambda f: f.id)
+            return hit[0].id if hit else None
         existing, _why = _fc.match_existing(read, tpl)
         return existing or None
 
-    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str) -> None:
-        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп."""
-        row = self.client.get(f"/{form_id}", {"fields": _fc.READBACK_FIELDS})
-        bad = _fc.compare_form(tpl, plan.page_id, row)
+    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str, reused: bool = False,
+                     cover_id: str = "", name: str = "") -> None:
+        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп.
+
+        Картинка (ACL-2188): у новой формы расхождение - стоп, у переиспользованной - заметка и дальше
+        (фото могли удалить со Страницы, рабочая форма не должна блокировать каждую публикацию).
+        """
+        # ACL-2571: the Page photo id of a local picture is known only at publish; the name stays the template's.
+        cov = dict(tpl, cover_photo_id=cover_id) if cover_id else tpl
+        row = self.client.get(f"/{form_id}", {"fields": _fc.readback_fields(cov)})
+        if reused and isinstance(row, dict):
+            # ACL-2668: переиспользуется и дубль «<шаблон> copy N · ACL <хэш>» - тоже своя.
+            got = str(row.get("name") or "")
+            name = got if _fc.copy_number(got, tpl) >= 0 else name
+        bad = _fc.compare_form(tpl, plan.page_id, row, name=name)
+        cover = _fc.compare_cover(cov, row)
+        if cover and reused and not bad:
+            self._step(out, f"form {_ft.form_name(tpl)!r}: {_fc.MSG_COVER_UNCONFIRMED}")
+            cover = []
+        bad += cover
+        logic = _fc.compare_logic(tpl, row)     # ACL-2178: a changed or missing condition always stops the run
+        bad += logic
         if bad:
+            tail = (" The form stays on the Page; the next run reuses it with a note."
+                    if "background image" in bad and not reused else "")
+            if logic and not reused:
+                tail += " The form stays on the Page; it can't be edited or deleted by the robot."
             raise CreationStopped(f"The form {_ft.form_name(tpl)!r} was read back with differences ("
-                                  + "; ".join(bad) + "). Nothing that depends on it was created.",
+                                  + "; ".join(bad) + "). Nothing that depends on it was created." + tail,
                                   created=out.created, kind="form_mismatch")
 
     def _ensure_form(self, out: Outcome, plan: CampaignPlan, ad: AdPlan) -> None:
@@ -3524,25 +5597,32 @@ class CampaignCreator:
                 out.reused.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: found on the Page, reused")
             else:
+                base = _ft.form_name(tpl)
                 try:
-                    # Метка ДО записи: без неё повторный запуск может создать вторую форму.
-                    _fc.record_pending(plan.act, plan.page_id, step.form_name)
-                except OSError as exc:
-                    raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
-                                          kind="form_state") from exc
+                    # Метка ДО записи: если ответ потеряется, следующий запуск назовёт дубль «copy N».
+                    _fc.record_pending(plan.act, plan.page_id, base)
+                except OSError:
+                    pass    # ACL-2668: метка - только имя дубля, публикацию она не останавливает
+                cover_id = self._cover_ids.get(tpl["id"], "")
+                params = _ft.form_params(tpl, cover_id)
+                params["name"] = step.form_name     # имя дубля после потерянного ответа
                 try:
                     step.form_id = self._write(
                         out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
-                        _ft.form_params(tpl), lambda: self._find_form_id(plan, tpl),
+                        params, lambda: self._find_form_id(plan, tpl, step.form_name),
                         form_page=plan.page_id)
                 except GraphError as exc:
-                    _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
-                    raise CreationStopped(_fc.refused_message(exc), created=out.created,
-                                          kind="form_refused") from exc
-                _fc.clear_pending(plan.act, plan.page_id, step.form_name)
+                    _fc.clear_pending(plan.act, plan.page_id, base)   # Meta отказала: формы нет
+                    if cover_id and tpl.get("cover_local_sha256"):
+                        # The cached photo may be gone from the Page: the next publish uploads again.
+                        _cover_store.forget_photo(plan.page_id, tpl["cover_local_sha256"])
+                    raise CreationStopped(_fc.refused_message(exc, dict(tpl, cover_photo_id=cover_id) if cover_id else tpl),
+                                          created=out.created, kind="form_refused") from exc
+                _fc.clear_pending(plan.act, plan.page_id, base)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")
-            self._verify_form(out, plan, tpl, step.form_id)
+            self._verify_form(out, plan, tpl, step.form_id, reused=bool(step.existing_id),
+                              cover_id=self._cover_ids.get(tpl["id"], ""), name=step.form_name)
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 
@@ -3630,7 +5710,7 @@ class CampaignCreator:
                     "optimization_goal": aset["optimization_goal"], "billing_event": aset["billing_event"],
                     "destination_type": aset["destination_type"], "call_to_action": cta.get("type"),
                     "ad_title": ad.title, "ad_body": ad.body, "ad_link_description": ad.description or None,
-                    "link": (plan.link if ad.uses_feed else
+                    "link": ((INSTANT_FORM_LINK if ad_set.instant else plan.link) if ad.uses_feed else
                              data.get("link") or (cta.get("value") or {}).get("link")),
                     "placements": aset["targeting"],
                     "api_preview": {"campaign": {"special_ad_categories": camp["special_ad_categories"]}}}))
@@ -3706,7 +5786,7 @@ class CampaignCreator:
                                     "vertical_bytes": len(files.get(ad.vertical_path, b""))}
                                    if ad.vertical_path else {}),
                                 "library_name": (video_title(plan.video_tag, data) if ad.kind == "video"
-                                                 else image_name(ad.path, data)),
+                                                 else image_name(ad.path, data, self._converted_ext(ad.path))),
                                 "creative": (self.creative_params(plan, ad, ad_set, media, ad.name)
                                              if ad.uses_feed else self._story(plan, ad, ad_set, media))})
                 sets.append({**self.adset_params(plan, ad_set, "<campaign>", targeting), "ads": ads})
@@ -3800,6 +5880,9 @@ class CampaignCreator:
         if ad_set.time_zone:
             # ACL-1448: время введено по поясу команды; расписание выше уже в часах кабинета.
             row["time_zone"] = ad_set.time_zone
+            note = self.schedule_zone_note(ad_set)
+            if note:
+                row["schedule_zone_note"] = note
 
     @staticmethod
     def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:
@@ -3847,6 +5930,10 @@ class CampaignCreator:
             self._audience_summary(sets[-1], plan, ad_set, t)
             if ad_set.dynamic:
                 sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
+            elif any((ad_set.instant and a.uses_feed) or (a.multi_text and a.vertical_path) for a in ad_set.ads):
+                # ACL-2611: Website with a Stories / Reels file takes the same labelled shape as an Instant Form.
+                sets[-1]["creative_mode"] = ("Several texts with placement rules (Stories / Reels show the first "
+                                             "text; any number of ads in this ad set)")
             if ad_set.instant:
                 # ACL-1775: вместо сайта - форма Страницы (имя и id); ключей сайта у такого набора нет.
                 known = self._page_forms.by_id() if self._page_forms else {}
@@ -3910,18 +5997,60 @@ class CampaignCreator:
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
         # 1. Всё, что можно проверить до записи.
+        # ACL-1856: the request as submitted - before name choice and before any start-time move.
+        submitted = (self._plan_view(plan), plan.tag)
         targetings, files = self._prepare(plan, out)
         self._check_reviewed_ids(plan)
+        # ACL-2571: the picture of a shared template goes to this Page BEFORE the first object is created.
+        self._upload_form_covers(out, plan)
 
         # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
         #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
         choice = self._resolve_name(plan, targetings)
+        base_plan = plan
         requested, plan = plan.name, choice.plan
         out.published_as = plan.name
         out.copy_number = choice.copy_number
         self._check_planned(plan, targetings, choice.found_sets)
         self._drain_start_move_notes(out)
         self._save_name_receipt(out, requested, choice)
+        # ACL-1856: журнал по итоговому плану (имя уже выбрано) и сверка прошлых этапов - до первой записи.
+        existing_id = str(choice.existing["id"]) if choice.existing else ""
+        for _attempt in range(4):
+            try:
+                adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+                break
+            except (_SwitchCopy, _AliveUnknown) as sw:
+                if isinstance(sw, _SwitchCopy):
+                    # ACL-2583: the operation already wrote (or may have written) the campaign under a higher copy
+                    # name than the lagging name choice: switch the rest of the run to that copy plan (labels,
+                    # names, receipt), never back to the base name.
+                    n = sw.copy_number
+                else:
+                    # ACL-2583 (owner decision): the earlier campaign of the journal cannot be read even after the
+                    # retries. No stop: a new operation under a copy name that differs from the earlier one.
+                    n = max(choice.copy_number, sw.copy_number) + 1
+                plan = copy_plan(base_plan, n)
+                self._check_name_length(plan)
+                choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
+                out.published_as, out.copy_number, existing_id = plan.name, n, ""
+                self._check_planned(plan, targetings, choice.found_sets)
+                self._save_name_receipt(out, requested, choice)
+                if isinstance(sw, _AliveUnknown):
+                    out.warnings.append(MSG_CONTINUED_AS_COPY.format(name=plan.name))
+        else:
+            raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name), created=out.created,
+                                  kind="unknown")
+        if adopt and not existing_id:
+            # The name search missed our live campaign: resume into it, never create a second one (ACL-1856).
+            found_sets, _partial, why = self._resume_state(plan, targetings, adopt)
+            if why:
+                self._snapshot_operation(out)
+                raise CreationStopped(MSG_MISMATCH.format(name=plan.name), created=out.created,
+                                      kind="resume_mismatch")
+            choice = NameChoice(plan, {"id": adopt, "name": plan.name}, found_sets, choice.copy_number)
+            existing_id = adopt
+        self._verify_resume(plan, out, existing_id)
         if choice.renamed:
             out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
@@ -3934,9 +6063,43 @@ class CampaignCreator:
             self._step(out, "campaign: found from a previous run")
             self._step(out, "existing campaign and ad sets match the builder")
         else:
-            out.campaign_id = self._write(
-                out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
-                lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
+            rewrites = 0
+            while True:
+                try:
+                    out.campaign_id = self._write(
+                        out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
+                        self._campaign_finder(plan, base_plan))
+                    break
+                except _CampaignRewrite as rw:
+                    # ACL-2583: the campaign write is unknown and not found: never the same name again. Set the old
+                    # operation aside and continue as a new one under the next copy name (bounded).
+                    rewrites += 1
+                    if rewrites > MAX_CAMPAIGN_REWRITES:
+                        self._snapshot_operation(out)
+                        raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name),
+                                              created=out.created, kind="unknown",
+                                              run_continues=True) from None
+                    old_name = plan.name
+                    n = max(choice.copy_number, rw.copy_number,
+                            name_copy_number(old_name, base_plan.name)) + 1
+                    plan = copy_plan(base_plan, n)
+                    self._check_name_length(plan)
+                    choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
+                    out.published_as, out.copy_number = plan.name, n
+                    found_sets = choice.found_sets
+                    self._check_planned(plan, targetings, found_sets)
+                    self._save_name_receipt(out, requested, choice)
+                    try:
+                        self._op = self.journal.supersede(self._op, request_id=self.request_key)
+                        self._op.set_published(plan.name, n)
+                    except _oj.JournalError as exc:
+                        self._journal_event("journal_save_failed", what="open", phase="supersede",
+                                            error=type(exc).__name__)
+                        raise CreationStopped(MSG_JOURNAL, created=out.created, kind="journal") from exc
+                    out.warnings.append(MSG_CAMPAIGN_REWRITTEN.format(old=old_name, name=plan.name))
+                    self._step(out, f"campaign: not found, creating a new one as {plan.name!r}")
+                    self._journal_event("unknown_rewritten", what="campaign", renamed_to=plan.name)
+                    self._snapshot_operation(out)
             out.created["campaign"] = out.campaign_id
             self._attach_name_receipt(out, plan.act, requested)
             self._verify_label(out, f"The campaign {plan.name!r}", out.campaign_id, plan.label)
@@ -4061,11 +6224,13 @@ class CampaignCreator:
         expected_title = video_title(tag, data) if data else ""
         actual_title = (self.client.get(f"/{actual_id}", {"fields": "title"}).get("title")
                         if data and actual_id else "")
-        verified = bool(expected_title and actual_title == expected_title)
+        # ACL-2744: a video reused from another campaign of this ad account carries that campaign's tag, same content hash.
+        reused = bool(data and actual_title and video_title_matches(str(actual_title), _md5(data)[:12]))
+        verified = bool(expected_title and (actual_title == expected_title or reused))
         if uploaded_id and (str(uploaded_id) == actual_id or not verified):
             check(aobj, id_field, str(uploaded_id), actual_id)
         if data:
-            check(aobj, content_field, expected_title, actual_title)
+            check(aobj, content_field, actual_title if reused else expected_title, actual_title)
         if identities is not None:
             identities.append({"object": aobj, "field": id_field,
                                "uploaded_id": str(uploaded_id or ""),
@@ -4075,7 +6240,8 @@ class CampaignCreator:
 
     def _feed_checks(self, check: Callable[[str, str, Any, Any], None], aobj: str, plan: CampaignPlan,
                      ad: AdPlan, creative: dict, rec: dict, files: dict[str, bytes],
-                     identities: list[dict] | None = None) -> list[tuple[str, str, str]]:
+                     identities: list[dict] | None = None, *, instant: bool = False,
+                     page_forms: _forms.FormsRead | None = None) -> list[tuple[str, str, str]]:
         """Сверка ленты ассетов (ACL-1774): все тексты как набор и привязка файлов к площадкам.
 
         Возвращает картинки, чей хэш не равен md5 нашего файла, — по ним ещё сверяется имя в библиотеке.
@@ -4091,17 +6257,47 @@ class CampaignCreator:
             # ACL-2290: Meta returns [' '] for "none"; whitespace-only values count as empty on both sides.
             return [v for v in values if str(v).strip()]
 
-        check(aobj, "primary_texts", nonblank(list(ad.bodies)), nonblank(texts("bodies")))
-        check(aobj, "headlines", nonblank(list(ad.titles)), nonblank(texts("titles")))
-        check(aobj, "descriptions", nonblank(list(ad.descriptions)), nonblank(texts("descriptions")))
+        # ACL-2611: a Website ad with several texts and a vertical file uses the same labelled shape as an Instant Form.
+        labelled = instant or (bool(ad.vertical_path) and ad.multi_text)
+
+        def listed(values: list[str]) -> list[str]:
+            # ACL-2584: on a labelled feed the texts are compared as a set (Meta may reorder them).
+            return sorted(values) if labelled else values
+
+        check(aobj, "primary_texts", listed(nonblank(list(ad.bodies))), listed(nonblank(texts("bodies"))))
+        check(aobj, "headlines", listed(nonblank(list(ad.titles))), listed(nonblank(texts("titles"))))
+        check(aobj, "descriptions", listed(nonblank(list(ad.descriptions))), listed(nonblank(texts("descriptions"))))
         ctas = fs.get("call_to_action_types") or [""]
         check(aobj, "call_to_action", ad.cta, ctas[0] if isinstance(ctas, list) and ctas else "")
         links = fs.get("link_urls") or [{}]
-        check(aobj, "link", plan.link, (links[0] or {}).get("website_url") if isinstance(links, list) and links else "")
+        check(aobj, "link", INSTANT_FORM_LINK if instant else plan.link,
+              (links[0] or {}).get("website_url") if isinstance(links, list) and links else "")
+        if instant:
+            # ACL-2528: the form id sits in the feed button; same id and page-membership checks as the single-text path.
+            feed_ctas = fs.get("call_to_actions")
+            feed_cta = feed_ctas[0] if isinstance(feed_ctas, list) and feed_ctas and isinstance(feed_ctas[0], dict) else {}
+            check(aobj, "feed_call_to_action", ad.cta, feed_cta.get("type"))
+            self._form_checks(check, aobj, ad, feed_cta, page_forms)
         key = "videos" if ad.kind == "video" else "images"
         check(aobj, "format", ad.kind, "video" if fs.get("videos") else ("image" if fs.get("images") else ""))
         id_key = "video_id" if ad.kind == "video" else "hash"
         rows = [x for x in (fs.get(key) or []) if isinstance(x, dict)]
+        if instant:
+            # ACL-2584: Ads Manager's own readback shows one file stored as two rows (same id, the second with a
+            # crop). Rows with the same id are one file carrying the labels of all of them.
+            merged: dict[str, dict] = {}
+            for r in rows:
+                ident = str(r.get(id_key) or "")
+                if not ident:
+                    merged[f"#{len(merged)}"] = r
+                    continue
+                names = merged.get(ident, {}).get("adlabels") or []
+                raw = r.get("adlabels")
+                raw = raw.get("data") if isinstance(raw, dict) else raw
+                more = [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
+                have = {x.get("name") for x in names}
+                merged[ident] = {id_key: ident, "adlabels": names + [x for x in more if x.get("name") not in have]}
+            rows = list(merged.values())
 
         def label_of(row: dict) -> str:
             raw = row.get("adlabels")
@@ -4110,12 +6306,57 @@ class CampaignCreator:
             first = raw[0] if isinstance(raw, list) and len(raw) == 1 else None
             return str(first.get("name") or "") if isinstance(first, dict) else ""
 
+        def names_of(row: dict) -> list[str]:
+            raw = row.get("adlabels")
+            if isinstance(raw, dict):
+                raw = raw.get("data")
+            return sorted(str(x.get("name") or "") for x in raw if isinstance(x, dict)) if isinstance(raw, list) else []
+
+        if labelled:
+            # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
+            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
+                if not nonblank(list(base)):
+                    continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
+                main, vertical = _wpol.instant_labels(kind)
+                got = [x for x in (fs.get(kind) or []) if isinstance(x, dict) and str(x.get("text") or "").strip()]
+                check(aobj, kind + "_main_label", sorted(nonblank(list(base))),
+                      sorted(str(x.get("text")) for x in got if main in names_of(x)))
+                check(aobj, kind + "_vertical_label", [base[0]],
+                      [str(x.get("text")) for x in got if vertical in names_of(x)])
+            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
+            media_key = "videos" if ad.kind == "video" else "images"
+            # The empty title is sent with its label in both rules, so the rules always name it.
+            present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),
+                                         ("descriptions", ad.descriptions)) if nonblank(list(base)) or k == "titles"
+                       ] + ["link_urls", media_key]
+
+            def rule_label(r: dict, lk: str) -> Any:
+                # ACL-2584: the public Graph names these `*_label`, the internal readback `*_adlabel`.
+                lab = r.get(lk) or r.get(lk.replace("_label", "_adlabel"))
+                return lab if isinstance(lab, dict) else {}
+
+            got_rules = [r for r in (fs.get("asset_customization_rules") or []) if isinstance(r, dict)]
+            for n, (name, want) in enumerate((("main", main_pos), ("stories_reels", vert_pos))):
+                want_labels = {_wpol.INSTANT_ASSET_KINDS[k][1]: _wpol.instant_labels(k)[n] for k in present}
+                rule = next((r for r in got_rules if all(
+                    rule_label(r, lk).get("name") == v for lk, v in want_labels.items())), {})
+                check(aobj, f"rule_{name}_labels", want_labels,
+                      {lk: rule_label(rule, lk).get("name") for lk in want_labels} if rule else {})
+                cs = rule.get("customization_spec") or {}
+                check(aobj, f"rule_{name}_placements",
+                      {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")},
+                      {k: sorted(cs.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")})
+        main_label, vert_label = _wpol.instant_labels(key) if labelled else (LABEL_MAIN, LABEL_VERTICAL)
         by_label = {label_of(r): str(r.get(id_key) or "") for r in rows}
-        bound = {"main": by_label.get(LABEL_MAIN) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
-        bound["vertical"] = by_label.get(LABEL_VERTICAL, "")
+        bound = {"main": by_label.get(main_label) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
+        bound["vertical"] = by_label.get(vert_label, "")
         check(aobj, "file_count", 2 if ad.vertical_path else 1, len(rows))
         if ad.vertical_path:
-            check(aobj, "media_labels", [LABEL_MAIN, LABEL_VERTICAL], [label_of(r) for r in rows])
+            # ACL-2611: each file carries exactly its own label (main file -> main rule, vertical file -> Stories/Reels rule).
+            check(aobj, "media_labels", [main_label, vert_label], [label_of(r) for r in rows])
+        elif instant:
+            check(aobj, "media_labels", sorted(_wpol.instant_labels(key)), sorted(n for r in rows for n in names_of(r)))
         else:
             check(aobj, "placement_rules", [], fs.get("asset_customization_rules") or [])
         extra: list[tuple[str, str, str]] = []
@@ -4135,7 +6376,7 @@ class CampaignCreator:
                     check(aobj, name, str(made), got)
                 if data and got and got != _md5(data):
                     extra.append((aobj, path, got))
-        if ad.vertical_path:
+        if ad.vertical_path and not labelled:
             # Какие площадки получили какой файл: правило на метку должно нести ровно наши площадки.
             main_pos, vert_pos = self.rule_positions(ad.placements)
             label_key = "video_label" if ad.kind == "video" else "image_label"
@@ -4260,7 +6501,8 @@ class CampaignCreator:
                 if ad.uses_feed:
                     # ACL-1774: тексты и файлы в ленте ассетов, а не в object_story_spec.
                     image_ads += self._feed_checks(check, aobj, plan, ad, creative, rec, files,
-                                                   diag.setdefault("video_identity", []))
+                                                   diag.setdefault("video_identity", []),
+                                                   instant=ad_set.instant, page_forms=page_forms)
                     continue
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":
@@ -4306,7 +6548,8 @@ class CampaignCreator:
                 "hashes": sorted({h for _, _, h in image_ads}), "fields": "hash,name"}, max_pages=1)
             names = {str(r.get("hash")): str(r.get("name") or "") for r in rows}
             for aobj, path, h in image_ads:
-                check(aobj, "image_file", image_name(path, files[path]), names.get(h, ""))
+                want_name = image_name(path, files[path], self._converted_ext(path))
+                check(aobj, "image_file", want_name, stored_image_name(want_name, names.get(h, "")))
         mismatches = [c for c in checks if not c["ok"]]
         return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches,
                 "diagnostics": diag}
@@ -4376,6 +6619,14 @@ def graph_problem(exc: BaseException) -> dict:
                 "severity": "blocking", "step": "graph_error", "raw": raw or "Meta refused the request (no details given)."}
     return {"title": x.message_en, "impact": "", "action": x.action_en, "severity": "blocking",
             "step": "graph_error", "raw": (f"code {code}: " if code else "") + raw}
+
+
+def _object_gone(exc: GraphError) -> bool:
+    """ACL-2578: Meta says the object does not exist (deleted); any other failed read leaves the question open.
+
+    ACL-2639 uses it too (a pending video upload is forgotten only then). Deliberately NOT "nonexisting": Meta's
+    "(#100) Tried accessing nonexisting field" is a wrong-field error on a live object, not a missing object."""
+    return exc.code == 100 and (exc.subcode == 33 or "does not exist" in str(exc).lower())
 
 
 def _advantage_info(camp: dict) -> dict:

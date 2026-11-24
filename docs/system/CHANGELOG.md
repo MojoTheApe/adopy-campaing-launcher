@@ -1,5 +1,509 @@
 # System history
 
+## ACL-2883 — Landing preview shows the real page as a thumbnail — 2026-11-23
+
+The hover preview of a landing in the builder now loads the landing with its own origin, so landings that depend on their own scripts show the real page instead of their error page. The page is laid out at phone size and scaled down into the preview box, so the whole first screen is visible instead of a cropped piece. The frame still cannot reach the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1883).
+
+## ACL-2881 — Landing search is faster: one reused connection and a 1-second pending poll — 2026-11-23
+
+The landing picker now keeps one open connection to JCloudFront for later searches instead of connecting for every call, and repeats a "preparing the catalog" answer every second instead of every three. A repeated search takes about 0.2 s instead of 1.3 s, a new code about 0.5 s instead of 5 s. The first search after a long idle still waits while JCloudFront prepares its catalog.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1881).
+
+## ACL-2878 — Landing preview frame is no longer blocked by the dashboard policy — 2026-11-23
+
+The hover preview of a landing in the builder showed an empty grey box because the dashboard's Content-Security-Policy had no `frame-src`. It now allows https pages in the preview frame; the frame stays sandboxed and the dashboard itself still cannot be framed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1878).
+
+## ACL-2876 — Landing picker: the hover preview stays beside the results list — 2026-11-23
+
+The landing preview in the builder is now placed relative to the window next to the hovered row (right of the list, else left, else at the right edge) instead of at a fixed offset, so it no longer lands over the scrollbar in a narrow panel.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1876).
+
+## ACL-2872 — Landing picker: grouped Variant search by configuration — 2026-11-23
+
+Searching a Variant code such as `1_ar_fm` now finds it inside longer landing addresses and shows one card per unique configuration with the number of pages in it, plus a "unique configurations · landings" line. A pasted URL shows the grouped variants of its template on all domains. The Asset filter narrows the same grouped search.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1872).
+
+## ACL-2694 — Run limits save without a confirm dialog; memory threshold 0-95 % — 2026-11-23
+
+Settings saves any in-bounds run limit at once: no confirm dialog, no warning text, no `confirm` flag in the API. The memory threshold accepts 0-95 % (default 92 %); Profiles at once stays 1-8.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1694).
+
+## ACL-2692 — Publish, commands, Check plan and Open profile work as Retry on a held profile — 2026-11-23
+
+A person-started Publish, campaign command (incl. shut-off), Check plan or Open profile now probes a held profile like Retry: a healthy page lifts the hold, a page that still has the problem sets it again and the row shows the reason. Automatic reads keep respecting the hold. A code-31 hold is still cleared only after Meta answered a person's write.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1692).
+
+## ACL-2697 — Report rebuild waits only for low memory, not for a publish — 2026-11-23
+
+The report no longer defers its own rebuild because a publish is running; it waits only while the computer is short of memory (the same 92 % gate as a new profile). Refresh is never deferred.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1697).
+
+## ACL-2677 — Timed Meta pause no longer refuses actions the person started — 2026-11-23
+
+After a Meta stop, the timed per-profile pause (rate limit, frozen tab) holds only automatic background reads. Publish, Check plan, commands and Read/Retry started by the person go at once. Persisted holds (checkpoint, login page, policy block) are unchanged, and the account row still shows the reason.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1677).
+
+## ACL-2735 — No limit on heavy account actions at once — 2026-11-16
+
+The "Heavy actions at once" limit (default 1, `ACL_WARM_MAX_HEAVY`) is removed by the owner's decision on audit row 3:
+publish, Check plan, commands and reads on different accounts no longer wait for each other. How many run at once is
+decided only by the memory gate and "Profiles at once". Two actions on the same profile still never run together
+(the profile lock). The field is gone from Settings → Run limits; an old `ACL_WARM_MAX_HEAVY` value in `.env` is ignored.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1735).
+
+## ACL-2870 — Home: Open on one account no longer blocks the others — 2026-11-23
+
+Pressing Open on one account disables only that account's button; other accounts and the warm bar stay usable, and the server accepts open jobs for different accounts at once.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1870).
+
+## ACL-2676 — Profile starts no longer wait for the CPU — 2026-11-23
+
+The next profile of a job no longer waits for the CPU to stay below 70 % for 5 s (up to 180 s). The settings
+`ACL_START_CPU_SETTLE_S` and `ACL_START_MAX_HOLD_S` are removed. A start is held only by the memory gate (ACL-2255)
+and the profile ceiling; profiles of a job still start one at a time while the previous one is warming up. The
+restart pause after a profile closed under load no longer waits for the CPU to drop either. The load wait text shows
+the CPU reading without a "starts below" level. `ACL_LOAD_CPU_PCT` stays for tab patience.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1676).
+
+## ACL-2695 — Retry a failed account read on expand and in the next window — 2026-11-23
+
+An ordinary failed read (network, timeout, replaced tab) no longer blocks the account for an hour: expanding it reads it again at once, and the next 08/13/18 window reads it as well. A held profile (ACL-2091) is still skipped by every automatic read; only a person's Retry reaches it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1695).
+
+## ACL-2686 — A kept profile window takes no slot and defers nothing — 2026-11-23
+
+A kept convenience profile window (after a clean publish, Check plan, read or command) no longer counts against "Profiles at once" and no longer defers the scheduled sweep or the report rebuild; only running or waiting jobs do. It closes at once when a job is short of memory; `ACL_KEPT_IDLE_CLOSE_MIN` stays an override. Review windows keep their slot. Multilogin log out/repair still sees kept windows.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1686).
+
+## ACL-2683 — Lead forms: create right away after a lost Meta answer — 2026-11-23
+
+If Meta never answered a lead form write and the form list does not show it, the next Publish no longer waits: it creates the form at once under the name "<template> copy N". A duplicate is acceptable; the copy is matched as our own form on later runs.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1683).
+
+## ACL-2693 — One 24 h freshness rule for account status, show read age — 2026-11-23
+
+Home now uses the same 24 h freshness rule as Manage: a clear read older than 24 h is not shown as fresh Active. A fresh Active status shows its read age next to the word, e.g. "Active · 3h ago".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1693).
+
+## ACL-2738 — Publish waits for Meta's video processing until the video is ready — 2026-11-16
+
+Publish no longer stops with "the video is still processing after 300 s; publish again later". The creator polls the
+video's status until Meta reports it ready (every 15 s, every 60 s after 20 polls), with no time or poll cap; the
+buyer's Cancel still works at every poll. The live status line shows "video processing at Meta (NN%), M min SS s"
+(Meta's `processing_progress` when given). Polls beyond the plan's reserve (`CALLS_PER_VIDEO_POLLS`) extend the run's
+call budget instead of ending the run. Only a real processing error stops that ad, with Meta's reason from the
+status phases. A resumed publish no longer stops on a video that is still processing; only a failed video stops it.
+Owner decision 16 of the ACL-2668 audit (#1668).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1738).
+
+## ACL-2863 — Home map no longer takes another account's stats by a name-ending guess — 2026-11-23
+
+The tail guess uses only the account's own name (without the " - Person" annotation), needs a digit in the tail, and never matches a non-Facebook alias.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1863).
+
+## ACL-2859 — Landing picker: template fallback after a pending search, lazy load, hidden Asset chip — 2026-11-22
+
+A Variant whose first path search answered "preparing the catalog" is now also searched as a template when the repeat finds nothing. Chosen landings are loaded when an account block is first shown, not for every collapsed block at page load. The empty "×" chip under the Asset field no longer shows when no asset is chosen.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1859).
+
+## ACL-2852 — Builder: pick JCloudFront landings for an account — 2026-11-22
+
+The builder's Account section can search the JCloudFront catalog by Variant, path, URL or Asset, preview a landing on hover or open it in a new tab, and keep up to three landings per account with an even, editable split (100 / 50-50 / 33-33-34). "Use landing" in the stats Landings tab opens the same search. Generate is shown but disabled until the Keitaro connection. The MCP token stays in the machine environment.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1852).
+
+## ACL-2853 — Add country works when the country holds only another buyer's accounts — 2026-11-20
+
+"Add <country> to the account map" and Home "+ Country" now record the country for the selected buyer (KW and Kuwait count as one country), so it appears empty on that buyer's map while other buyers' accounts stay hidden; a press that changes nothing shows the reason next to the button.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1853).
+
+## ACL-2850 — Pixel list loads faster — 2026-11-20
+
+Pixel and Pages are read in one profile session (one open, two read-only calls) and each click fills both caches; Check plan and Publish fill an empty pixel cache from the pixel list they already read; the Pixel field shows the profile wait/opening text; pixel reads write `fb_api_read` with wait, capture and call seconds.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1850).
+
+## ACL-2847 — Logged out of Facebook: Publish and Check plan say so at once — 2026-11-20
+
+A profile that was already open and fell to the Facebook login page is now detected when Publish or Check plan reaches it (local tab addresses only, no Graph call). That account shows "Logged out of Facebook. Open the profile, log in to Ads Manager, then publish again." and Publish and Check plan stop with the same text; other accounts go on. A review that cannot open, or a Confirm that cannot start, now says why instead of doing nothing.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1847).
+
+## ACL-2845 — Arabic texts with a Stories/Reels file: empty default rule in the Website feed — 2026-11-20
+
+The Website labelled feed (several texts plus a Stories/Reels file) now sends its main rule with an empty customization_spec, the default rule Ads Manager sends. Meta refused Arabic texts without it (error 2490266, "Missing Default Rule in Language Asset Feed").
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1845).
+
+Live retest 20.11 still got 2490266, so the same feed now also sends `optimization_type: PLACEMENT`, as Ads Manager and the Instant Form do. Without it Meta treated the Arabic texts as a language asset feed.
+
+## ACL-2831 — Ad texts form: no example placeholders — 2026-11-19
+
+Removed grey example placeholders from the Ad title, Language, Headline and Description fields so they are not mistaken for filled values.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1831).
+
+## ACL-2841 — Facebook lock: login-page hold and Meta's own text — 2026-11-19
+
+A profile tab on the Facebook login or recover page now holds that account (red, "Logged out of Facebook"), and the row shows the tab title Meta wrote, read from the local tab list. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1841).
+
+## ACL-2839 — Builder schedule shows the hours as Ads Manager will — 2026-11-19
+
+Under the lifetime schedule grid the line now reads "In Ads Manager (<time zone>): Mon–Thu 08–19, ..." using the same Israel-to-account conversion Publish writes (account time zone and DST of the campaign dates); it waits for Check plan while the zone is unknown.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1839).
+
+## ACL-2835 — Pixel field: empty list wording and no caching of empty answers — 2026-11-19
+
+An account with no pixel now shows "No pixel found on this account" instead of "the only pixel", and an empty answer is no longer cached, so the next open or Refresh pixels re-reads it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1835).
+
+## ACL-2834 — Pixel refusal text: drop "(inactive)" — 2026-11-19
+
+When Meta refuses an ad because its pixel is no longer available, the message now says "activate it or check access in Events Manager" instead of claiming the pixel is inactive.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1834).
+
+## ACL-2822 — Faster profile open — 2026-11-19
+
+The proxy check asks only the profile's own slot, the running-profiles lookup stops at the first endpoint that answers, a dead folder-id endpoint is skipped, and every open writes one `profile.open` summary (outcome and per-step seconds) to the event log.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1822).
+
+## ACL-2811 — A stopped publish shows Meta's reason, never "wait" — 2026-11-19
+
+A publish that stops shows the account's Meta reason (for example "authenticate this account") with what to do, also when Meta's signal is stored after the stop; no publish text tells the buyer to wait, and with no reason it says "Publish again".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1811).
+
+## ACL-2821 — Multilogin refusal names the likely workspace mismatch on the account — 2026-11-19
+
+When Multilogin refuses to open a profile (403), the account row now says the Multilogin app may be signed in to the other workspace (Inhouse vs KLD), or that this sign-in is in use on another computer - it is a hint, not a certainty, and works for both slots. A refused slot gets one recheck, is then not started again within the same publish, read or batch, and one successful start clears it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1821).
+
+## ACL-2820 — Closed profile says "closed", not "busy or locked" — 2026-11-19
+
+A profile closed before or during an action now shows "The profile was closed - press Open (or Retry) to open it again" on that account's row. Real Multilogin locks keep their own text.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1820).
+
+## ACL-2819 — Can't-lock-profile after a stop is released and opened — 2026-11-19
+
+On "can't lock profile" the API open now asks local Multilogin for the profile status: stopped means release the stale lock and start once; running or syncing means wait for stopped, then start. Local calls only, never Meta.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1819).
+
+## ACL-2818 — Profile restart cooldown defaults to 0 — 2026-11-19
+
+The pause after a profile stop (`ACL_PROFILE_RESTART_COOLDOWN_S`) now defaults to 0 s, per the owner's 23.10 decision, so a closed profile reopens at once without the sync-wait or "can be started again" text. The env variable still overrides it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1818).
+
+## ACL-2814 — Meta's definite refusal is shown, not "did not confirm" — 2026-11-19
+
+A non-transient Graph refusal with Meta's own text (e.g. 100/1784033 "pixel is no longer available", even with HTTP 500) now stops that campaign with Meta's reason and the action, with no readback and no second send.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1814).
+
+## ACL-2816 — Pixel field in the builder — 2026-11-19
+
+The builder has a Pixel field next to the Facebook Page: the account's pixels are read inside the profile (Refresh pixels), several pixels require a choice, Instant Form-only campaigns need none.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1816).
+
+## ACL-2808 — Date change opens faster — 2026-11-19
+
+The Country Workbench for all countries is now computed in one vectorized pass instead of ~700 small groupings per report, so a period that was never opened builds much faster. Numbers, rows and order on screen are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1808).
+
+## ACL-2806 — Budget command changes lifetime budgets — 2026-11-19
+
+The manual budget command now raises or lowers the lifetime budget of a campaign or ad set (preview "X lifetime → Y lifetime", readback checks `lifetime_budget`); a Meta refusal stays on that object's row. Daily budgets and automatic rules are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1806).
+
+## ACL-2790 — Keep a profile open for the next action without holding a slot — 2026-11-18
+
+After a buyer-started read, command or Check plan on the API path, the profile it opened stays open as a "preemptible" kept window, so a command pressed next on that account does not reopen the profile. Any job that needs a slot or memory (read, command, Check plan, Publish, Open profile) closes such a window at once, least recently used first — nobody waits for it. Post-publish kept windows (ACL-2113) and the RPA path are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1790).
+
+## ACL-2652 — A profile hold is lifted by the owner — 2026-11-19
+
+Open profile (single and "Open profiles for today") and a person's budget/status edit lift the "Meta asks to confirm this account" hold (code 31) and make one status call; if Meta asks again the hold returns. Retry shows for any held profile (Home row, Manage, the red banner) and is a status-only read. Open profile also ends a "tab stopped answering" hold, and that refusal no longer carries the `account_blocked` code. Background reads never lift a hold; policy, logged-out and checkpoint holds are never lifted by an edit.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1652).
+
+## ACL-2792 — Fast proxy probe retry — 2026-11-19
+
+When the profile proxy probe fails its first attempt, ACL now re-probes the same neutral host every second within the same 12 s budget instead of sleeping the whole time.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1792).
+
+## ACL-2666 — Ad schedule hours converted with real time zone rules — 2026-11-19
+
+Hours ticked in Israel time are converted to the ad account time zone with real zone rules for the
+run dates (not a fixed offset), so a New York account in November gets a 7 hour difference, not 8.
+Check plan now states the account zone and the difference used.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1666).
+
+## ACL-2791 — One light tab from command preview to execute — 2026-11-18
+
+A command preview now uses the same read-only helper mode as its execute, so confirming reuses the kept light tab and token instead of opening a capture tab or handing the token over again; the pre-write re-read is unchanged and a lost tab is replaced as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1791).
+
+## ACL-2785 — Graph API is the default backend — 2026-11-18
+
+A missing or empty `ACL_FB_BACKEND` in the machine `.env` now means the Graph API backend (from inside the profile), so publish, reads, campaign commands, inventory and the builder no longer fall back to RPA after an update or on a fresh machine. Only an explicit `ACL_FB_BACKEND=rpa` selects RPA, kept for manual intervention on an account. All readers share one helper, `src/fb_api/backend.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1785).
+
+## ACL-2789 — Release the profile before the list refresh after a campaign command — 2026-11-18
+
+A campaign command now frees the account's profile as soon as readback confirms the write: the changed row is updated from the readback at once, and the list refresh runs after the release as one refresh for a run of commands on the same account.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1789).
+
+## ACL-2780 — Campaign Builder follows the selected buyer — 2026-11-18
+
+After you switch "Logged as" to another buyer, the Campaign Builder now shows only that buyer's accounts and drafts, like the Accounts list. Builder drafts are stored separately for each buyer: existing drafts stay with the machine's default buyer, switching never deletes anyone's drafts, and switching back brings them back. Accounts of other buyers no longer appear in the builder's account rows and recommendations. https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1780
+
+## ACL-2764 — One-step statistics sign-in instead of the "No data file" page — 2026-11-18
+
+A computer with no BI connection and no stats workbook (fresh install, or an update from the Excel era) now opens a single "Connect statistics" step: one Google sign-in button, no Excel path or environment-variable text. After sign-in the dashboard starts building and opens on its own, with no "Check again" or manual refresh; if the connection appears another way the page opens by itself. Updates keep the BI settings in the machine `.env`, so sign-in is needed once per computer.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1764).
+
+## ACL-2742 — Fix flaky date-change browser test (null _hc) — 2026-11-18
+
+The browser test for ten date changes polled `document.querySelector('.amap-campaigns')._hc` right after `amapApply` started a page navigation. In the new document `.amap-campaigns` does not exist until `<body>` is parsed, so the poll threw "Cannot read properties of null (reading '_hc')". The test now waits for the navigation itself and its readiness check is null-safe. Test-only change, no dashboard behaviour change.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1742).
+
+## ACL-2773 — Hub test: a tampered session signature always differs — 2026-11-18
+
+The Hub Worker test for a tampered session cookie sometimes left the signature unchanged (its last character was already "0") and failed at random. It now always flips that character to a different one. Test-only change.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1773
+
+## ACL-2768 — Telemetry Hub part 3: Telegram bot for buyers' runs — 2026-11-18
+
+The Hub now has a Telegram bot for the owner. It sends one grouped alert per failed buyer run, with Explain, Mute and Task buttons, and the same failure is not repeated within 30 minutes. It also sends a one-time alert for a stuck job and a morning digest after 07:00 Israel time. It answers /today /yesterday /failures /unfinished /buyer /machine /tasks /done /cleared /hint /mute /unmute. Runs that published with problems count as "ok (N with problems)" and show yellow in the Hub. The bot answers only the owner's chat, and its token lives only in Worker secrets.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1768
+
+## ACL-2767 — Telemetry Hub part 2: the owner's Control Center for buyers' runs — 2026-11-18
+
+The Hub Worker now serves an owner-only Control Center: a per-buyer day summary (campaigns, ok / failed / not started, active hours, median duration, version), a live feed of run lines, and a run detail view with steps, timings and a plain-English explanation of each failure. The owner signs in once with the owner key; the session is kept in a signed cookie for 30 days. No Meta requests, no external scripts.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1767
+
+## ACL-2763 — Per-buyer account map: the accounts connected under the selected buyer — 2026-11-18
+
+When "Logged as" switches to another buyer, the stats already came from BI for that buyer, but the account map still showed the machine's own accounts. An account connected while a buyer is selected is now tagged with that buyer, and the account map, builder accounts and Home show only the selected buyer's accounts. Rows without a tag belong to the machine's default buyer, so nothing existing moves.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1763
+
+## ACL-2752 — Publish popup: publish the ready campaigns, not-ready ones stay in the builder — 2026-11-17
+
+When some selected campaigns are not ready, the publish popup now offers "Publish N ready" (N counts only ready campaigns) and an x to take a not-ready campaign or account out of this publish. Removing only unticks it; the draft stays in the builder.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1752
+
+## ACL-2748 — An unknown write result no longer stops a publish — 2026-11-17
+
+Owner rule 12.11 (publishing beats blocking). An unknown write result of any kind (no answer, a bare
+`call_unknown` of the page helper, a 5xx or code 1/2 answer, non-JSON, an answer without an id) whose two readbacks find
+nothing is sent again once, uploads included (a duplicate is acceptable, a lost publish is not). If the re-send is
+unknown too, only that campaign stops; the next campaigns of the run still publish. A definite Meta error with a real
+code, and a deterministic rejection subcode, still stop without a re-send.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1748).
+
+The 15-minute refusal of a rerun after an unresolved creative write is removed (owner decision 17.11): the rerun reads
+back, adopts the creative if it is found, otherwise writes it again (a duplicate is acceptable). An unreadable or
+incomplete creative listing still stops, since absence cannot be proven.
+
+## ACL-2744 — Video reuse by content hash, upload size and speed in the log — 2026-11-17
+
+A video already in the ad account is reused by its content hash whatever campaign tag it was uploaded under, so it is not uploaded again across ads, campaigns and runs. Each upload now reports its size, duration and MB/s in the live status and in the run log (`mb_s`), so a slow proxy is visible.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1744).
+
+## ACL-2750 — Connecting an account from the builder links it to a country that has no accounts yet — 2026-11-17
+
+The connect block of a country with spend but no linked account rendered an empty country, so a connect from the builder's "+ Account" saved the account without linking it and the builder lost it after the reload. The block now carries the country name, like the Home view does.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1750
+
+## ACL-2746 — A lost light-tab session or clean upload tab no longer stops a publish — 2026-11-17
+
+The 90 s re-capture bound and the 2-per-run limit (ACL-2344) are gone: a lost Graph session of the light tab is taken again as often as needed. A lost clean upload tab is reopened and the upload retried; if none can be opened the upload continues in the light tab. Checkpoint, login and wrong-origin still stop. Lost session/tab reasons are logged as codes.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1746).
+
+## ACL-2703 — Team library syncs on events, no 15 s pull — 2026-11-17
+
+The read copy of the team library no longer goes to GitHub whenever it is older than 15 s
+(ACL-2668 decision #41). Events refresh it instead: page load and Refresh (all three kinds,
+in the background, the page does not wait), opening the builder's form picker, the Targeting /
+Ad texts / Forms sections, the publish start (targets, ad texts and form templates) and own saves.
+Reads during a publish use the copy without network calls. Conflict handling is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1703).
+
+## ACL-2668 decision 12 — Profiles start together, no separate start limit or gap — 2026-11-16
+
+MLX `start` requests are no longer sent one at a time: as many profiles start at once as the "Profiles at once" slot
+ceiling (`ACL_MAX_PROFILES`) lets through. The 3 s gap after a queued start (`ACL_MLX_START_GAP_S`) is removed.
+`ACL_MLX_PARALLEL_STARTS` stays only as an emergency cap (unset = no separate limit). The single delayed retry after an
+MLX connection drop (10053/10054) is unchanged.
+
+## ACL-2596 — An Automatic Page with a stored form photo keeps the light work tab — 2026-11-12
+
+When a draft's Page is "Automatic", the work-tab decision now resolves it the way the creator does (the first Page of
+the account's Page list) from the list already stored on this computer, with no new Graph reads. If that Page already
+has the stored photo id for the form picture, the job stays on the light tab. If the Page cannot be resolved locally
+(no fresh stored list, empty list), the safe Ads Manager tab (`fallback_reason: form_photo_upload`) is kept.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1596).
+
+## ACL-2595 — Meta "Please authenticate your account" (31/3858385) stops the account — 2026-11-12
+
+Graph error 31 / subcode 3858385 is now an account security check, not a generic step refusal: the client stops
+writing for that account (a checkpoint-kind stop, persisted like the other account blocks), the remaining campaigns of the
+account in the job are shown as "Not started: account needs authentication", and the result card and account panel say
+"Meta asks to confirm this account (security check). Open Ads Manager in this profile and complete the check, then publish
+again. Existing ads keep running." The raw Meta text stays in Recent runs. Other accounts are not affected.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1595).
+
+## ACL-2593 — Form background upload no longer fails on the light work tab — 2026-11-12
+
+A publish job that has to upload a form background picture (template with a picture and no stored photo id for the
+Page) now runs its work lease on the Ads Manager tab, decided before the lease starts from the planned forms
+(`fallback_reason: form_photo_upload`, not counted as a light failure). Jobs without an upload stay light. If an
+upload still reaches a light tab, the lease is switched to Ads Manager first and the upload is sent once there; the
+"Ads Manager did not show the session values" refusal can no longer come from a light tab.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1593).
+
+## ACL-2591 — Light work tab on by default for every buyer — 2026-11-12
+
+Publishing no longer keeps a heavy Ads Manager tab open: the light work tab is now on for every buyer by default, with no setup step after an update. `ACL_LIGHT_WORK_TAB` stays only as an emergency off-switch (`0`, `false`, `no` or `off`); when it is turned off explicitly, leases use the Ads Manager tab and report `fallback_reason: flag_off`. The per-lease fallback to the Ads Manager tab on a failed hand-over is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1591).
+
+## ACL-2584 — Several texts on an Instant Form ad in Ads Manager's shape, many ads per ad set — 2026-11-12
+
+An Instant Form ad with several texts now goes the way Ads Manager sends it (owner capture 2026-11-11, variant A2):
+an asset feed with `optimization_type: PLACEMENT` and two placement rules. Every text carries the main label, text 1 also
+the Stories / Reels label; the file, the form link and the headlines are labelled the same way, and the lead form stays in
+the feed button. The ad set is no longer Dynamic Creative, so it takes as many ads as Meta allows (the "one ad per ad
+set" rule stays only for Website ad sets). Write policy and the page helper accept exactly this shape and nothing else
+on an Instant Form; the old dynamic form feed is refused. Read-back checks the texts as a set, the mode, the label
+sharing and the rule-to-label mapping. The main rule is always the empty catch-all, like Ads Manager (live 12.11: with an explicit main group the editor showed one text per ad); write policy and the page helper refuse any other main rule. With Manual placements both Feed and Stories / Reels must still be selected. An Instant Form ad without a headline now goes out the way Ads Manager sent it: exactly one empty headline carrying both labels, the headline label kept in both rules (write policy and the page helper accept an empty text only in that exact case; empty primary texts and descriptions stay refused). In Check plan the missing headline is a warning for an Instant Form ad; a Website ad with several texts and no headline stays blocked, because that case is not verified yet. Read-back treats an empty headline on both sides as a match, reads the rule label keys in both spellings (star-label and star-adlabel) and treats one file that Meta stores as two rows (same id, one cropped) as one file. A rule with platforms but no position lists, and an ad set write for an Instant Form ad set that is also Dynamic Creative, are refused. The paused test write with the owner shows whether Meta accepts the empty headline. A Stories / Reels file next to a
+form ad is still refused. Live acceptance by Meta is a separate paused test write with the owner. Everything stays PAUSED.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1584).
+
+Republishing no longer stops on a creative Meta stored with the same labels in another order (live 12.11: "expected acl_body_main got acl_body_vertical"): when an earlier creative is checked for reuse, and in read-back, the labels of each asset are compared as a set of names and the lists inside the asset feed (texts, files, rules) as unordered collections; every text, id, label name, button and link is still compared exactly, so a changed text or a missing or extra label still stops.
+
+## ACL-2583 — A failed read of the journal's campaign no longer counts as "campaign gone" — 2026-11-12
+
+Depends on ACL-1856 (#1569) and ACL-2578 (#1580).
+
+When a publish finds an earlier operation in the journal, it reads that campaign by id. Before, any failed read (timeout, rate limit, Meta 5xx) was taken as "the campaign is gone" and a new operation started, which could create a second campaign next to a live one. Now only a campaign row actually read with a DELETED/ARCHIVED status counts as gone (a "does not exist" answer, code 100 / subcode 33, does not: see the last paragraph). A read that fails any other way (timeout, Meta 5xx, code 1/2) is retried 2-3 times over about 30 s; if Meta still does not answer, the publish does not stop: it continues as a new operation under a distinct `<name> copy N` name (a possible duplicate is accepted, the same name is never reused) and says so in a warning. Rate limits (codes 4/17) stay a stop.
+Publishing no longer asks the buyer to wait: a campaign that is alive by id with the recorded name is always resumed (no lag window), and a write whose result is unknown is read back once more after the same ~30 s pause and, if Meta still does not have it, written again (a duplicate is possible; objects are PAUSED). Only Meta's own refusals such as rate limits stop a publish.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1583).
+If the result of the campaign write itself stays unknown and ACL cannot find the campaign after the second read, it is never written again under the same name (Meta's name search is the part that lags): the publish continues as a new operation under the next `<name> copy N`, records `unknown_rewritten` with the new name in the journal, and warns that a possible PAUSED duplicate of the earlier name may exist. Only the campaign name is protected: ad sets and ads written again inside our own campaign keep their names.
+The same holds when the earlier stage was already settled as "not found" by the first run (that readback is the same lagging name search) and for the in-run resend after a network answer lost (ACL-2301): the campaign is resent under the next `<name> copy N` with the duplicate warning, never under the same name. Ad sets and ads still resend under their own names. The readback also accepts an image name that Meta suffixed more than once (`acl-<hash>.png_105_105`).
+The next copy number is always above every campaign name the operation has written: a later run never lowers the operation's counter while the campaign stage is unresolved, the readback of that stage searches for the name recorded in it, and a second lost answer inside one run continues under the following copy name (up to 5 tries, then a plain "unknown" stop that asks to check Ads Manager). The same campaign name is never written twice.
+When the name search lags but the operation already recorded a copy name (`<name> copy N`), the rest of the run continues under that copy (campaign, ad set names, tag, receipt, journal) instead of the base name, so the tag check matches the adopted campaign and a campaign this operation itself wrote is never taken for a buyer rename.
+A Meta "does not exist / cannot be loaded due to missing permissions" answer (code 100 / subcode 33) for a campaign this draft recorded (name receipt or journal) no longer frees the name either: Meta gives that answer for live campaigns it cannot load right now (Doc284 made two campaigns with one name this way). The publish continues as the next `<name> copy N`. Every gone/unknown decision now logs the Graph code, subcode and message (ids masked) as the `campaign_read_decision` event and a publish log line.
+
+## ACL-2528 — Several primary texts on an Instant Form ad (first step, offline) — 2026-11-11
+
+An Instant Form ad with several texts and ONE file now builds an asset feed whose button carries the lead form
+(`asset_feed_spec.call_to_actions[0].value.lead_gen_form_id`), as Ads Manager stores it (owner capture 2026-11-11).
+The ad set runs as Dynamic Creative, like a Website ad with several texts. Allowed only for on-ad lead ad sets, with
+the same numeric-id checks; Python policy and page helper agree on one matrix. Read-back verifies the form id, the
+button and the placeholder link. A Stories / Reels file next to a form ad is still refused. Live acceptance of the shape
+by Meta is a separate paused test write with the owner. Everything stays PAUSED.
+Owner decision 2026-11-12: the rule "choose Primary text 1 first" is gone. An empty Primary text 1, or a library entry with only a headline, never blocks (warning only, as before); texts 2-5 with a body are used in order, and an ad with no body at all is created without a primary text.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1528).
+
+## ACL-2579 — Instant Form with a background is never reused without it — 2026-11-12
+
+A form template with a background picture creates its form with `context_card.cover_photo_id` (unchanged) and the readback still stops a new form whose background does not read back (no picture or another one). New: before anything is written, a form of the same name that is already on the Page is read once; if Meta shows it with no background (or another one) while the template has one, Check plan stops with a plain message ("archive that form in Ads Manager or change the template") instead of reusing it with only a note. A form that cannot be read keeps the old behaviour (reused, with a note). Offline tests now run the posted form body through the Python write policy and the in-page helper mirror.
+Round 2 (owner's live check): The owner's live check (Doc284, 12.11): the form was created and its photo read back, but Ads Manager showed no background. Cause: Ads Manager also sends the form's top-level `background_image_option=UPLOAD` (the intro "Background image: Upload image" choice); without it Meta keeps the picture on the card but does not show it. Now every form with a picture (a Page photo or the ACL-2571 local picture) is created with `background_image_option: "UPLOAD"` next to `context_card.cover_photo_id`; a form without a picture is sent exactly as before. The write policy allows the key only as "UPLOAD" and only together with a cover photo (the in-page helper mirrors it and refuses on an old table); the readback and the reuse check now also require the option, so a form with the photo but no option is "missing" (stops, never reused).
+Forms with a picture that were already created without the option (they cannot be edited) get a NEW name on the next publish: the name hash of templates with a picture carries a version marker (`cover-v2`); templates without a picture keep their names. A template with a picture and no intro text now still sends its card (the headline stands in for the text).
+Risk: after this build a template with a picture creates one new form per Page on its first publish (the old, background-less form stays on the Page; archive it in Ads Manager if wanted). A build older than this one publishes the old name and form.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1579).
+
+## ACL-2178 — Lead form templates: conditions on each answer — 2026-11-12
+
+A multiple choice question of a form template can now carry a condition per answer: continue to the next question, go to a later question, submit the form, or close it. Turn on "Conditional logic" in the Forms tab editor or in the builder's "Create and save form"; each answer gets a "Then:" selector, a question can be marked "Only shown after an answer", and an answer that closes the form needs a "Non-lead end page" (title, text, https link). Jumps go forward only, at least one path must submit, and the limit stays at 5 questions. Custom questions come first on a form with conditions.
+
+Publishing sends the conditions in one create call (`conditional_logic` with `logic_data` keyed `customized_N`, and `end_pages` with the lead and non-lead pages instead of `thank_you_page`), built from the answer text so reordering the options never moves a branch. Both fields are added, fail-closed, to the form write policy and to its in-page mirror. After creation (and when an existing form is reused) the form is read back and its conditions and end pages are compared with the template; a difference stops the run and says the form stays on the Page. Meta's refusal of a form with conditions is shown with its code and subcode. Templates without conditions produce byte-identical requests, content hashes and form names, so no duplicate forms appear on Pages.
+
+Conditions use a separate stored question type (`multiple_choice_logic`), so a build older than this one refuses such a template instead of publishing it without the closing branch. Not yet confirmed live: Meta accepting the shape from the dashboard's own request on a paused write (tracked as a separate live check).
+Risk: builds older than this one cannot publish or edit templates with conditions.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1178).
+
+## ACL-2571 — Shared form template: one background picture for every account and Page — 2026-11-12
+
+In the Forms tab and in the builder's "Create and save form", the background picture is now chosen from this computer with no Account or Page selected (the Page-first gate and the "Upload to Page" button of ACL-2533 are gone). Choosing a file only shows a preview from the local file; saving the template keeps the file on this computer (machine config folder `form_covers`, one file per template id + content hash) and writes only its SHA-256 into the template (`cover_local_sha256`). The team library never receives image bytes. "Choose from Page" and pasting a Photo ID stay; a template has one picture, either a Page photo or the local file.
+
+At publish, a campaign whose form is created on its Page uploads the stored picture to that Page from inside the account's profile, before the first campaign object is created, through the same web-session upload, write policy and call budget as ACL-2533 (the creation session now carries the same narrow upload block for its own Page; one extra call is counted per template with a picture). The returned photo id is cached per Page + picture hash, so a second publish to the same Page uploads nothing; the same template on another Page uploads once there. The form name is the template's, identical on every Page. If the upload is refused or its result is unknown the campaign stops with Meta's answer and nothing is created; if Meta later refuses the form with a cached photo id the cache entry is dropped so the next run uploads again.
+
+On a computer without the file (the template came from the team library) the editor says "Background picture is on another computer — choose it again here" and a publish creates the form without a background (a warning in the plan), never with another Page's photo. A duplicated template keeps its picture. The editor preview of a stored picture is served by this dashboard itself (`/api/form-templates/cover-file`, same origin, CSP unchanged). The ACL-2533 route `/api/form-photo-upload` stays but the editor no longer calls it.
+Risk: builds older than this one drop `cover_local_sha256` when they validate a shared template and publish the form without a background under the old name.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1571).
+
+## ACL-2578 — Readback accepts Meta's image-name suffix; a re-run reuses its left-over and never repeats a campaign name — 2026-11-12
+
+Depends on ACL-1856 (#1569).
+
+Readback no longer flags an image whose library name Meta stored with a `_<digits>` suffix (a different image still fails). A re-run after a stop now reuses its own left-over campaign and ad set when their settings match the builder, even if the creatives were replaced or added: for a campaign that has no ads yet, Meta's derived placement aggregate (`advantage_placement_state`) is no longer part of that comparison (the ad sets' own placements are still compared, and the aggregate is checked after the writes). The campaign name is never taken twice: a live campaign with the exact name counts as taken whatever its tag, a left-over known from the local name record counts even when the Meta listing misses it, and a failed read of that campaign (not "does not exist") stops the run before any write. The stop message names the real copy name instead of "_2". Not detectable: no local record and a listing miss.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1578).
+
+## ACL-2548 — Background refresh skips held profiles — 2026-11-12
+
+Part B of ACL-2091. While a profile waits for a person (checkpoint, login page, Meta block, frozen tab), the account refresh queue does not read it at all: scheduled 08/13/18 reads, background reads, page-open reads and refreshes after an action are skipped before any call, even when forced. Only a person's Retry reaches the profile. A skip writes no attempt row, so the stored stops and a persisted global halt stay as they were. A refusal with the account-level code `account_blocked` no longer counts as a stop for the text fallback, so its "checkpoint" wording cannot raise a halt for every account. Other accounts are read as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1548).
+
+## ACL-2547 — Account blocks: persisted holds, action context, reason texts — 2026-11-11
+
+Part A of ACL-2091. A checkpoint, a login page, a Meta policy block (368, 1404078, 2859015, 1404163) and a frozen Ads Manager tab whose one replacement is spent now become a persisted hold (`account_holds.json`, no timer, survives a restart) kept by the new `fb_api/account_blocks.py`; a person's Retry (or an explicit Read) that finds the page healthy lifts it, and background reads are not queued for a held profile. A token-only logout keeps its 1 minute timer. Refusals name the kind, the profile and the action that found the problem (for example "a background read") instead of "waiting about 10 min", with code `account_blocked`. One classifier now recognises `/hacked-protection` and `two_factor` in all three detectors. No window or tab handling changes yet.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1547).
+
+## ACL-2575 — WebP/AVIF/HEIC image creatives are converted before publishing — 2026-11-12
+
+A WebP ad image passed every check, the paused campaign and ad set were created, and then Meta refused the upload
+(error 100/1487411 FileTypeNotSupported) and the buyer was told to "check Ads Manager". Now WebP, AVIF and HEIC images
+are converted locally to PNG (transparent) or JPEG in the preflight (the buyer's file is not changed, the converted
+size counts toward the same cap) and the conversion is listed in the warnings and in Check plan; an image that cannot
+be converted is refused before any write. A definite non-transient FileTypeNotSupported answer is now reported as a
+refusal naming the ad and the file, not as an unknown result. The EXIF orientation of a converted photo is applied, so
+a phone picture is not published sideways.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1575).
+
+## ACL-1856 — Campaign creation keeps durable progress and resumes only after a check — 2026-11-12
+
+The API campaign creator records every write in a per-operation journal file on the computer
+(`api_operations/<operation id>.json`): "sent" is saved before the request goes to Meta, and the result
+(created / unknown / refused / stopped) right after. After a restart the earlier progress is checked in Meta
+before the first write; a changed object stops the run with a plain message and nothing is written.
+- The operation identity is the plan as submitted (before the name choice and before any start-time move) plus the
+  draft position in the submit; the chosen name stays in the record. The page's submit key is bound to the draft
+  position, so two identical drafts of one submit are two operations (`X`, `X copy 1`).
+- A campaign deleted in Ads Manager is not a block: the earlier record is set aside (kept as `.superseded` for 30 days)
+  and the publish starts a new operation. A live campaign that the name search does not list yet stops the run
+  without a write ("wait a few minutes") only for 10 minutes after the campaign was confirmed; later it counts as gone
+  and a new operation starts. A campaign renamed in Ads Manager is taken over by the buyer: the record is set aside
+  and a new operation starts, nothing is written into the renamed campaign. A different set or order of drafts in a
+  later submit is a new operation (the ACL-2250 name/tag lookup applies).
+- A write whose result is unknown and was looked for by readback and not found is sent again on the next publish (the
+  ACL-2250 behaviour, no waiting). Only a step left "sent" by a run that died, or one the readback could not settle,
+  waits 10 minutes. Uploads (files) still wait.
+- Each step carries an owner token checked under the file lock: two processes on one machine folder cannot both send
+  the same step.
+- The extra reads of a resume check are added to the call budget from the number of confirmed objects, not a flat number.
+- Old operation files (any state), `.corrupt`, `.superseded` and orphan lock files are removed after 30 days, at most
+  one scan per 6 hours; `.corrupt` files are timestamped. The submit-key duplicate scan reads recent files only.
+- The job result carries the stages, the IDs already created and one plain next action that agrees with the error.
+  (Showing them in the page is a separate task.)
+- After the 10-minute lag window a saved campaign counts as gone only when the read by id says so (read fails, DELETED or ARCHIVED). A live campaign with the recorded name that the name search does not list is resumed, never duplicated. A campaign renamed in Ads Manager gets its own warning.
+Objects stay PAUSED-only. `ACL_OPERATION_JOURNAL=0` turns the journal off.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/856).
+
+## ACL-2538 — Different ads always get different names — 2026-11-11
+
+Check plan no longer refuses ads whose creative files have no number in their names. The file's own name (without extension, up to 40 characters) now serves as the creative half of the ad name ("coffee beans - Head"); files with a number and ads with a creative id keep exactly the names they had. If two ads in one ad set still get the same name (same file, same text), the later ones become "Name 2", "Name 3" and Check plan shows a note instead of stopping. Stats note: a stem without a number is read by the dashboard as the creative label (via the dash). Stem digits can no longer be mistaken for a creative number ("IMG_123" becomes "IMG_1 23", dimensions such as 1080x1080 are dropped). A numbered duplicate ("Head 2") has a different text half, so in stats it forms its own text bucket separate from "Head".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1538).
+
+## ACL-2533 — Instant Form templates: background image, uploaded from the builder — 2026-11-11
+
+A form template can carry an optional background image, shown on the intro screen (`context_card.cover_photo_id`). In the Forms tab and in the builder's "Create and save form" the "Background image" field now has "Upload": choose a JPEG or PNG file (up to 8 MB) on this computer, see the preview at once, then press "Upload to Page". The preview is drawn from the local file only; nothing from Meta is loaded by the dashboard. The file is sent through the profile's own Ads Manager tab, as the chosen Page, with the same web request Ads Manager itself uses (not Graph); the Page must belong to the account. The template stores the photo id, the Page and the file's checksum, never the picture, so a republish on the same Page finds the form and uploads nothing again. "Choose from Page" and pasting a Photo ID stay as a fallback. One press makes one upload (one call in that session's budget), never retried; a failure after sending says the result is unknown. Meta's refusal is shown with the form name. A template without a picture is unchanged (same hash, same request). Changing the Page in the Forms tab clears the picture (a photo never moves to another Page). The upload exists only in its own helper mode, not in the publish helper; it runs as an exclusive write on the profile. A refusal before sending (for example the page showed no session values) is reported as a plain refusal and does not pause the account's reads.
+Earlier in this task (ACL-2188 work): the picture needs a Description and belongs to one Page, and a template used on another Page stops at Check plan before anything is written. A changed picture makes a new form on the next publish. A cover that cannot be confirmed on a new form stops the run; on a reused form it is only noted. Clearing the picture now really removes it from the stored template.
+Review rework (round 3, found in the owner's live test): a chosen file is never dropped silently. Save in the Forms tab and "Save and select" in the builder first upload a chosen-but-not-uploaded file (one upload, the same route) and then save with the returned pair; if the upload fails or cannot start the save stops with a visible message and the file stays chosen. A missing Page is a visible blocking error ("Refresh pages and choose a Page"). A state label next to the preview says "Chosen (not uploaded yet)", "Uploading…", "Uploaded to Page …" or "Upload failed: …". The preview is hidden when there is no file (an inline display no longer overrides the `hidden` attribute), and dropping a file also clears the file input. The Account and Page come first: one obvious account or Page is preselected, otherwise the file input waits with a hint until a Page is chosen.
+Review rework (round 4): with the light work tab switched on (`ACL_LIGHT_WORK_TAB=1`) a photo upload session always runs on the Ads Manager tab (the light page has no session values and reused the previous upload's helper); the light tab stays for every other mode. Switching mode drops the kept tab once, which is fine for a button press.
+Risk: the upload endpoint is an undocumented Ads Manager web request (not Graph) and can change without notice; the first live upload was done by the owner on 2026-11-12 on TEST9095 (one POST to the upload route, 200, then the template save); it worked, and the template holds the uploaded Page photo id and Page id. A build older than this one shares the template library; it drops the picture when it validates a template, so it publishes a form without a picture under the old name and does not warn.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1533).
+
+
 ## ACL-2562 — Publish retry keeps the refused campaigns of the first request — 2026-11-12
 
 A resend of Publish after a lost answer (ACL-1399 Retry, same request key) now returns the campaigns that the review refused at the first request, with the same reasons. The builder shows the "Not created" line for them, keeps their tick and gives them no build dot, exactly as after the first answer.

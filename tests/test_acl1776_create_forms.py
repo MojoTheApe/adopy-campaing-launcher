@@ -71,6 +71,9 @@ class FormsMeta(FormMeta):
             mode = self.fail_next.pop("leadgen_forms", None)
             if mode == "unsent":
                 return {"error": "call_unknown"}
+            if mode == "unsent_stuck":            # no answer, not created - and the re-send gets none either
+                self.fail_next["leadgen_forms"] = "unsent"
+                return {"error": "call_unknown"}
             if self.refuse:
                 return {"status": 400, "body": {"error": self.refuse}}
             fid = str(7100000 + len(self.form_posts))
@@ -262,6 +265,8 @@ def _deep(path, key, value):
     return out
 
 
+_CARD = {"title": "Hello", "style": "PARAGRAPH_STYLE", "content": ["Hi there"], "cover_photo_id": "122118707799486042"}
+
 #: Одна таблица на ОБЕ линии: (имя, страница пути, ребро пути, параметры, разрешено).
 FORM_MATRIX = [
     ("ok", PAGE, "leadgen_forms", BASE, True),
@@ -305,6 +310,14 @@ FORM_MATRIX = [
     ("no_locale", PAGE, "leadgen_forms", _p(locale=None), False),
     *[(n, PAGE, "leadgen_forms", prm, False) for n, prm in NESTED_TERMS],
     ("ok_thank_you_no_link_none", PAGE, "leadgen_forms", BASE, True),
+    # ACL-2188: фоновая картинка - строка из цифр внутри context_card
+    ("ok_cover_photo_id", PAGE, "leadgen_forms", _p(context_card=_CARD), True),
+    ("ok_cover_photo_id_json", PAGE, "leadgen_forms",
+     _p(context_card=json.dumps({**_CARD, "cover_photo_id": "122118707799486042"})), True),
+    ("cover_photo_id_number", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo_id": 12345}), False),
+    ("cover_photo_id_letters", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo_id": "12ab"}), False),
+    ("cover_photo_id_empty", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo_id": ""}), False),
+    ("cover_photo_nested", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo": {"id": "1"}}), False),
     # другие рёбра и чужие Страницы
     ("page_feed", PAGE, "feed", BASE, False),
     ("page_tos_edge", PAGE, "leadgen_tos", BASE, False),
@@ -365,7 +378,8 @@ def test_the_two_policy_chains_do_not_overlap():
     assert "tos_accepted" in wp.FORBIDDEN_ANYWHERE and "tos_accepted" not in wp.FORM_KEYS
     assert wp.FORM_KEYS == frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
                                       "question_page_custom_headline", "locale", "follow_up_action_url",
-                                      "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+                                      "is_optimized_for_quality", "block_display_for_non_targeted_viewer",
+                                      "background_image_option", "conditional_logic", "end_pages"})
 
 
 def test_the_policy_does_not_mutate_the_callers_params():
@@ -574,15 +588,16 @@ def test_the_pending_marker_is_written_atomically_and_joined_with_a_pipe(tmp_pat
     assert path.read_text(encoding="utf-8") == before and not list(path.parent.glob("*.tmp"))
 
 
-def test_no_form_is_created_when_the_local_marker_cannot_be_saved(tmp_path, monkeypatch):
+def test_a_form_is_still_created_when_the_local_marker_cannot_be_saved(tmp_path, monkeypatch):
+    """ACL-2668: метка - только имя дубля; не записалась - форма создаётся всё равно."""
     blocker = tmp_path / "blocker"
     blocker.write_text("a file, not a folder", encoding="utf-8")
     monkeypatch.setattr(fc, "pending_path", lambda: blocker / "pending_forms.json")
     tid = _saved()["id"]
     meta = FormsMeta()
     out, _c = _run(meta, _tpl_draft(tmp_path, [tid]))
-    assert out.stop_kind == "form_state" and "Couldn't record the form state locally" in out.error
-    assert "not creating a form" in out.error and not meta.form_posts
+    assert out.error == "" and len(meta.form_posts) == 1
+    assert meta.form_posts[0][1]["name"] == ft.form_name(ft.validate(TEMPLATE)[0])
 
 
 def test_a_no_link_thank_you_page_sends_button_type_none_and_the_readback_accepts_it():
@@ -662,48 +677,75 @@ def test_a_timeout_is_reconciled_by_reading_the_forms_list_without_a_retry(tmp_p
     assert client.unreconciled is None
 
 
-def test_a_timeout_with_nothing_found_stops_and_blocks_any_blind_retry(tmp_path):
+def test_a_timeout_with_nothing_found_is_resent_once_then_stops_only_this_campaign(tmp_path):
     tid = _saved()["id"]
     meta = FormsMeta()
-    meta.fail_next["leadgen_forms"] = "unsent"          # формы нет, ответ потерян
+    meta.fail_next["leadgen_forms"] = "unsent_stuck"          # формы нет, ответ потерян
     creator, client = _creator(meta)
     out = creator.run(cr.plan_from_draft(_tpl_draft(tmp_path, [tid])))
     assert out.stop_kind == "unknown" and "nothing was found by readback" in out.error
-    assert len(meta.form_posts) == 1 and "adcreatives" not in _edges(meta)
-    assert client.unreconciled == f"/{PAGE}/leadgen_forms"
-    with pytest.raises(g.WritesBlocked):                # клиент не пишет, пока не сверено
-        client.post(f"/{PAGE}/leadgen_forms", BASE, form_page=PAGE)
-    assert len(meta.form_posts) == 1
+    # owner rule 12.11: one re-send after the empty readbacks, never a third POST; the run goes on to the next campaign
+    assert out.run_continues is True
+    assert len(meta.form_posts) == 2 and "adcreatives" not in _edges(meta)
+    assert client.unreconciled is None
 
 
-def test_a_rerun_after_an_unknown_write_waits_instead_of_creating_a_second_form(tmp_path, monkeypatch):
+def test_a_rerun_after_an_unknown_write_creates_a_copy_right_away(tmp_path):
+    """ACL-2668: ответ Meta потерян, формы в списке нет - не ждём 15 минут, создаём дубль «copy N» сразу."""
     tid = _saved()["id"]
+    clean = ft.validate(TEMPLATE)[0]
     meta = FormsMeta()
-    meta.fail_next["leadgen_forms"] = "unsent"
+    meta.fail_next["leadgen_forms"] = "unsent_stuck"
     first, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
-    assert first.stop_kind == "unknown" and len(meta.form_posts) == 1
-    name = ft.form_name(ft.validate(TEMPLATE)[0])
+    assert first.stop_kind == "unknown" and len(meta.form_posts) == 2     # the write and its one re-send
+    name = ft.form_name(clean)
     assert fc.is_pending(ACT, PAGE, name)
-    # Список всё ещё без формы, прошло мало времени: повторный запуск стоит.
-    again, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
-    assert "may still be appearing at Meta" in again.error and "wait a few minutes" in again.error
-    assert len(meta.form_posts) == 1, "вторая форма не создана"
-    # Check plan говорит то же и ничего не пишет.
+    copy_name = f"Demo form copy 1 · ACL {ft.content_hash(clean)}"
+    # Check plan: никакого «подождите», форма будет создана под именем дубля, ничего не пишется.
     creator, _c = _creator(meta, writes=False)
     plan_out = creator.plan_only(cr.plan_from_draft(_tpl_draft(tmp_path, [tid])))
-    assert "may still be appearing at Meta" in plan_out.error and len(meta.form_posts) == 1
-    # Через 15 минут метка устарела: форму можно создать.
-    real = fc.time.time()
-    monkeypatch.setattr(fc.time, "time", lambda: real + fc.PENDING_WINDOW_S + 5)
-    late, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
-    assert late.error == "" and len(meta.form_posts) == 2
+    assert "may still be appearing" not in plan_out.error and "wait a few minutes" not in plan_out.error
+    assert len(meta.form_posts) == 2
+    again, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
+    assert again.error == "", again.error
+    assert len(meta.form_posts) == 3 and meta.form_posts[2][1]["name"] == copy_name
+    assert any(f"form {copy_name!r}: created" in s for s in again.steps)
     assert not fc.is_pending(ACT, PAGE, name)
+    # Следующий запуск находит дубль и переиспользует его: третьей формы нет.
+    third, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
+    assert third.error == "" and len(meta.form_posts) == 3
+
+
+def test_copy_names_keep_the_robot_label_and_are_matched_as_own_forms():
+    clean = ft.validate(TEMPLATE)[0]
+    base = ft.form_name(clean)
+    one = fc.copy_form_name(clean, 1)
+    assert one.endswith(f" · ACL {ft.content_hash(clean)}") and one.startswith("Demo form copy 1")
+    wp.check_form_create(PAGE, "POST", f"/{PAGE}/{wp.FORM_EDGE}", {**ft.form_params(clean), "name": one}, None, PAGE)
+    assert fc.copy_number(base, clean) == 0 and fc.copy_number(one, clean) == 1
+    assert fc.copy_number("Demo form copy x · ACL 000000", clean) == -1
+    assert fc.copy_number(f"Other copy 1 · ACL {ft.content_hash(clean)}", clean) == -1
+
+    class Read:
+        def __init__(self, forms):
+            self.forms = forms
+
+    class F:
+        def __init__(self, fid, name, usable=True, status="ACTIVE"):
+            self.id, self.name, self.usable, self.status = fid, name, usable, status
+
+    # Точное имя главнее дубля; без точного - дубль с меньшим номером; следующий номер после видимых.
+    assert fc.match_existing(Read([F("9", one), F("8", base)]), clean) == ("8", "")
+    two = fc.copy_form_name(clean, 2)
+    assert fc.match_existing(Read([F("5", two), F("9", one)]), clean) == ("9", "")
+    assert fc.next_copy_name(Read([F("5", two), F("8", base, usable=False)]), clean) == fc.copy_form_name(clean, 3)
+    assert fc.next_copy_name(Read([]), clean) == one
 
 
 def test_the_pending_marker_is_dropped_when_the_form_shows_up(tmp_path):
     tid = _saved()["id"]
     meta = FormsMeta()
-    meta.fail_next["leadgen_forms"] = "unsent"
+    meta.fail_next["leadgen_forms"] = "unsent_stuck"
     _run(meta, _tpl_draft(tmp_path, [tid]))
     name = ft.form_name(ft.validate(TEMPLATE)[0])
     assert fc.is_pending(ACT, PAGE, name)

@@ -140,7 +140,7 @@ def test_resume_of_a_partial_run_reuses_the_copy(tmp_path):
     meta = FakeMeta()
     assert _run(meta, _draft(tmp_path, ads=1))[0].error == ""
     _campaign(meta, BASE)["daily_budget"] = "999"
-    meta.fail_next["ads"] = "unsent"          # обрыв на объявлении: копия и её группа уже есть
+    meta.fail_next["ads"] = "unsent_stuck"          # обрыв на объявлении: копия и её группа уже есть
     broken, _ = _run(meta, _draft(tmp_path, ads=1))
     assert broken.stop_kind == "unknown" and broken.published_as == BASE + " copy 1"
     meta.fail_next.clear()
