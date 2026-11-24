@@ -17,8 +17,8 @@
 Молчаливой подмены нет: автоматически берётся только точное совпадение имени (регистр,
 повторные пробелы и разделители «- _ /» не важны; символы + # & . и диакритика СОХРАНЯЮТСЯ).
 Всё остальное — «picked X for Y?» с кандидатами: публикация блокируется до подтверждения.
-Бюджет считается в чтениях Graph (каждая страница), а не в вызовах get_all; не хватило —
-термин «unknown», и человек нажимает Check plan снова. Только чтения: ни одного POST.
+Потолка чтений нет (ACL-2668 #36): все термины проверяются за один Check plan; паузу между
+вызовами держит клиент Graph, повторы снимает кэш поиска. Только чтения: ни одного POST.
 """
 from __future__ import annotations
 
@@ -45,20 +45,19 @@ SPLIT = "split"
 WORK_SEARCHES = (("work_positions", "adworkposition"), ("work_employers", "adworkemployer"))
 EDU_SEARCHES = (("education_schools", "adeducationschool"), ("education_majors", "adeducationmajor"))
 
-#: Потолки в ЧТЕНИЯХ Graph (каждая страница = чтение): на искомую строку и на задание.
-TERM_READ_CAP = 8
-#: Потолок задания растёт с числом искомых строк: JOB_READ_BASE + JOB_READ_PER_TERM * строк
-#: (целая строка и каждая её часть), но не выше JOB_READ_ABS_CAP. JOB_READ_CAP - прежнее имя базы.
+#: ACL-2668 (#36, решение владельца 16.11): у поиска интересов НЕТ потолка чтений - Check plan проверяет все
+#: термины за один проход. Паузу между вызовами держит клиент Graph (`min_interval_s`), повторы снимает кэш.
+#: Числа ниже - только ОЦЕНКА чтений для запаса бюджета публикации (`creator.estimate_targeting_reads`):
+#: база + шаг на каждую различную строку (целую и каждую её часть). Это не потолок.
 JOB_READ_BASE = 6
 JOB_READ_PER_TERM = 6
-#: ACL-2499: поиск по кабинету (targetingsearch) - ещё одно чтение на каждую искомую строку.
-ACCOUNT_SEARCH_EXTRA_READS = 1
-JOB_READ_ABS_CAP = 90
-JOB_READ_CAP = JOB_READ_BASE
-#: Сколько секунд результаты поиска живут между Check plan (повтор после «unknown» идёт дальше).
+#: Верх ОЦЕНКИ чтений таргетинга (`creator.estimate_targeting_reads`). Это не потолок: у поиска его нет (#36),
+#: у публикации своего бюджета вызовов тоже нет (ACL-2668, решение 8). После Check plan результаты в кэше.
+PUBLISH_READS_ALLOWANCE = 90
+#: Сколько секунд результаты поиска живут между Check plan и публикацией (повторных чтений нет).
 SEARCH_CACHE_TTL_S = 600.0
-#: Сколько чтений оставить клиенту про запас, чтобы наш цикл не съел общий потолок.
-CLIENT_RESERVE = 2
+#: Страниц на один поиск - это объём ответа, а не бюджет: точное имя Meta отдаёт в первой полусотне,
+#: дальше идут слабые кандидаты, из которых показываем только MAX_CANDIDATES.
 SEARCH_PAGES = 2
 BEHAVIOR_PAGES = 3
 SEARCH_LIMIT = 50
@@ -67,6 +66,8 @@ BEHAVIOR_LIMIT = 1000
 STRONG_SCORE = 0.78
 WEAK_SCORE = 0.5
 MAX_CANDIDATES = 8
+#: ACL-2668: резолвер больше не отдаёт «unknown» из-за бюджета чтений; текст остаётся для его читателей
+#: (creator, preflight_rules) на случай состояния «unknown».
 UNKNOWN_MESSAGE = "Couldn't check all interests — press Check plan again"
 #: ACL-2267: тёплая находка, которую Meta больше не отдаёт, а поиск точного имени не нашёл.
 WARM_GONE_REASON = "The saved match is no longer offered by Meta; pick a candidate"
@@ -364,10 +365,6 @@ def forget_candidates() -> None:
         _CANDIDATES.clear()
 
 
-class _Spent(Exception):
-    """Вышел потолок чтений термина/задания (не ошибка Meta)."""
-
-
 _OK_STATES = ("exact", "confirmed")
 
 
@@ -375,7 +372,6 @@ class TermResolver:
     """Ищет термины библиотеки в Meta. Кэш на задание; только чтения."""
 
     def __init__(self, client: Any, store: ConfirmedStore | None = None, *,
-                 term_cap: int = TERM_READ_CAP, job_cap: int | None = None,
                  cache: SearchCache | None = None, scope: str = "", facts: Any = None, act: str = ""):
         self.client = client
         #: Кабинет «act_<digits>» для поиска act_X/targetingsearch; пусто - этот поиск не делается.
@@ -402,14 +398,9 @@ class TermResolver:
         self._warm_dropped: set[str] = set()
         #: Счётчики для телеметрии (без имён терминов).
         self.facts_stats = {"warm_hits": 0, "warm_saved": 0, "warm_dropped": 0, "warm_dropped_unattributed": 0}
-        self.term_cap = int(term_cap)
-        #: Явный потолок задания (тесты) или None: тогда он растёт с числом строк (см. prefetch).
-        self._fixed_job_cap = None if job_cap is None else int(job_cap)
-        self.job_cap = self._fixed_job_cap if job_cap is not None else JOB_READ_BASE + self.per_term_reads
         self._shared, self._scope = cache, scope
-        #: Чтений Graph за задание (каждая страница), для бюджета и тестов.
+        #: Чтений Graph за задание (каждая страница): счётчик для телеметрии и тестов, не потолок.
         self.reads = 0
-        self._term_reads = 0
         self._results: dict[str, dict] = {}
         self._valid: dict[str, dict] = {}
         self._valid_asked: set[str] = set()
@@ -425,31 +416,22 @@ class TermResolver:
         #: Interest ids Meta rejected as `Invalid id` (their cache entries are dropped).
         self._bad_ids: set[str] = set()
 
-    @property
-    def per_term_reads(self) -> int:
-        """Чтений задания на искомую строку: с известным кабинетом на одно больше (targetingsearch)."""
-        return JOB_READ_PER_TERM + (ACCOUNT_SEARCH_EXTRA_READS if self.act else 0)
-
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
-    def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True,
-                path: str = "/search") -> list[dict]:
+    def _lookup(self, search_type: str, params: dict, pages: int, *, path: str = "/search") -> list[dict]:
         if search_type in self.refused:
             return []                      # уже отказано в этом задании: повторов нет
         optional = search_type in OPTIONAL_LOOKUPS
         before = getattr(self.client, "calls", None)
         try:
-            return self._get_all(params, pages, count_term=count_term, path=path)
+            return self._get_all(params, pages, path=path)
         except GraphError as exc:
             soft = optional and (is_permission_refusal(exc) or search_type in ANY_ERROR_OPTIONAL)
             if not soft:
                 raise name_lookup(exc, search_type) from exc
             refusal = is_permission_refusal(exc)
-        # Отказанный запрос тоже был чтением: он остаётся в бюджете.
+        # Отказанный запрос тоже был чтением: он остаётся в счётчике.
         after = getattr(self.client, "calls", None)
-        spent = max(1, after - before) if isinstance(before, int) and isinstance(after, int) else 1
-        self.reads += spent
-        if count_term:
-            self._term_reads += spent
+        self.reads += max(1, after - before) if isinstance(before, int) and isinstance(after, int) else 1
         label, effect = OPTIONAL_LOOKUPS[search_type]
         if refusal:
             self.refused[search_type] = f"Meta refused the {label} ({search_type}) on this account; {effect}."
@@ -478,8 +460,8 @@ class TermResolver:
         return (lead + " and the ".join(gone) + tail + ", so the term could not be "
                 "checked there; fix the term or confirm a candidate")
 
-    # -- бюджет чтений
-    def _get_all(self, params: dict, pages: int, *, count_term: bool = True, path: str = "/search") -> list[dict]:
+    # -- чтение с кэшем; потолка чтений нет (ACL-2668 #36), паузу между вызовами держит клиент
+    def _get_all(self, params: dict, pages: int, *, path: str = "/search") -> list[dict]:
         key = (tuple(sorted((k, json.dumps(v, sort_keys=True)) for k, v in params.items())), pages)
         if path != "/search":
             key = (path,) + key      # прежние ключи /search не меняются (общий кэш Check plan)
@@ -490,23 +472,15 @@ class TermResolver:
             if warm is not None:     # результат недавнего Check plan: ни одного чтения
                 self._query_cache[key] = warm
                 return warm
-        # Наихудший случай: все страницы. Не хватает - не начинаем (результат «unknown», не догадка).
-        if self.reads + pages > self.job_cap or (count_term and self._term_reads + pages > self.term_cap):
-            raise _Spent
         cl = self.client
-        mx, used = getattr(cl, "max_calls", None), getattr(cl, "calls", None)
-        if isinstance(mx, int) and isinstance(used, int) and used + CLIENT_RESERVE + pages > mx:
-            raise _Spent
+        used = getattr(cl, "calls", None)
         before = used if isinstance(used, int) else None
         cut_before = len(getattr(cl, "truncated", None) or [])
         rows = cl.get_all(path, params, max_pages=pages)
         after = getattr(cl, "calls", None)
         # Настоящие чтения: разница счётчика клиента (по странице на GET); без счётчика - как минимум одно.
         spent = (after - before) if before is not None and isinstance(after, int) else 1
-        spent = max(1, spent)
-        self.reads += spent
-        if count_term:
-            self._term_reads += spent
+        self.reads += max(1, spent)
         if params.get("type") == "adinterestvalid" and len(getattr(cl, "truncated", None) or []) > cut_before:
             # ACL-2267: неполный ответ пакета не кэшируется - при повторе обрезка была бы уже не видна,
             # и отсутствующий в нём id сочли бы отвергнутым.
@@ -646,35 +620,24 @@ class TermResolver:
         if not ids:
             return True       # поведения, должности и пр.: доверяем до срока или отказа Meta (решение D1)
         if not any(i in self._bad_ids for i in ids):
-            try:
-                self._ask_valid([], ids)     # обычно ответ уже получен prefetch-пакетом: вызова нет
-            except _Spent:
-                return False
+            self._ask_valid([], ids)     # обычно ответ уже получен prefetch-пакетом: вызова нет
             if all(i in self._valid_ids for i in ids):
                 return True
         if all(i in self._ids_asked or i in self._bad_ids for i in ids):
             key = self._warm_key(term)
             self._facts.drop_terms([key])    # Meta интерес не отдала: кэш недостоверен
             self._note_warm_dropped([key])
-        return False     # не проверено (отказ, бюджет, обрезанный ответ): ищем как обычно, запись не трогаем
+        return False     # не проверено (отказ, обрезанный ответ): ищем как обычно, запись не трогаем
 
     def prefetch(self, terms: list[str]) -> None:
         """Один пакетный adinterestvalid на все термины, их части и id подтверждённых и тёплых интересов."""
-        self._term_reads = 0
-        try:
-            pending = [t for t in terms if norm(t) not in self._results]
-            todo = [t for t in pending if self._warm_hit(t) is None]
-            every = todo + [p for t in todo for p in split_term(t)]
-            # id подтверждённых и тёплых интересов проверяются в том же пакете, что и имена; термин,
-            # который и подтверждён, и в кэше, попадает сюда по обоим признакам.
-            id_terms = pending + [p for t in pending for p in split_term(t)]
-            if self._fixed_job_cap is None:
-                # потолок считается и по тёплым терминам: отвергнутый id потребует обычного поиска
-                n = len({norm(x) for x in id_terms}) + len(self._results)
-                self.job_cap = min(JOB_READ_ABS_CAP, max(self.job_cap, JOB_READ_BASE + self.per_term_reads * n))
-            self._ask_valid(every, self._cached_interest_ids(id_terms) + self._warm_interest_ids(id_terms))
-        except _Spent:
-            pass
+        pending = [t for t in terms if norm(t) not in self._results]
+        todo = [t for t in pending if self._warm_hit(t) is None]
+        every = todo + [p for t in todo for p in split_term(t)]
+        # id подтверждённых и тёплых интересов проверяются в том же пакете, что и имена; термин,
+        # который и подтверждён, и в кэше, попадает сюда по обоим признакам.
+        id_terms = pending + [p for t in pending for p in split_term(t)]
+        self._ask_valid(every, self._cached_interest_ids(id_terms) + self._warm_interest_ids(id_terms))
 
     @staticmethod
     def _row(r: dict, bucket: str) -> dict | None:
@@ -696,10 +659,10 @@ class TermResolver:
                 if rows:
                     yield bucket, rows
         if self._behaviors is None:
-            # Общий список поведений: на задание один раз, в потолок термина не входит.
+            # Общий список поведений: на задание один раз.
             self._behaviors = self._lookup(
                 "adTargetingCategory", {"type": "adTargetingCategory", "class": "behaviors", "limit": BEHAVIOR_LIMIT},
-                BEHAVIOR_PAGES, count_term=False)
+                BEHAVIOR_PAGES)
         yield "behaviors", self._behaviors
         for bucket, typ in WORK_SEARCHES + EDU_SEARCHES:
             yield bucket, self._lookup(typ, {"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
@@ -707,7 +670,6 @@ class TermResolver:
     def _find(self, term: str) -> dict:
         """Одна строка целиком: подтверждённый -> точный -> кандидаты."""
         key = norm(term)
-        self._term_reads = 0     # потолок считается на каждую искомую строку (целую и каждую часть)
         stale = ""
         saved = self.store.get_all(term)
         if saved:
@@ -724,36 +686,32 @@ class TermResolver:
         if not stale and key in self._warm_dropped:
             stale = WARM_GONE_REASON
         cands: dict[tuple, dict] = {}
-        try:
-            self._ask_valid([term])
-            hit = self._valid.get(key)
-            if hit:
-                self._warm_put(term, [hit])
-                return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
+        self._ask_valid([term])
+        hit = self._valid.get(key)
+        if hit:
+            self._warm_put(term, [hit])
+            return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
 
-            for bucket, rows in self._stages(term):
-                tail_hits: dict[str, dict] = {}   # имя совпало, но с «(категорией)»: id -> строка
-                for r in rows:
-                    c = self._row(r, bucket)
-                    if not c:
-                        continue
-                    if norm(c["name"]) == key:
-                        self._warm_put(term, [c])
-                        return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
-                    if base_name(c["name"]) == key:
-                        tail_hits.setdefault(c["id"], c)
-                    sc = score(term, c["name"])
-                    if sc >= WEAK_SCORE:
-                        cands.setdefault((c["type"], c["id"]), {**c, "score": sc})
-                if len(tail_hits) == 1:
-                    # Единственный интерес с таким именем и категорией в скобках - это он и есть.
-                    # Два и больше («Apple (fruit)» / «Apple (company)») - решает человек, не мы.
-                    (c,) = tail_hits.values()
+        for bucket, rows in self._stages(term):
+            tail_hits: dict[str, dict] = {}   # имя совпало, но с «(категорией)»: id -> строка
+            for r in rows:
+                c = self._row(r, bucket)
+                if not c:
+                    continue
+                if norm(c["name"]) == key:
                     self._warm_put(term, [c])
                     return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
-        except _Spent:
-            return {"term": term, "state": "unknown", "picks": [], "candidates": [],
-                    "reason": UNKNOWN_MESSAGE}
+                if base_name(c["name"]) == key:
+                    tail_hits.setdefault(c["id"], c)
+                sc = score(term, c["name"])
+                if sc >= WEAK_SCORE:
+                    cands.setdefault((c["type"], c["id"]), {**c, "score": sc})
+            if len(tail_hits) == 1:
+                # Единственный интерес с таким именем и категорией в скобках - это он и есть.
+                # Два и больше («Apple (fruit)» / «Apple (company)») - решает человек, не мы.
+                (c,) = tail_hits.values()
+                self._warm_put(term, [c])
+                return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
         # ACL-2473: пометку об отказанных поисках даём только термину без кандидатов; при кандидатах
         # причина простая (нет точного совпадения, выберите один), аккаунт тут ни при чём.
@@ -770,7 +728,7 @@ class TermResolver:
                    for p in picks_of(entry))
 
     def resolve(self, term: str) -> dict:
-        """Результат по термину: state exact|confirmed|pending|unresolved|unknown."""
+        """Результат по термину: state exact|confirmed|pending|unresolved."""
         key = norm(term)
         if key in self._results:
             return self._results[key]
@@ -778,9 +736,7 @@ class TermResolver:
         parts = split_term(term)
         if res["state"] == "unresolved" and parts:
             subs = [self._find(p) if norm(p) != key else res for p in parts]
-            if any(s["state"] == "unknown" for s in subs):
-                res = {**res, "state": "unknown", "reason": UNKNOWN_MESSAGE, "parts": subs}
-            elif all(s["state"] in _OK_STATES for s in subs):
+            if all(s["state"] in _OK_STATES for s in subs):
                 # Разбиение - другой таргетинг (OR): предлагаем кандидатом, ждём подтверждения.
                 cand = split_candidate([p for s in subs for p in s["picks"]])
                 res = {"term": term, "state": "pending", "picks": [], "candidates": [cand],

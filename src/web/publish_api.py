@@ -814,6 +814,8 @@ class ApiPublisher:
         journal = None
         if not self.dry_run and journal_enabled():
             journal = _oj.OperationJournal()      # a resume check adds its own reads to the budget (creator)
+        # ACL-2668: ни у Check plan (все интересы за один проход, #36), ни у публикации (решение 8) нет
+        # своего потолка вызовов; пауза между вызовами у клиента остаётся.
         self._client.reset_budget(None)          # ACL-2668: без потолка; сбрасывает счётчик и свой стоп
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
@@ -1069,11 +1071,13 @@ class ApiPublisher:
 # записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`). Page профиля
 # дополнительно требует один отдельный validate-only creative, без создания объектов.
 
-#: Потолок вызовов на предпроверку кабинета внутри «Check plan».
-# ACL-1771: поиск детального таргетинга ходит за списками Meta. Потолок задания в резолвере растёт с числом
-# терминов, но не выше `JOB_READ_ABS_CAP`; здесь он лежит выше него с запасом на предпроверку кабинета.
-PLAN_PREFLIGHT_MAX_CALLS = 30 + _tr_cap.JOB_READ_ABS_CAP
-#: Результаты поиска переживают Check plan на короткое время: повтор после «unknown» идёт дальше.
+#: ACL-2668 #36 (решение владельца 16.11): у «Check plan» нет потолка вызовов - все интересы проверяются
+#: за один проход, «press Check plan again» из-за бюджета не бывает. Число - просто «без предела» для
+#: счётчика клиента; паузу между вызовами (`min_interval_s`) клиент держит как раньше.
+PLAN_MAX_CALLS = 10**9
+#: Прежнее имя: предпроверка кабинета внутри «Check plan» идёт с тем же клиентом.
+PLAN_PREFLIGHT_MAX_CALLS = PLAN_MAX_CALLS
+#: Результаты поиска переживают Check plan на короткое время: публикация их не читает заново.
 PLAN_SEARCH_CACHE = _tr_cap.SearchCache()
 
 #: ACL-2117: сколько секунд Check plan держит открытым профиль, который сам поднял
