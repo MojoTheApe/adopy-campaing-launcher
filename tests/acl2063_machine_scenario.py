@@ -55,16 +55,18 @@ class MachinePeople:
         assert not any(v['state']['queued'] for v in drained), drained
         assert actual_reads == 3
         trace = read_json(self.ipc / 'trace.json')
-        assert trace['max'] == 1 and trace['active'] == 0
+        # ACL-2668: each process reads up to Profiles at once accounts, so across the two
+        # processes all three distinct accounts (A, B, C) may be read together; one account never twice.
+        assert 1 <= trace['max'] <= 3 and trace['active'] == {}, trace
         assert sorted(row[1] for row in trace['reads']) == ['A', 'B', 'C']
         for p in self.people:
             state = self.command(p, 'state')
             assert all(v['snapshot'] for v in state['visible'].values())
             assert state['state']['sweep']['done'] == state['state']['sweep']['total'] == 2
             assert state['private_unchanged']
-        assert self.command(first, 'checkpoint')['state']['halt']['kind'] == 'checkpoint'
-        assert self.command(second, 'state')['state']['halt']['kind'] == 'checkpoint'
-        assert self.command(second, 'restart')['state']['halt']['kind'] == 'checkpoint'
+        assert self.command(first, 'checkpoint')['state']['halt']['kind'] == 'global'
+        assert self.command(second, 'state')['state']['halt']['kind'] == 'global'
+        assert self.command(second, 'restart')['state']['halt']['kind'] == 'global'
         assert self.command(second, 'drain')['reads'] == 0
         assert self.command(second, 'retry')['state']['halt'] is None
         assert self.command(first, 'state')['state']['halt'] is None

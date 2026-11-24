@@ -194,9 +194,9 @@ def test_check_plan_prepare_accepts_a_2_5_gb_compressible_video(tmp_path, monkey
 
 
 def test_check_plan_prepare_refuses_a_2_5_gb_video_without_a_compressor_by_size_not_by_calls(tmp_path, monkeypatch):
-    """ACL-2668: отказ остаётся только по размеру файла (путь без воркера), не по числу вызовов."""
+    """ACL-2668: отказ остаётся только по файлу (нет ffmpeg для сжатия ACL-2644 / размер), не по числу вызовов."""
     plan = _plan(tmp_path, [2500], monkeypatch)                 # autouse fixture: no ffmpeg
     creator, out = _check_plan(plan, monkeypatch)
     with pytest.raises(cr.PlanError) as err:
         creator._prepare(plan, writing=False, out=out)
-    assert "larger than" in str(err.value) and "Meta calls" not in str(err.value)
+    assert "Meta calls" not in str(err.value) and "split" not in str(err.value), str(err.value)

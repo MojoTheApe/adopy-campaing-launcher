@@ -4,8 +4,8 @@
 До этого чтение (ACL-1580) закрывало поднятый им профиль при любом исходе —
 и разлогиненный тоже: строка просила «log in inside Multilogin», а окна уже
 не было. Теперь при logged out, checkpoint, зависшей вкладке и блоке 368
-профиль, который чтение само подняло, остаётся открытым, а его место в
-очереди держится как окно «на проверку» (`review`). Прочие отказы закрывают
+профиль, который чтение само подняло, остаётся открытым как окно с проблемой
+(`problem`, ACL-2549): места не занимает и других не задерживает. Прочие отказы закрывают
 профиль, как раньше; уже открытый профиль чтение не трогает, как раньше.
 
 Multilogin и Meta подменены стендами ACL-1580 (RPA) и ACL-1760 (API).
@@ -91,7 +91,7 @@ def test_a_logged_out_profile_the_read_started_stays_open(reads):
     assert "kill" not in reads.ev
     assert reads.automation.get(PROFILE), "the profile must stay open"
     kept = _kept(reads.queue)
-    assert len(kept) == 1 and kept[0]["kept_kind"] == ps.KEPT_REVIEW
+    assert len(kept) == 1 and kept[0]["kept_kind"] == ps.KEPT_PROBLEM
     rows = [r for r in reads.rows if r[0] == "spend_profile_kept_for_problem"]
     assert len(rows) == 1 and rows[0][2]["diag"]["problem"] == "logged_out"
     assert not [r for r in reads.rows if r[0] == "spend_profile_closed_after_read"]
@@ -133,7 +133,7 @@ def _calls(w):
 def _assert_kept(w):
     assert w.soft_stops == [], "the profile with the problem was closed"
     assert _calls(w) == ["acquire", "keep"]
-    assert w.kept_kinds == [ps.KEPT_REVIEW]
+    assert w.kept_kinds == [ps.KEPT_PROBLEM]
     assert w.timers == [], "no grace timer: the window is not closed later either"
 
 

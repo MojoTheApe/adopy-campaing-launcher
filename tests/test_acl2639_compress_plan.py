@@ -46,14 +46,16 @@ def test_by_default_a_large_video_goes_straight_to_chunks_without_touching_the_f
 
 def test_publish_without_a_call_budget_uploads_the_originals_uncompressed(tmp_path, monkeypatch):
     """ACL-2668 (решение 8): у публикации нет своего бюджета вызовов, значит и сжатия «чтобы влезло» нет:
-    в плане - оригиналы (запас неизвестен -> `plan_upload_sizes` ничего не сжимает)."""
+    в плане - оригиналы (запас неизвестен -> `plan_upload_sizes` ничего не сжимает). Видео до порога ACL-2644
+    (500 МБ): сжатие «выше 500 МБ» - отдельное правило владельца, оно не меняется."""
     monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
-    plan = B._plan(tmp_path, [900, 900, 900], monkeypatch, vertical={0: 400, 1: 400, 2: 400})
+    monkeypatch.delenv("ACL_VIDEO_COMPRESS_OVER_MB", raising=False)
+    plan = B._plan(tmp_path, [480, 480, 480], monkeypatch, vertical={0: 400, 1: 400, 2: 400})
     assert not hasattr(publish_api, "create_call_budget")
     planned = cr.plan_upload_sizes(plan)
     assert not any(q for _s, q in planned.values())
-    assert sorted(size for size, _ in planned.values()) == sorted([900 * MB] * 3 + [400 * MB] * 3)
+    assert sorted(size for size, _ in planned.values()) == sorted([480 * MB] * 3 + [400 * MB] * 3)
 
 
 def test_videos_that_fit_chunked_are_never_planned_compressed(tmp_path, monkeypatch):
@@ -65,7 +67,8 @@ def test_videos_that_fit_chunked_are_never_planned_compressed(tmp_path, monkeypa
     assert sorted(size for size, _ in planned.values()) == sorted([70 * MB, 70 * MB, 30 * MB, 30 * MB])
 
 
-def test_the_plan_never_compresses_when_the_fast_upload_is_on_or_the_fallback_is_off(tmp_path, monkeypatch):
+def test_the_budget_fallback_is_not_planned_when_the_fast_upload_is_on_or_the_fallback_is_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_OVER_MB", "100000")   # ACL-2644: the size threshold is not what this test is about
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
     plan = B._plan(tmp_path, [2000, 2000], monkeypatch)
     monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
@@ -79,6 +82,7 @@ def test_the_plan_never_compresses_when_the_fast_upload_is_on_or_the_fallback_is
 
 
 def test_without_a_known_spare_the_originals_are_planned(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_OVER_MB", "100000")   # ACL-2644: above the threshold they are planned compressed
     monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
     plan = B._plan(tmp_path, [2000], monkeypatch)

@@ -60,7 +60,7 @@ def world(monkeypatch, tmp_path):
     monkeypatch.setattr(stop_log, "_DEFAULT", log)
     monkeypatch.setattr(stop_log, "_sleep", clock.sleep)
     monkeypatch.setattr(launch, "_record", events.append)
-    monkeypatch.setattr(launch, "_PACER", launch.StartPacer(gap=lambda: 0.0))
+    monkeypatch.setattr(launch, "_PACER", launch.StartPacer(limit=lambda: 0))
     monkeypatch.setattr(prof, "running_state", lambda l, p: ("not_running", None))
     monkeypatch.setenv(stop_log.RESTART_COOLDOWN_ENV, "180")
     monkeypatch.setenv(stop_log.RESTART_MAX_WAIT_ENV, "300")
@@ -442,13 +442,24 @@ def test_with_keep_open_on_the_plan_window_is_convenience_has_no_timer_and_is_lr
 
     now = [1000.0]
     closed = []
-    settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=1, kept_idle_close_s=600.0)
+    settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=1)
+    memory = [120 * 1024]
+
+    def read_memory():
+        return ps.MemoryReading(total_mb=128 * 1024, available_mb=memory[0])
+
+    def evict(job_id, label, profile, idle_s=0.0):
+        closed.append((label, profile))
+        memory[0] += 4 * 1024
+        return True
+
     slots = ps.ProfileSlots(
-        memory=lambda: ps.MemoryReading(total_mb=128 * 1024, available_mb=120 * 1024),
+        memory=read_memory,
         settings=lambda: settings, clock=lambda: now[0], tick_s=0.02,
         usage=ps.ProfileUsage(lambda profiles: {p: 3584 for p in profiles}, clock=lambda: now[0],
                               background=False),
-        evictor=lambda job_id, label, profile, idle_s=0.0: closed.append((label, profile)) or True)
+        open_probe=ps.OpenProfileProbe(lambda profiles: set(), clock=lambda: now[0], background=False),
+        evictor=evict)
     monkeypatch.setattr(_as, "_slot_queue", lambda: slots)
     timers = []
     monkeypatch.setattr(threading, "Timer", lambda *a, **k: timers.append(a) or SimpleNamespace(
@@ -460,9 +471,18 @@ def test_with_keep_open_on_the_plan_window_is_convenience_has_no_timer_and_is_lr
     assert timers == [] and not _as._PENDING_CLOSE
     (row,) = slots.snapshot()["running"]
     assert row["kept"] is True and row["kept_kind"] == ps.KEPT_CONVENIENCE
-    now[0] += 601                                   # idle past the limit: another account needs the room
+    # ACL-2668: the kept plan window takes no slot - with a ceiling of 1 another account starts at once
     got = []
     t = threading.Thread(target=lambda: got.append(slots.acquire("job-2", "P-OTHER")))
+    t.daemon = True
+    t.start()
+    t.join(5)
+    assert got and got[0] and closed == []
+    slots.release("job-2")
+    # ...and when memory is short it gives way at once, without any idle time
+    memory[0] = 8 * 1024
+    got.clear()
+    t = threading.Thread(target=lambda: got.append(slots.acquire("job-3", "P-THIRD")))
     t.daemon = True
     t.start()
     t.join(5)

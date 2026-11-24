@@ -1,4 +1,7 @@
-"""ACL-2673: a new release reaches the Update button within about a minute."""
+"""ACL-2673: the server re-asks GitHub after a 60 s cache window.
+
+The page timer from ACL-2673 is gone (ACL-2668 decision 23): the page checks
+on page load and Refresh only; the 60 s cache stays to save GitHub calls."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -44,13 +47,13 @@ def test_release_published_while_page_is_open_shows_within_two_minutes(rig):
     assert not ru.check(now=1000.0)["available"]
     rig.latest = "2026-11-16.1700"
     state = None
-    for t in (1060.0, 1120.0):  # two unforced periodic checks
+    for t in (1060.0, 1120.0):  # two unforced checks
         state = ru.check(now=t)
     assert state["available"] and state["candidate"]["version"] == "2026-11-16.1700"
 
 
-def test_template_polls_every_minute_unforced():
+def test_template_has_no_periodic_check():
+    """ACL-2668 decision 23 replaced the minute timer: checks run on events only."""
     html = TEMPLATE.read_text(encoding="utf-8")
-    assert "setInterval(function () { aclCheck(false); }, 60 * 1000);" in html
+    assert "aclCheck(false)" not in html
     assert "aclCheck(true);" in html
-    assert "aclCheck(false); }, 60 * 60 * 1000" not in html

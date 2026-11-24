@@ -369,7 +369,10 @@ def plan(state, repo, expected_sha, context=None, activation=None, completion=No
         wire = envelope(partial, repo, context['wire']['archive'], context['wire']['activation'], overrides, deleted)
         if raw(reconstruct(wire, archive)) != raw(state):
             raise ValueError('Archive overlays do not preserve the complete logical state')
-        if len(raw(wire)) <= ROTATE: return {'wire': wire, 'archive_bytes': None}
+        # ROTATE is the compaction target, not the next rotation trigger. Active
+        # records may stay above that target even after a complete extraction;
+        # rotating them on every write would upload the entire archive again.
+        if len(raw(wire)) <= LIMIT: return {'wire': wire, 'archive_bytes': None}
         activation = context['wire']['activation']
     if not identity(expected_sha) or not isinstance(activation, dict) or not activation:
         raise ValueError('Archive activation needs exact owned snapshot evidence')
@@ -403,10 +406,6 @@ def write(request, repo, state, expected_sha, context=None, activation=None,
     # The live blob and archive enter authority together, on the exact fresh
     # branch tree. Non-forced advancement preserves concurrent neighboring files.
     blobs = []
-    for content in (selected['archive_bytes'], data):
-        result = request(root + '/git/blobs', 'POST', {'encoding': 'base64', 'content': base64.b64encode(content).decode()})
-        if result.get('sha') != git_sha(content): raise ValueError('Git did not retain the exact archive/live blob')
-        blobs.append(result['sha'])
     for attempt in range(3):
         ref = request(root + '/git/ref/heads/tracker-state')['object']
         if ref.get('type') != 'commit' or not identity(ref.get('sha')): raise ValueError('Invalid native state branch head')
@@ -415,6 +414,13 @@ def write(request, repo, state, expected_sha, context=None, activation=None,
         if row.get('sha') != expected_sha: raise ArchiveConflict('Tracker state changed before archive transaction')
         tree = request(root + '/git/commits/' + head)['tree']['sha']
         if not identity(tree): raise ValueError('Invalid original state branch tree')
+        # Reject a known stale snapshot before any uploads. A later race still
+        # fails the non-forced ref update; neighboring-file retries reuse blobs.
+        if not blobs:
+            for content in (selected['archive_bytes'], data):
+                result = request(root + '/git/blobs', 'POST', {'encoding': 'base64', 'content': base64.b64encode(content).decode()})
+                if result.get('sha') != git_sha(content): raise ValueError('Git did not retain the exact archive/live blob')
+                blobs.append(result['sha'])
         created = request(root + '/git/trees', 'POST', {'base_tree': tree, 'tree': [
             {'path': selected['wire']['archive']['path'], 'mode': '100644', 'type': 'blob', 'sha': blobs[0]},
             {'path': '.tracker-state.json', 'mode': '100644', 'type': 'blob', 'sha': blobs[1]}]})
