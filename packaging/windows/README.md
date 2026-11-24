@@ -74,20 +74,21 @@ The same installer is distributed to every campaign manager. No personal
 configuration package is required. On first launch, the setup wizard asks the
 user to:
 
-1. enter their name as it appears in the CM column of the Stats workbook;
-2. choose the Stats workbook and the Creatives folder (default
-   `Documents\ACL\Creatives`, created if missing);
+1. enter their name (as BI knows them);
+2. check the Creatives folder (default `Documents\ACL\Creatives`, created if
+   missing). No Excel file is asked for (ACL-2867);
 3. check the readiness summary. Multilogin is connected later, in the
    dashboard (Accounts → Connect Multilogin), not in the wizard (ACL-1303).
 
-No Google Sheet link, Google access file or Upload FB workbook is asked for
-(ACL-1239): targets and ad texts come from the team library (ACL-1241), the
-account list from the Stats workbook, and ad-account IDs from each Multilogin
-profile when the user connects it on the Accounts screen. The wizard writes the
-machine-local configuration transactionally under `%LOCALAPPDATA%\ACL` and fixes
-the production safety mode; the user never edits `.env`, CSV, JSON, or profile
-UUIDs. The Stats workbook and Creatives folder can be changed later in the
-dashboard (Accounts → This computer).
+No Google Sheet link, Google access file, Upload FB workbook or Stats workbook
+is asked for (ACL-1239, ACL-2867): targets and ad texts come from the team
+library (ACL-1241), the account list from BI when the user signs in (otherwise
+it stays empty), and ad-account IDs from each Multilogin profile when the user
+connects it on the Accounts screen. The wizard writes the machine-local
+configuration transactionally under `%LOCALAPPDATA%\ACL` and fixes the
+production safety mode; the user never edits `.env`, CSV, JSON, or profile
+UUIDs. The Creatives folder can be changed later in the dashboard (Accounts →
+This computer).
 
 ### Setup guide (ACL-1175)
 

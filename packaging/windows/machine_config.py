@@ -50,8 +50,8 @@ class AccountAssignment:
 @dataclass(frozen=True)
 class MachineConfiguration:
     """What setup writes. No Google Sheets and no Upload FB workbook (ACL-1239):
-    targets and ad texts come from the team library, accounts from the Stats
-    workbook, ad-account IDs from each Multilogin profile in the dashboard."""
+    targets and ad texts come from the team library, accounts from BI (or
+    later from profiles, ACL-2867), ad-account IDs from each Multilogin profile in the dashboard."""
 
     campaign_manager_name: str
     accounts: tuple[AccountAssignment, ...]
@@ -157,7 +157,7 @@ def apply_machine_configuration(
     configuration: MachineConfiguration,
     config_directory: str | Path,
     *,
-    stats_workbook: str,
+    stats_workbook: str = "",
     creatives_directory: str,
 ) -> None:
     config_dir = Path(config_directory)
