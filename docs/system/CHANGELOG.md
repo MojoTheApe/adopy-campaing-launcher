@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2896 — Builder Pages and Pixel no longer stay on Loading behind profile reads — 2026-11-24
+
+Cached-only answers for the builder (`/api/account-pages` and `/api/account-pixels` with
+`cached=1`, and `/publish-plan/cached`) now run in their own small thread pool
+(`acl-cached`) instead of the shared default pool, where Check plan, profile
+connections and Page/form reads wait for a profile and could fill every worker.
+Refresh pages / Refresh pixels (and clicking the field) now start a real read even while
+the cached-only request is still pending; a read already in flight is still not duplicated.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1896).
+
 ## ACL-2890 — Update never refused for reads; waits for publishing on the release path — 2026-11-24
 
 The installed ACL.exe Update path (`_apply_release_update`) already follows owner decision 11
