@@ -6712,6 +6712,27 @@ def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
     return None
 
 
+# ── Ответы только из кэша — не за чтениями профиля (ACL-2896) ─────────────
+#
+# Билдер при отрисовке спрашивает Pages / Pixel / вердикты Check plan только из
+# кэша на машине (cached=1, /publish-plan/cached). Через `asyncio.to_thread` они
+# стояли в общем пуле цикла (min(32, cpu+4) потоков) за check_plan,
+# prepare_connection, чтением Страниц и open-profile, которые висят там в
+# ожидании профиля; при Check all на нескольких аккаунтах пул полон, и чтение
+# файла в 1 мс ждало минутами — поле стояло на «Loading…».
+# Свой маленький пул, а не ответ прямо в цикле: кэш Pages/Pixel — чтение JSON
+# с диска под threading-замком (его держит и запись кэша), а cached_plan строит
+# черновики (enrich читает файлы); всё это не должно держать цикл событий.
+# В этот пул не попадает ничего, что открывает профиль.
+_CACHED_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="acl-cached")
+
+
+async def _in_cached_pool(fn, /, *args, **kwargs):
+    loop = asyncio.get_running_loop()
+    ctx = contextvars.copy_context()
+    return await loop.run_in_executor(_CACHED_POOL, functools.partial(ctx.run, fn, *args, **kwargs))
+
+
 @app.post("/api/account-pages")
 async def api_account_pages(request: Request) -> JSONResponse:
     """Read available Pages under the existing profile read lock; no Meta writes."""
@@ -6723,7 +6744,7 @@ async def api_account_pages(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
     if str(form.get("cached") or "") == "1":
         # Отрисовка билдера: только кэш на машине, профиль не открывается.
-        return JSONResponse(await asyncio.to_thread(cached_only, account))
+        return JSONResponse(await _in_cached_pool(cached_only, account))
     # Без force — ответ из кэша на машине (12 ч): лишний запуск профиля ради списка Страниц не нужен.
     force = str(form.get("force") or "") == "1"
     return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
@@ -6739,7 +6760,7 @@ async def api_account_pixels(request: Request) -> Response:
     if not account:
         return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
     if str(form.get("cached") or "") == "1":
-        return JSONResponse(await asyncio.to_thread(cached_only, account))
+        return JSONResponse(await _in_cached_pool(cached_only, account))
     force = str(form.get("force") or "") == "1"
     if str(form.get("stream") or "") == "1":
         # ACL-2850: строки ожидания («Waiting for a free profile slot», «Opening ...») едут строками JSON
@@ -7278,8 +7299,8 @@ async def publish_plan_cached(request: Request) -> JSONResponse:
     country, account_label, slots = _parse_build_upload_form(form)
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
-    return JSONResponse(await asyncio.to_thread(publish_api.cached_plan, slots, account_label=account_label,
-                                                country=country))
+    return JSONResponse(await _in_cached_pool(publish_api.cached_plan, slots, account_label=account_label,
+                                              country=country))
 
 
 # ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
