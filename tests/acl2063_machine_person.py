@@ -78,8 +78,9 @@ def main():
         with machine_file_lock(ipc / 'trace.lock', timeout=10):
             value = read_json(trace); value['active'].pop(account, None); write(trace, value)
         if mode[0] == 'checkpoint':
-            return ci.Snapshot(account=account, state='failed', stop='checkpoint',
-                               finished_at_utc=stamp.isoformat(), error='synthetic checkpoint')
+            # ACL-2668: общий стоп машины теперь только Multilogin; чекпоинт держит лишь свой аккаунт.
+            return ci.Snapshot(account=account, state='failed', error_code='mlx_session_lost',
+                               finished_at_utc=stamp.isoformat(), error='synthetic Multilogin session lost')
         return ci.Snapshot(account=account, state='empty', finished_at=stamp.strftime('%Y-%m-%d %H:%M:%S'),
                            finished_at_utc=stamp.isoformat(), steps={s: 'ok' for s in ci.STRUCTURE_STEPS})
     queue = ar.RefreshQueue(reader, clock=lambda: stamp.timestamp(), store=ars.RefreshStore(config),

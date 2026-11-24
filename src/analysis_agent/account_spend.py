@@ -1298,14 +1298,14 @@ def _close_if_still_pending(opened: _ReadOpen) -> None:
 def _keep_for_problem(opened: _ReadOpen, problem: str, stop: Any = None) -> None:
     """ACL-2091: проблема аккаунта — окно, поднятое чтением, остаётся открытым.
 
-    Место в очереди держится как окно «на проверку» (`review`, как у Publish с
-    проблемой, ACL-1603): очередь видит открытый Mimic, простой его не закрывает.
+    Окно отмечено как оставленное с проблемой (`problem`, ACL-2549): простой его не закрывает,
+    но место оно не занимает и задания других аккаунтов не задерживает (ACL-2686).
     """
     if opened.slot_id:
-        from src.web.profile_slots import KEPT_REVIEW
+        from src.web.profile_slots import KEPT_PROBLEM
 
         try:
-            _slot_queue().keep(opened.slot_id, opened.account, kind=KEPT_REVIEW)
+            _slot_queue().keep(opened.slot_id, opened.account, kind=KEPT_PROBLEM)
         except Exception:
             log.exception("Could not mark the kept window of %s", opened.account)
     log.info("%s: %s — the profile the read started stays open", opened.account, problem)

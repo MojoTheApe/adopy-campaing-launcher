@@ -2,9 +2,11 @@
 
 До «Profiles at once» аккаунтов читаются сразу, аккаунт - одним чтением (ACL-2668). Порядок: action > retry > attention
 > schedule. Свежий аккаунт (снимок ok/partial/empty моложе часа) не читается. Сбой одного
-аккаунта не останавливает очередь; сбой, общий для всех (Multilogin, чекпоинт,
-потолок вызовов, остывание, выключенный API), ставит очередь на паузу с одной
-причиной. Периода здесь нет: даты читать аккаунты не заставляют.
+аккаунта не останавливает очередь: чекпоинт, лимит Meta, отказ по политике, разлогин,
+зависшая вкладка и потолок вызовов помечают только свой аккаунт (ACL-2668, решение 1).
+Паузу всей очереди с одной причиной ставит только сбой машины: Multilogin не запущен
+или его сессия/токен мертвы, выключенный API, недоступное общее состояние машины.
+Периода здесь нет: даты читать аккаунты не заставляют.
 """
 from __future__ import annotations
 
@@ -13,7 +15,6 @@ import heapq
 import hashlib
 import logging
 import os
-import re
 import threading
 import time
 import sys
@@ -23,7 +24,7 @@ from typing import Callable, Literal
 from src.analysis_agent import campaign_inventory
 from src.analysis_agent.campaign_inventory import Snapshot, run_read
 from src.analysis_agent.account_refresh_state import RefreshStore
-from src.analysis_agent.account_refresh_machine import MachineStore, binding, CoordinationError
+from src.analysis_agent.account_refresh_machine import MachineStore, binding, CoordinationError, MACHINE_STOP_KIND
 
 log = logging.getLogger(__name__)
 
@@ -53,32 +54,24 @@ def _publishing_busy() -> bool:
         return False
 
 
-#: Коды ошибки снимка, общие для всех аккаунтов: код → (причина, сколько секунд ждать | None).
+#: Коды ошибки снимка, общие для всей машины: код → (причина, сколько секунд ждать | None).
+#: ACL-2668 (решение 1): только поломки машины. Всё, что случилось с одним аккаунтом
+#: (чекпоинт, лимит Meta, политика, потолок вызовов), сюда не входит и помечает лишь его строку.
 _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
     campaign_inventory.NEEDS_API_CODE: (
         "Account reads are off: the API backend is not enabled on this server. Enable it, then press Retry.", None),
     "mlx_session_lost": ("Multilogin lost its session. Reopen Multilogin, then press Retry.", None),
     "mlx_token_expired": ("The Multilogin token has expired. Update it in Multilogin, then press Retry.", None),
     "mlx_token_workspace": ("The Multilogin token belongs to another workspace. Fix it, then press Retry.", None),
-    "call_budget": ("The call budget for account reads is used up. Raise the limit, then press Retry.", None),
     "coordination_unavailable": ("The machine account-read state is unavailable. Restore access, then press Retry.", None),
 }
 
-_MINUTES = re.compile(r"about (\d+) min", re.I)
+#: Вид единственной оставшейся паузы машины (в общем `state.json` и в локальном хранилище очереди).
+MACHINE_HALT_KIND = MACHINE_STOP_KIND
 
 #: ACL-2653: a read that stays "updating" longer than this ends as failed (the row then shows Retry).
 STUCK_UPDATING_S = 1200.0
 STUCK_TEXT = "The read did not finish in 20 minutes. Press Retry."
-
-
-#: Остановки Meta (`Snapshot.stop`), общие для всех аккаунтов: вид → (причина, ждать по таймеру?).
-#: Чекпоинт и потолок вызовов сами не проходят: только явный Retry, который удался.
-_GLOBAL_STOPS: dict[str, tuple[str, bool]] = {
-    "checkpoint": ("A profile is on a Facebook checkpoint. Solve it inside Multilogin, then press Retry.", False),
-    "rate_limited": ("Meta asked to slow down. Account reads are paused for a while.", True),
-    "policy_block": ("Meta refused the requests. Account reads are paused for a while.", True),
-    "call_budget": _GLOBAL_CODES["call_budget"][:1] + (False,),
-}
 
 
 def _action_text(trigger: str) -> str:
@@ -143,39 +136,21 @@ def _held_blocks(account: str, trigger: str, force: bool = False) -> bool:
     return _profile_held(account)
 
 
-def _cooldown_s(kind: str, text: str) -> float:
-    """Сколько ждать по таймеру: минуты из текста, иначе COOLDOWN_S по виду остановки."""
-    from src.analysis_agent.account_spend_api import COOLDOWN_S
-
-    table = float(COOLDOWN_S.get(kind, 300.0))
-    mins = _MINUTES.search(text or "")
-    # Минуты из текста не короче таблицы: подсказка «about 1 min» не отменяет остывание вида.
-    return max(int(mins.group(1)) * 60.0, table) if mins else table
-
-
 def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
-    """Общая остановка: `(причина по-английски, сколько секунд ждать | None)`.
+    """Остановка всей машины: `(причина по-английски, сколько секунд ждать | None)`.
 
-    Сначала коды и вид остановки, строки — только запасной путь.
+    ACL-2668 (решение 1): только Multilogin, выключенный API и общее состояние машины.
+    Остановка Meta (`snap.stop`: чекпоинт, лимит, политика, потолок вызовов, разлогин,
+    зависшая вкладка) — проблема одного аккаунта и машину не останавливает.
     """
     code = (snap.error_code or "").strip()
     if code == "account_blocked":
-        return None   # ACL-2548: a refusal of a held profile is an account-level code; its text says "checkpoint" but nothing was read
+        return None   # ACL-2548: a refusal of a held profile is an account-level code; nothing was read
     if code in _GLOBAL_CODES:
         return _GLOBAL_CODES[code]
-    kind = (snap.stop or "").strip()
-    if kind in _GLOBAL_STOPS:
-        reason, timed = _GLOBAL_STOPS[kind]
-        return reason, (_cooldown_s(kind, snap.error) if timed else None)
     text = (snap.error or "").lower()
     if "10061" in text or "launcher.mlx.yt" in text or "multilogin is not running" in text:
         return ("Multilogin is not reachable on this computer. Start the Multilogin app, then press Retry.", None)
-    if "checkpoint" in text:
-        return _GLOBAL_STOPS["checkpoint"][0], None
-    if "slow down" in text or "rate limit" in text:
-        return _GLOBAL_STOPS["rate_limited"][0], _cooldown_s("rate_limited", text)
-    if "call budget" in text:
-        return _GLOBAL_CODES["call_budget"]
     return None
 
 
@@ -183,8 +158,12 @@ def is_person_stop(snap: Snapshot) -> bool:
     """ACL-2653: the read ended on a Facebook checkpoint/lock of ONE profile (a person's problem, not the machine's)."""
     if (snap.error_code or "").strip() == "account_blocked":
         return False
-    stop = _global_stop(snap)
-    return bool(stop) and stop[0] == _GLOBAL_STOPS["checkpoint"][0]
+    if _global_stop(snap):
+        return False
+    kind = (snap.stop or "").strip()
+    if kind:
+        return kind == "checkpoint"
+    return "checkpoint" in (snap.error or "").lower()
 
 
 def classify(snap: Snapshot) -> Literal["ok", "account", "global", "person"]:
@@ -200,10 +179,16 @@ def classify(snap: Snapshot) -> Literal["ok", "account", "global", "person"]:
 
 
 def _halt_kind(snap: Snapshot) -> str:
-    """Вид общей паузы: `checkpoint` снимается только чтением того же аккаунта, остальные - любым удачным."""
-    kind = (snap.stop or "").strip()
-    text = (snap.error or "").lower()
-    return "checkpoint" if kind == "checkpoint" or (not kind and "checkpoint" in text) else (kind or "global")
+    """Вид общей паузы: остался один — поломка машины (ACL-2668)."""
+    return MACHINE_HALT_KIND
+
+
+def is_machine_halt(halt: dict | None) -> bool:
+    """Пауза машины, а не старая сохранённая пауза одного аккаунта (чекпоинт, лимит, потолок вызовов).
+
+    ACL-2668: такие паузы, записанные прежними сборками в `state.json` или в хранилище очереди,
+    больше ничего не останавливают."""
+    return bool(halt) and halt.get("kind", MACHINE_HALT_KIND) == MACHINE_HALT_KIND
 
 
 class RefreshQueue:
@@ -270,7 +255,8 @@ class RefreshQueue:
         self._machine.migrate(self._owner, f"{local:%Y-%m-%d}/{window}" if window else None,
                               list(keys.values()),
                               seen=bool(window and window in old["windows_done"].get(f"{local:%Y-%m-%d}", [])),
-                              halt=old.get("halt") or self._persisted_halt(), bindings=keys, now=self._clock())
+                              halt=old.get("halt") if is_machine_halt(old.get("halt")) else None,
+                              bindings=keys, now=self._clock())
         with self._store.transaction() as state:
             state["machine_migrated"] = True
 
@@ -447,37 +433,9 @@ class RefreshQueue:
 
     # ───────── заявки ─────────
 
-    def _persisted_halt(self) -> dict | None:
-        """Пауза, восстановленная из хранилища: чекпоинт и потолок вызовов переживают рестарт
-        и видны второму процессу дешборда (остановка записана в последней попытке аккаунта).
-        """
-        try:
-            stops = campaign_inventory.latest_stops()
-        except Exception:  # noqa: BLE001 — нечитаемое хранилище не должно валить очередь
-            log.debug("persisted stops were not read", exc_info=True)
-            return None
-        now = self._clock()
-        found: dict | None = None
-        for account, (kind, at_utc) in sorted(stops.items()):
-            if kind == "call_budget":
-                until = None
-            elif kind in ("rate_limited", "policy_block"):
-                at = _parse_utc(at_utc)
-                if at is None:
-                    continue
-                until = at + _cooldown_s(kind, "")
-                if now >= until:
-                    continue
-            else:
-                continue
-            halt = {"reason": _GLOBAL_STOPS[kind][0], "until": until, "kind": kind,
-                    "account": account, "persisted": True}
-            found = found or halt
-        return found
-
     def _prune_machine_stops(self) -> None:
         """ACL-2653: drop machine stops that cannot lift on their own: an unmapped key (the account was removed)
-        and the old machine-wide `checkpoint` stop. A dropped checkpoint of a known account becomes that
+        and the old per-account stops (checkpoint, rate limit, policy, call budget; ACL-2668). A dropped checkpoint of a known account becomes that
         profile's hold, so the profile itself stays untouched until a person presses Retry.
         Runs under the machine read lease; if a read owns it, the next call tries again."""
         if self._machine is None:
@@ -495,7 +453,8 @@ class RefreshQueue:
             hold.__exit__(None, None, None)
         by_key = {key: account for account, key in keys.items()}
         for stop in dropped:
-            log.info("Dropped a machine checkpoint stop (%s)", "known account" if stop["key"] in by_key else "other config")
+            log.info("Dropped a per-account machine stop %s (%s)", stop["kind"],
+                     "known account" if stop["key"] in by_key else "other config")
             account = by_key.get(stop["key"])
             if account and stop["kind"] == "checkpoint":
                 self._hold_person_lock(account, "a background read")
@@ -536,7 +495,7 @@ class RefreshQueue:
             self._halt = None       # ACL-2653: an old saved checkpoint halt no longer stops anything
         if self._machine is not None:
             shared = self._machine.halt(now=self._clock())
-            if shared:
+            if shared or getattr(self._machine, "stale_stops", False):
                 try:
                     self._prune_machine_stops()
                     shared = self._machine.halt(now=self._clock())
@@ -550,13 +509,13 @@ class RefreshQueue:
             if self._halt and "machine_generation" in self._halt:
                 self._halt = None
         halt = self._halt
-        if halt and halt.get("persisted"):
-            self._halt = halt = None  # восстановленная пауза выводится заново: файл мог измениться
+        if halt and (halt.get("persisted") or not is_machine_halt(halt)):
+            # ACL-2668: сохранённая прежней сборкой пауза одного аккаунта больше не держит очередь.
+            self._halt = halt = None
+            self._bypass.clear()
         if halt and halt["until"] is not None and self._clock() >= halt["until"]:
             self._halt = None
             self._bypass.clear()
-        if self._halt is None:
-            self._halt = self._persisted_halt()
 
     def forget(self, accounts: list[str]) -> None:
         """ACL-2653: a removed account leaves the queue, its row and its sweep slot."""
@@ -574,9 +533,10 @@ class RefreshQueue:
     def request(self, account: str, trigger: str, *, force: bool = False, window: str = "") -> dict:
         """Поставить аккаунт в очередь.
 
-        Явный `retry`/`action` (force) пересчитывает свежесть, но паузу всей очереди не снимает:
-        без таймера он читает только свой аккаунт мимо паузы, и пауза уходит, лишь если чтение
-        удалось; с таймером ждёт его конца. Остальные заявки на паузе встают в очередь.
+        Явный `retry`/`action` (force) пересчитывает свежесть. Пауза всей очереди бывает только
+        у поломки машины (Multilogin, выключенный API) и таймера не имеет (ACL-2668): явная заявка
+        читает только свой аккаунт мимо неё, и пауза уходит, лишь если чтение удалось.
+        Остальные заявки на паузе встают в очередь.
         Упавшее чтение без удержания профиля не ждёт часа (ACL-2668 #26): раскрытие аккаунта
         (`attention`) читает его сразу, обход по расписанию — в следующем окне. Удержанный
         профиль (ACL-2091) автоматические заявки не трогают. `window` помечает обход по
@@ -1062,13 +1022,10 @@ class RefreshQueue:
         prev_at = self._rows.get(account, {}).get("list_at", "")
         if verdict == "ok":
             self._rows[account] = {"list_at": snap.finished_at, "state": snap.state, "error": ""}
-            halt = self._halt
-            if bypassed and halt is not None:
-                # Пауза чекпоинта снимается только удачным чтением аккаунта, который её поднял:
-                # удача соседнего профиля ничего не говорит о чекпоинте этого.
-                if halt.get("kind") != "checkpoint" or halt.get("account") == account:
-                    self._halt = None
-                    self._bypass.clear()
+            if bypassed and self._halt is not None:
+                # Удачное чтение мимо паузы машины доказывает, что Multilogin снова работает.
+                self._halt = None
+                self._bypass.clear()
             return
         why = snap.error or (snap.problems[-1] if snap.problems else "") or snap.error_code or snap.stop or "failed"
         self._rows[account] = {"list_at": prev_at, "state": "failed", "error": why}
@@ -1076,6 +1033,8 @@ class RefreshQueue:
             # ACL-2653: only this profile waits for a person; the queue of the other accounts is not halted.
             self._hold_person_lock(account, _action_text(trigger))
             return
+        # ACL-2668: verdict "account" (лимит Meta, политика, потолок вызовов, разлогин, зависшая
+        # вкладка) помечает только эту строку; остальные аккаунты читаются дальше.
         if verdict == "global":
             reason, wait = _global_stop(snap)  # type: ignore[misc]
             self._halt = {"reason": reason, "until": self._clock() + wait if wait else None,
