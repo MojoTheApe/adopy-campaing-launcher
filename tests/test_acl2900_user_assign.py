@@ -213,7 +213,7 @@ def test_page_flag_follows_key(monkeypatch):
     assert app_mod._user_assign_enabled() is True
     # Шаблон карты подключает блок только по этому флагу.
     src = (Path(app_mod.__file__).parent / "templates" / "_account_map.html").read_text(encoding="utf-8")
-    assert '{% if user_assign_enabled() %}{% include "_user_assign.html" %}{% endif %}' in src
+    assert '{% if user_assign_enabled is defined and user_assign_enabled() %}{% include "_user_assign.html" %}{% endif %}' in src
 
 
 def test_preview_route(owner):
