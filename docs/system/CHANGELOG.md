@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2883 — Landing preview shows the real page as a thumbnail — 2026-11-23
+
+The hover preview of a landing in the builder now loads the landing with its own origin, so landings that depend on their own scripts show the real page instead of their error page. The page is laid out at phone size and scaled down into the preview box, so the whole first screen is visible instead of a cropped piece. The frame still cannot reach the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1883).
+
 ## ACL-2881 — Landing search is faster: one reused connection and a 1-second pending poll — 2026-11-23
 
 The landing picker now keeps one open connection to JCloudFront for later searches instead of connecting for every call, and repeats a "preparing the catalog" answer every second instead of every three. A repeated search takes about 0.2 s instead of 1.3 s, a new code about 0.5 s instead of 5 s. The first search after a long idle still waits while JCloudFront prepares its catalog.

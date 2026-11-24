@@ -150,7 +150,7 @@ def test_every_row_has_an_open_in_new_tab_link_and_hover_shows_preview(page):
     page.locator("[data-landings-preview] iframe").wait_for()
     frame = page.locator("[data-landings-preview] iframe")
     assert frame.get_attribute("src") == "https://lp.example.com/aaa"
-    assert frame.get_attribute("sandbox") == "allow-scripts"
+    assert frame.get_attribute("sandbox") == "allow-scripts allow-same-origin"
     page.locator("[data-landings-query]").hover()
     page.wait_for_function("document.querySelector('[data-landings-preview]').hidden")
 
@@ -239,8 +239,11 @@ def test_use_landing_opens_the_picker_prefilled_and_searches(page):
     assert page.evaluate("cbUseLanding('Other', 'x')") is False
 
 
+THUMB_CSS = re.search(r"\.cb-landing-preview \{ width: 253px[^}]*\}\s*\.cb-landing-preview iframe \{[^}]*\}", TEMPLATE).group(0)
+
+
 def _hover_first_row(page):
-    page.add_style_tag(content=PREVIEW_CSS + " .cb-landing-popup { width: 300px; }")
+    page.add_style_tag(content=PREVIEW_CSS + " " + THUMB_CSS + " .cb-landing-preview iframe { border: 0; } .cb-landing-popup { width: 300px; }")
     page.click("[data-landings-open]")
     page.fill("[data-landings-query]", "x")
     page.click("[data-landings-go]")
@@ -254,6 +257,15 @@ def _hover_first_row(page):
         const l = document.querySelector('[data-landings-results]').getBoundingClientRect();
         return {p: [p.left, p.top, p.right, p.bottom], l: [l.left, l.right], w: innerWidth, h: innerHeight};
     }""")
+
+
+def test_preview_frame_is_phone_sized_and_scaled_into_the_box(page):
+    # ACL-2883: миниатюра всей страницы, а не обрезок узкого окна.
+    _hover_first_row(page)
+    box = page.locator("[data-landings-preview]").bounding_box()
+    frame = page.locator("[data-landings-preview] iframe").bounding_box()
+    assert abs(frame["width"] - 390 * 0.65) < 1 and abs(frame["height"] - 844 * 0.65) < 1
+    assert frame["width"] <= box["width"] + 1 and frame["height"] <= box["height"] + 1
 
 
 def test_preview_stays_inside_the_window_in_a_narrow_panel(page):
