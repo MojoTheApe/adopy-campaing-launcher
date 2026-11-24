@@ -92,8 +92,9 @@ def _media_brief(ad_media: dict) -> dict:
 
 
 def stats_payload(name: str, spec_hash: str, *, outcome: Any = None, plan: Any = None,
-                  began: float, calls: int, writes: int, raised: str | None = None) -> dict:
-    """Итог работы создателя: тайминги, число вызовов и что создано."""
+                  began: float, calls: int, writes: int, raised: str | None = None,
+                  load: dict | None = None) -> dict:
+    """Итог работы создателя: тайминги, число вызовов, что создано и нагрузка машины (`load`)."""
     out: dict[str, Any] = {
         "campaign_name": name, "spec_hash": spec_hash,
         "duration_s": round(time.monotonic() - began, 1),
@@ -105,6 +106,8 @@ def stats_payload(name: str, spec_hash: str, *, outcome: Any = None, plan: Any =
             "tag": getattr(plan, "tag", None), "mismatches": outcome.mismatches,
             "ad_media": _media_brief(outcome.ad_media),
         })
+    if load is not None:
+        out["load"] = load
     return out
 
 

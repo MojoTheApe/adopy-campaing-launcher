@@ -84,8 +84,8 @@ def test_a_persons_retry_still_reaches_a_held_profile(env, held):
 def test_account_blocked_code_is_not_a_global_stop_even_if_the_text_says_checkpoint(error):
     snap = _failed("B97", error, code="account_blocked")
     assert ar._global_stop(snap) is None and ar.classify(snap) == "account"
-    # ACL-2668: and without the code the checkpoint text is still an account problem
-    assert ar._global_stop(_failed("B97", error)) is None and ar.classify(_failed("B97", error)) == "account"
+    # ACL-2668/ACL-2653: without the code the checkpoint text is its own profile's hold, never the machine
+    assert ar._global_stop(_failed("B97", error)) is None and ar.classify(_failed("B97", error)) == "person"
 
 
 def test_a_refused_read_does_not_raise_a_global_halt(env, held):
@@ -96,3 +96,16 @@ def test_a_refused_read_does_not_raise_a_global_halt(env, held):
     q._drain_once()
     assert q.state().get("halt") in (None, {}) or not q._halt
     assert q._halt is None
+
+
+def test_a_held_profile_with_a_recent_failure_is_still_skipped_everywhere(env, held):
+    # ACL-2695: dropping the "recently failed" wait must not drop the hold (ACL-2091) at any queue site.
+    env.attempts[HELD] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": "checkpoint"}
+    q = _queue(env)
+    q.begin_sweep("08:00", 2, accounts=[HELD, "OTHER"])
+    assert q.request(HELD, "schedule", window="08:00") == {"queued": False, "reason": "profile_held"}
+    assert q.request(HELD, "attention") == {"queued": False, "reason": "profile_held"}
+    q.request("OTHER", "schedule", window="08:00")
+    q._drain_once()
+    assert [a for a, _ in env.read] == ["OTHER"]
+    assert held == []

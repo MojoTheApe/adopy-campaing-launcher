@@ -105,7 +105,7 @@ def test_incomplete_retry_does_not_clear_persisted_checkpoint(read_result):
     old = "2026-10-24T08:00:00+00:00"
     ci.put_result(ci.Snapshot(account="A", state="failed", stop="checkpoint", error="Synthetic checkpoint", finished_at_utc=old))
     queue = ar.RefreshQueue(reader=lambda account, trigger: read_result("exception", "adsets")[0], accounts=lambda: ["A"])
-    assert queue.state()["halt"] is None   # ACL-2668: чекпоинт одного аккаунта очередь не держит
+    assert queue.state()["halt"] is None        # ACL-2653: the checkpoint is a profile hold, not a halt
     queue.request("A", "retry", force=True)
     assert queue._drain_once() == 1
     assert queue.state()["halt"] is None

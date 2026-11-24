@@ -353,7 +353,7 @@ def test_country_has_no_manual_bulk_read_control(page, site):
 
 
 def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
-    monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+    monkeypatch.setenv(api.BACKEND_ENV, "rpa")
     with sync_playwright() as pw:
         browser = launch_chromium(pw)
         pg = browser.new_page(viewport={"width": 1280, "height": 600})
@@ -459,14 +459,30 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     shots = os.environ.get("ACL_SHOTS_DIR", "")
     page.add_script_tag(url="http://acl.test/static/acm_commands.js")
     page.wait_for_function("!!window.acmCommands")
-    # Persist a real terminal attempt before attention. A recent failure must
-    # stay failed until Retry; it cannot coexist with queued work for Fresh.
+    # Persist a real terminal attempt before attention.
     stamp = datetime.now(timezone.utc)
     failed_at = stamp.astimezone().strftime('%Y-%m-%d %H:%M:%S')
-    ci.put_result(ci.Snapshot(account='Fresh', state='failed', finished_at=failed_at,
-        finished_at_utc=stamp.isoformat(), error=RAW_ERROR.replace('Not sent: ', '')))
+
+    def failed_read(account, trigger):
+        snap = ci.Snapshot(account=account, state='failed', finished_at=failed_at,
+                           finished_at_utc=stamp.isoformat(), error=RAW_ERROR.replace('Not sent: ', ''))
+        ci.put_result(snap)
+        return snap
+
+    failed_read('Fresh', 'test')
     page.evaluate('() => window.aclAccountRefresh.load()')
     open_acc(page, "Fresh")
+    # ACL-2668 #26: a failed read has no one-hour wait, expanding reads it again at once.
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.running.Fresh === true")
+    assert [q for q in site.q.state()['queued'] if q['account'] == 'Fresh'] == [
+        {'account': 'Fresh', 'trigger': 'attention'}]
+    # The queue is paused (Multilogin unreachable above), so the expand waits; the person's
+    # Retry reads past the pause and fails again (the fixture worker is off: drained by hand).
+    site.q._reader = failed_read
+    page.evaluate("() => window.aclAccountRefresh.request('Fresh', 'retry')")
+    site.q._drain_once()
+    page.evaluate('() => window.aclAccountRefresh.load()')
+    page.evaluate("() => document.querySelector('.amap-campaigns')._hc.reload('Fresh')")
     page.wait_for_selector('tr[data-msg="acct:Fresh:read"]')
     assert not [q for q in site.q.state()['queued'] if q['account'] == 'Fresh']
     assert site.q.state()['running'] != 'Fresh'

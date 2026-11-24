@@ -97,7 +97,8 @@ def test_latest_failed_attempt_keeps_a_recent_success_from_hiding_retry(env, sta
                          "error": "The profile was opened by hand"}
     assert not ar.is_fresh("A", now=NOW)
     q = _queue(env)
-    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
+    # ACL-2668 #26: обычная неудача не ждёт часа — раскрытие читает сразу.
+    assert q.request("A", "attention") == {"queued": True, "reason": "queued"}
     assert env.snaps["A"] is cached and env.read == []
     assert q.request("A", "retry", force=True) == {"queued": True, "reason": "queued"}
     q._drain_once()
@@ -246,7 +247,8 @@ def test_classify_variants():
     assert ar.classify(_failed("A", "x", "mlx_token_expired")) == "global"
     assert ar.classify(_failed("A", "[WinError 10061] launcher.mlx.yt")) == "global"
     assert ar.classify(_failed("A", "x", "call_budget")) == "account"
-    assert ar.classify(_failed("A", "The A profile is on a Facebook checkpoint")) == "account"
+    # ACL-2653: a checkpoint holds only its own profile (a hold), never the machine.
+    assert ar.classify(_failed("A", "The A profile is on a Facebook checkpoint")) == "person"
     assert ar.classify(_failed("A", "Meta rate limit reached; the read was stopped.")) == "account"
     assert ar.classify(_failed("A", "no access to the ad account")) == "account"
     assert ar.classify(_failed("A", "logged out", "logged_out")) == "account"
@@ -312,7 +314,8 @@ def test_meta_stop_marks_only_its_account_and_is_not_fresh(env, kind):
     st = q.state()
     assert st["halt"] is None
     assert st["rows"]["A"]["state"] == "failed" and st["rows"]["B"]["state"] == "ok"
-    assert ar.classify(env.failures["A"]) == "account"
+    # ACL-2653: a checkpoint becomes its own profile's hold ("person"); the rest are account rows.
+    assert ar.classify(env.failures["A"]) == ("person" if kind == "checkpoint" else "account")
     env.snaps["A"] = env.failures["A"]
     assert not ar.is_fresh("A", now=NOW)
     env.snaps["A"] = ci.Snapshot(account="A", state="partial", finished_at_utc=_iso(NOW),
@@ -517,17 +520,26 @@ def test_legacy_saved_account_halt_in_memory_is_dropped(env):
     assert q.state()["halt"] is None and env.read == [("B", "attention")]
 
 
-def test_recently_failed_account_is_not_reread_by_automatic_triggers(env):
-    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 600), "stop": ""}
+def test_failed_read_is_retried_by_expand_and_the_next_window_without_an_hour_wait(env):
+    # ACL-2668 #26: обычная неудача (сеть, таймаут, замена вкладки) не блокирует чтение на час.
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": ""}
     q = _queue(env)
-    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
-    assert q.request("A", "schedule", window="morning") == {"queued": False, "reason": "recent_failure"}
-    assert q.state()["queued"] == []
-    # Явный Retry читает.
+    assert q.request("A", "attention") == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert env.read == [("A", "attention")]
+    assert q.request("A", "schedule", window="morning")["queued"] is True
     assert q.request("A", "retry", force=True)["queued"] is True
-    # Старая неудача (старше часа) не мешает.
-    env.attempts["B"] = {"state": "failed", "at_utc": _iso(NOW - ar.FRESH_S - 5), "stop": ""}
-    assert q.request("B", "attention")["queued"] is True
+
+
+def test_held_profile_still_skips_automatic_reads_after_a_failure(env, monkeypatch):
+    # Удержание профиля (ACL-2091) не меняется: автоматика его не читает, Retry — читает.
+    monkeypatch.setattr(ar, "_profile_held", lambda account: account == "A")
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": "checkpoint"}
+    q = _queue(env)
+    assert q.request("A", "attention") == {"queued": False, "reason": "profile_held"}
+    assert q.request("A", "schedule", window="morning") == {"queued": False, "reason": "profile_held"}
+    assert q.state()["queued"] == []
+    assert q.request("A", "retry", force=True)["queued"] is True
 
 
 def test_freshness_is_rechecked_when_the_request_is_taken(env):
@@ -543,12 +555,13 @@ def test_freshness_is_rechecked_when_the_request_is_taken(env):
     assert env.read == [("A", "retry")]
 
 
-def test_failure_recorded_while_queued_is_rechecked_when_taken(env):
+def test_failure_recorded_while_queued_does_not_drop_the_request(env):
+    # ACL-2668 #26: неудача другого процесса, пока заявка стояла, её не снимает.
     q = _queue(env)
     q.request("A", "attention")
     env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 5), "stop": ""}
     q._drain_once()
-    assert env.read == []
+    assert env.read == [("A", "attention")]
 
 
 def test_forced_request_for_the_running_account_joins_the_existing_read(env):
