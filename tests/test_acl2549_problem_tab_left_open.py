@@ -255,17 +255,33 @@ class ProblemPublisher(FakePublisher):
         return False            # warm path: the job did not start the profile
 
 
-def test_job_end_keeps_a_review_slot_and_explains_the_problem(jobs, monkeypatch):
+def test_warm_job_end_frees_its_slot_and_explains_the_problem(jobs, monkeypatch):
+    """Warm path (the job did not start the profile, nothing written): the slot is freed as before."""
     monkeypatch.setattr(publish_api, "ApiPublisher", ProblemPublisher)
     _, job = jobs("KLD_A", writes=0)
-    assert job["review_window"] is True and job["kept_kind"] == ps.KEPT_REVIEW
+    assert job["review_window"] is False and job["kept_kind"] == ps.KEPT_PROBLEM
     assert job["profile_problem"]["kind"] == "checkpoint"
     assert "security check" in job["profile_problem"]["reason"].lower()
     assert "Retry" in job["profile_problem"]["next"]
     assert job["profile_problem"]["reason"] in job["creative_notices"]
     assert pj.API_NO_WRITE_NOTICE not in job["creative_notices"]
+    assert pj._slots.snapshot()["running"] == []
+
+
+class StartedProblemPublisher(ProblemPublisher):
+    @property
+    def started_profile(self):
+        return True             # cold path: the job started the profile
+
+
+def test_cold_job_end_keeps_the_problem_window_without_a_slot(jobs, monkeypatch):
+    monkeypatch.setattr(publish_api, "ApiPublisher", StartedProblemPublisher)
+    _, job = jobs("KLD_A", writes=0)
+    assert job["review_window"] is True and job["kept_kind"] == ps.KEPT_PROBLEM
     assert [(r["profile"], r["kept_kind"]) for r in pj._slots.snapshot()["running"]] == [
-        (_key("KLD_A"), ps.KEPT_REVIEW)]
+        (_key("KLD_A"), ps.KEPT_PROBLEM)]
+    nxt = pj._slots.snapshot()["next"]
+    assert nxt.get("reason") != "review_windows" and nxt.get("kept_accounts") == []
 
 
 def test_job_end_after_an_auto_resume_that_closed_the_profile_has_no_kept_problem(jobs, monkeypatch):
@@ -284,18 +300,37 @@ def test_job_end_after_an_auto_resume_that_closed_the_profile_has_no_kept_proble
     assert "profile_problem" not in job
 
 
-# -- ProfileSlots.resolve_kept
+# -- ProfileSlots: a kept problem window takes no slot (ACL-2686)
 
-def test_resolve_kept_moves_review_to_convenience_by_profile_and_resets_the_idle_clock():
-    now = [100.0]
-    slots = ps.ProfileSlots(memory=lambda: ps.MemoryReading(64000, 60000), clock=lambda: now[0], tick_s=0.01,
-                            settings=lambda: ps.load_settings({}))
-    with slots._cond:
-        slots._running["j1"] = {"profile": "P1", "kept": True, "kept_kind": ps.KEPT_REVIEW, "label": "A", "kept_at": 1.0}
-        slots._running["j2"] = {"profile": "P2", "kept": True, "kept_kind": ps.KEPT_REVIEW, "label": "B", "kept_at": 1.0}
-        slots._running["j3"] = {"profile": "P1", "kept": False}
-    now[0] = 500.0
-    assert slots.resolve_kept("p1") == 1
-    assert slots._running["j1"]["kept_kind"] == ps.KEPT_CONVENIENCE and slots._running["j1"]["kept_at"] == 500.0
-    assert slots._running["j2"]["kept_kind"] == ps.KEPT_REVIEW
-    assert slots.resolve_kept("P1") == 0
+def _slots(ceiling=1):
+    import dataclasses
+    settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=ceiling)
+    return ps.ProfileSlots(memory=lambda: ps.MemoryReading(128000, 120000), clock=lambda: 1000.0,
+                           tick_s=0.01, settings=lambda: settings)
+
+
+def test_a_kept_problem_window_does_not_block_another_accounts_job():
+    slots = _slots(ceiling=1)
+    assert slots.acquire("j1", "P1") is not None
+    slots.keep("j1", "A", ps.KEPT_PROBLEM)
+    grant = slots.acquire("j2", "P2", once=True)
+    assert grant is not None and grant["first_hold"] is None
+    assert slots.working() is True
+    slots.release("j2")
+    assert slots.working() is False       # the problem window defers nothing
+
+
+def test_a_kept_review_window_still_holds_its_slot():
+    slots = _slots(ceiling=1)
+    assert slots.acquire("j1", "P1") is not None
+    slots.keep("j1", "A", ps.KEPT_REVIEW)
+    assert slots.acquire("j2", "P2", once=True) is None
+
+
+def test_a_retry_on_the_problem_profile_takes_the_window_and_is_not_held_as_review():
+    slots = _slots(ceiling=1)
+    assert slots.acquire("j1", "P1") is not None
+    slots.keep("j1", "A", ps.KEPT_PROBLEM)
+    grant = slots.acquire("j2", "P1", once=True)
+    assert grant is not None and grant["reused_kept"] == ps.KEPT_PROBLEM
+    assert [r["job_id"] for r in slots.snapshot()["running"]] == ["j2"]

@@ -141,6 +141,11 @@ DEFAULT_KEPT_IDLE_CLOSE_S = 0.0
 #: завершение, проблемы кабинета — ACL-2091) автоматически не закрывается никогда.
 KEPT_REVIEW = "review"
 KEPT_CONVENIENCE = "convenience"
+#: ACL-2549 + ACL-2686: окно, оставленное на проблеме аккаунта (checkpoint, разлогин, блок 368).
+#: Как «review», само не закрывается; но места не занимает и других не задерживает: проблема
+#: одного аккаунта видна только на его строке, очередь остальных идёт.
+KEPT_PROBLEM = "problem"
+KEPT_KINDS = (KEPT_REVIEW, KEPT_CONVENIENCE, KEPT_PROBLEM)
 #: Отказы, при которых простаивающее «удобное» окно можно закрыть ради нового.
 #: ACL-2668: в потолке «удобные» окна не считаются — закрывать их стоит только ради памяти.
 EVICT_REASONS = frozenset({"memory_low", "below_reserve"})
@@ -770,13 +775,19 @@ class ProfileSlots:
     def _is_convenience(r: dict[str, Any]) -> bool:
         return bool(r.get("kept")) and (r.get("kept_kind") or KEPT_REVIEW) == KEPT_CONVENIENCE
 
+    @staticmethod
+    def _takes_no_slot(r: dict[str, Any]) -> bool:
+        """ACL-2668/2686: «удобное» окно и (ACL-2549) окно с проблемой аккаунта потолок не занимают."""
+        return bool(r.get("kept")) and (r.get("kept_kind") or KEPT_REVIEW) in (KEPT_CONVENIENCE, KEPT_PROBLEM)
+
     def _count_running(self, profile: str = "") -> int:
         # ACL-2668: «удобное» окно (лёгкая вкладка после чистой публикации / Check plan)
         # место не занимает: потолок его не считает. Память оно занимает по-настоящему —
         # её видит замер свободной памяти, и при нехватке окно уступает сразу (`_evict_one`).
+        # ACL-2549: окно с проблемой аккаунта тоже не в счёт — других оно не задерживает.
         return len([1 for r in self._running.values()
                     if not (r.get("kept") and profile and r["profile"] == profile)
-                    and not self._is_convenience(r)])
+                    and not self._takes_no_slot(r)])
 
     def _kept_accounts(self, kind: str = KEPT_REVIEW) -> list[str]:
         return sorted({str(self._running[j].get("label") or "") for j in self._kept_of(kind)
@@ -803,30 +814,13 @@ class ProfileSlots:
             self._cond.notify_all()
         return len(gone)
 
-    def resolve_kept(self, profile: str) -> int:
-        """ACL-2549: the problem of a kept window is solved (a Retry read succeeded): `review` -> `convenience`.
-
-        The window then yields to idle eviction like a clean one instead of holding a place forever; `kept_at`
-        restarts so the idle timer counts from now. Only rows of this profile; the window is not closed and no
-        hold is cleared here. Returns how many rows changed."""
-        profile = str(profile or "").strip().lower()
-        changed = 0
-        with self._cond:
-            for r in self._running.values():
-                if (r.get("kept") and (r.get("kept_kind") or KEPT_REVIEW) == KEPT_REVIEW
-                        and str(r.get("profile") or "").strip().lower() == profile):
-                    r["kept_kind"] = KEPT_CONVENIENCE
-                    r["kept_at"] = self._clock()
-                    changed += 1
-            if changed:
-                self._cond.notify_all()
-        return changed
-
     def _reuse_kept(self, profile: str) -> str:
         """Новое задание на профиль берёт место оставленного там окна.
 
-        Возвращает вид взятого окна (`review`/`convenience`) или "" — окна не было.
+        Возвращает вид взятого окна (`review`/`problem`/`convenience`) или "" — окна не было.
         Окно «на проверку» остаётся таким и после повторного использования (ACL-2113).
+        ACL-2549: окно с проблемой — нет: новое задание (Retry) прошло чисто — проблема решена,
+        и окно становится обычным (по исходу этого задания).
         """
         kinds: list[str] = []
         for j in [j for j, r in self._running.items()
@@ -835,7 +829,9 @@ class ProfileSlots:
             del self._running[j]
         if not kinds:
             return ""
-        return KEPT_REVIEW if KEPT_REVIEW in kinds else KEPT_CONVENIENCE
+        if KEPT_REVIEW in kinds:
+            return KEPT_REVIEW
+        return KEPT_PROBLEM if KEPT_PROBLEM in kinds else KEPT_CONVENIENCE
 
     def _idle_candidate(self, for_profile: str, settings: SlotSettings) -> str | None:
         """Самое давно не тронутое простаивающее «удобное» окно (LRU), которое можно закрыть.
@@ -1206,7 +1202,7 @@ class ProfileSlots:
                 r = self._running[job_id]
                 r["kept"] = True
                 r["label"] = str(label or "")
-                r["kept_kind"] = kind if kind in (KEPT_REVIEW, KEPT_CONVENIENCE) else KEPT_REVIEW
+                r["kept_kind"] = kind if kind in KEPT_KINDS else KEPT_REVIEW
                 r["preemptible"] = bool(preemptible) and r["kept_kind"] == KEPT_CONVENIENCE
                 r["kept_at"] = self._clock()
             self._cond.notify_all()

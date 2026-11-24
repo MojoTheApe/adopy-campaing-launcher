@@ -31,7 +31,7 @@ from src.fb_ads_rpa.rpa_publisher import RpaPublisher, profile_key_for
 from src.fb_ads_rpa.operations import publish_lease
 from src.fb_ads_rpa.profile_lease import ProfileLeaseError
 from src.web.keep_awake import keep_display_awake
-from src.web.profile_slots import KEPT_CONVENIENCE, KEPT_REVIEW, ProfileSlots
+from src.web.profile_slots import KEPT_CONVENIENCE, KEPT_PROBLEM, KEPT_REVIEW, ProfileSlots
 from src.web import draft_status
 from src.fb_api import telemetry as _tm
 from src.analysis_agent.account_refresh_state import target_activity
@@ -929,7 +929,10 @@ def _run_job_inner(
                 left_open = (not bool(job.get("profile_closed"))
                              and job.get("review_window") is not False)
             if left_open and _job_ran_in_browser(job_id):
-                kind = (KEPT_CONVENIENCE if job.get("kept_kind") == KEPT_CONVENIENCE
+                # ACL-2549: окно с проблемой аккаунта места не занимает (ACL-2686) — и после
+                # окна на проверке тоже: проблема одного аккаунта не задерживает других.
+                kind = (KEPT_PROBLEM if job.get("kept_kind") == KEPT_PROBLEM
+                        else KEPT_CONVENIENCE if job.get("kept_kind") == KEPT_CONVENIENCE
                         and job.get("reused_kept") != KEPT_REVIEW else KEPT_REVIEW)
                 _slots.keep(job_id, account_label, kind)
             else:
@@ -1998,7 +2001,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             started = bool(publisher.started_profile)
         except Exception:
             started = True
-        still_open = outcome != "closed" and (started or outcome == "kept_problem")
+        still_open = outcome != "closed" and started
         # ACL-2113: окно, оставленное намеренно после чистой публикации, — «для удобства»
         # (уступает место простоем); всё остальное оставленное — на проверку.
         convenience = bool(clean and getattr(publisher, "stop", None) is None
@@ -2008,8 +2011,9 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
                 _jobs[job_id]["review_window"] = (not settled) or still_open
                 _jobs[job_id]["kept_kind"] = KEPT_CONVENIENCE if convenience else KEPT_REVIEW
                 if problem is not None:
-                    _jobs[job_id]["review_window"] = True
-                    _jobs[job_id]["kept_kind"] = KEPT_REVIEW
+                    # ACL-2549 + ACL-2686: окно с проблемой места не держит. Тёплый путь (профиль
+                    # поднял не этот job, ничего не записано) отпускает место, как и раньше.
+                    _jobs[job_id]["kept_kind"] = KEPT_PROBLEM
                     _jobs[job_id]["profile_problem"] = problem
         if problem is not None:
             _append_creative_notice(job_id, problem["reason"])
