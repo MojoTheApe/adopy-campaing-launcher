@@ -40,8 +40,7 @@ def owner_key() -> str:
     return (os.environ.get("ACL_HUB_OWNER_KEY") or "").strip()
 
 
-def hub_url() -> str:
-    return (os.environ.get("ACL_HUB_URL") or "").strip().rstrip("/")
+from src.web.user_accounts import hub_url  # noqa: E402  — общий адрес хаба из ACL-2899
 
 
 def enabled() -> bool:
