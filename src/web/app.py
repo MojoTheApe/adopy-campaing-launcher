@@ -4162,9 +4162,47 @@ async def api_user_assign_preview(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "results": results})
 
 
+def _user_assign_target(client, buyer: str, email_hint: str) -> "tuple[str, dict | None]":
+    """(почта юзера хаба, None) или ("", ответ для страницы), если почты нет / имя неоднозначно.
+
+    ACL-2920: байер берётся из «Logged as» страницы, отдельного выбора пользователя больше нет."""
+    from src.web import user_assign as _ua
+
+    try:
+        return _ua.find_user_email(client, buyer, email_hint), None
+    except _ua.NeedEmail:
+        return "", {"ok": False, "need_email": True, "buyer": buyer,
+                    "error": f"{buyer} has no hub user yet. Enter the buyer's email once."}
+    except _ua.HubError as exc:
+        return "", {"ok": False, "error": str(exc)}
+
+
+@app.get("/api/user-assign/accounts")
+async def api_user_assign_accounts(buyer: str = "") -> JSONResponse:
+    """Аккаунты выбранного в «Logged as» байера, как они назначены в хабе (активные и снятые)."""
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    buyer = " ".join(buyer.split())
+    if not buyer:
+        return JSONResponse({"ok": False, "error": "No buyer is selected."}, status_code=400)
+    client = _ua.HubClient()
+    email, problem = await _in_report_pool(_user_assign_target, client, buyer, "")
+    if problem is not None:
+        return JSONResponse({**problem, "accounts": []})
+    try:
+        rows = await _in_report_pool(client.assignments, email)
+    except _ua.HubError as exc:
+        return JSONResponse({"ok": False, "error": str(exc), "accounts": []})
+    return JSONResponse({"ok": True, "buyer": buyer, "user_email": email, "accounts": _ua.account_view(rows)})
+
+
 @app.post("/api/user-assign/send")
 async def api_user_assign_send(request: Request) -> JSONResponse:
-    """Заново разбирает строки на сервере и шлёт в хаб только `found` — браузеру строки не доверяем."""
+    """Заново разбирает строки на сервере и шлёт в хаб только `found` — браузеру строки не доверяем.
+
+    Кому: байер из «Logged as» (`buyer`). Почта нужна один раз, если юзера в хабе ещё нет (`user_email`)."""
     from src.web import user_assign as _ua
 
     if (denied := _user_assign_guard()) is not None:
@@ -4173,21 +4211,32 @@ async def api_user_assign_send(request: Request) -> JSONResponse:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
-    email = _ua.clean_email(data.get("user_email") or "")
-    if not email:
-        return JSONResponse({"ok": False, "error": "Pick a user or type a valid email."}, status_code=400)
+    buyer = " ".join(str(data.get("buyer") or "").split())
+    if not buyer:
+        return JSONResponse({"ok": False, "error": "No buyer is selected."}, status_code=400)
+    hint = str(data.get("user_email") or "")
+    if hint.strip() and not _ua.clean_email(hint):
+        return JSONResponse({"ok": False, "need_email": True, "buyer": buyer,
+                             "error": "That does not look like an email address."}, status_code=400)
+    client = _ua.HubClient()
+    email, problem = await _in_report_pool(_user_assign_target, client, buyer, hint)
+    if problem is not None:
+        return JSONResponse(problem)
     results = await _in_report_pool(_user_assign_resolve, str(data.get("text") or ""))
     rows = _ua.found_rows(results)
     if not rows:
         return JSONResponse({"ok": False, "error": "Nothing to assign: no line matched an account.",
                              "results": results})
     try:
-        await _in_report_pool(_ua.HubClient().assign, email, rows)
+        await _in_report_pool(client.assign, email, rows, buyer)
     except _ua.HubError as exc:
         return JSONResponse({"ok": False, "error": str(exc), "results": results})
+    if _ua.clean_email(hint):
+        _ua.remember_buyer(buyer, hint)
     for r in results:
         r["sent"] = r.get("state") == "found"
-    return JSONResponse({"ok": True, "assigned": [r["account_name"] for r in rows], "results": results})
+    return JSONResponse({"ok": True, "assigned": [r["account_name"] for r in rows], "results": results,
+                         "user_email": email})
 
 
 @app.post("/api/user-assign/remove")
@@ -4200,13 +4249,17 @@ async def api_user_assign_remove(request: Request) -> JSONResponse:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
-    email = _ua.clean_email(data.get("user_email") or "")
+    buyer = " ".join(str(data.get("buyer") or "").split())
     names = [str(n).strip() for n in (data.get("account_names") or []) if str(n).strip()]
-    if not email or not names:
-        return JSONResponse({"ok": False, "error": "A user and at least one account name are required."},
+    if not buyer or not names:
+        return JSONResponse({"ok": False, "error": "A buyer and at least one account name are required."},
                             status_code=400)
+    client = _ua.HubClient()
+    email, problem = await _in_report_pool(_user_assign_target, client, buyer, str(data.get("user_email") or ""))
+    if problem is not None:
+        return JSONResponse(problem)
     try:
-        await _in_report_pool(_ua.HubClient().remove, email, names)
+        await _in_report_pool(client.remove, email, names)
     except _ua.HubError as exc:
         return JSONResponse({"ok": False, "error": str(exc)})
     return JSONResponse({"ok": True, "removed": names})
