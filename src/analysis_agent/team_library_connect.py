@@ -16,8 +16,10 @@ GitHub: ни в логи, ни в телеметрию и Sentry, ни в тек
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+from pathlib import Path
 
 from config import paths
 from src.analysis_agent import team_library as tl
@@ -53,13 +55,68 @@ def _check_shape(token: str) -> str:
     return token
 
 
-def _local_snapshots() -> dict:
-    return {kind: seed.KINDS[kind][0]() for kind in _CONNECT_KINDS}
+#: ACL-2915: подключение по входу в Google переносит и шаблоны форм, как общий CLI.
+AUTO_CONNECT_KINDS = ("targets", "ad_texts", "form_templates")
+_REPO_SHAPE = re.compile(r"[A-Za-z0-9_.\-]{1,100}/[A-Za-z0-9_.\-]{1,100}")
+
+
+def _local_snapshots(kinds: tuple = _CONNECT_KINDS) -> dict:
+    return {kind: seed.KINDS[kind][0]() for kind in kinds}
 
 
 #: Снимок, не доехавший до библиотеки: повторное «Connect» берёт его, а не копию,
 #: которую открытие раздела уже подтянуло поверх местной.
 _pending: dict = {}
+
+#: ACL-2915 (ревью): то, что не доехало до библиотеки после подключения, живёт ещё и на диске.
+#: С токеном каждое открытие раздела подменяет местную копию общей, и без этого файла такие
+#: записи после перезапуска дешборда исчезли бы с экрана без единого повтора.
+_PENDING_FILE = "team_library_seed_pending.json"
+
+
+def _pending_path() -> Path:
+    return Path(paths.get_local_config_dir()) / _PENDING_FILE
+
+
+def _persist_pending() -> None:
+    """Записать `_pending` на диск (пусто — убрать файл). Ошибки диска не мешают подключению."""
+    try:
+        path = _pending_path()
+        if not _pending:
+            path.unlink(missing_ok=True)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        paths._atomic_write(path, json.dumps(_pending, ensure_ascii=False).encode("utf-8"))
+    except Exception:
+        pass
+
+
+def _load_pending_file() -> dict:
+    try:
+        data = json.loads(_pending_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if k in seed.KINDS and isinstance(v, dict)}
+
+
+def retry_pending() -> dict:
+    """ACL-2915: токен уже стоит, а часть местного не доехала до библиотеки — добавить недостающее ещё раз.
+
+    Вызывается на событии синхронизации (не по таймеру). Без файла и без записей в памяти ничего
+    не делает и в сеть не ходит. Возвращает, сколько добавлено по видам."""
+    if not _pending and not _pending_path().exists():
+        return {}
+    if not tl.configured():
+        return {}
+    for kind, snap in _load_pending_file().items():
+        _pending.setdefault(kind, snap)
+    if not _pending:
+        return {}
+    added, _error = _seed_counts(dict(_pending))
+    _persist_pending()
+    return added
 
 
 def _seed_counts(local: dict) -> tuple[dict, str]:
@@ -68,7 +125,7 @@ def _seed_counts(local: dict) -> tuple[dict, str]:
     (сколько добавлено по видам, текст первой ошибки). Вид, который не доехал,
     остаётся в `_pending` до следующей попытки."""
     out, error = {}, ""
-    for kind in _CONNECT_KINDS:
+    for kind in (*_CONNECT_KINDS, *(k for k in AUTO_CONNECT_KINDS if k not in _CONNECT_KINDS)):
         if kind not in local:
             continue
         try:
@@ -84,21 +141,35 @@ def _seed_counts(local: dict) -> tuple[dict, str]:
     return out, error
 
 
-def connect(token: str) -> dict:
-    """Проверить токен, сохранить на машине, добавить недостающее в библиотеку."""
+def connect(token: str, *, repo: str | None = None, kinds: tuple | None = None) -> dict:
+    """Проверить токен, сохранить на машине, добавить недостающее в библиотеку.
+
+    `repo` и `kinds` — для подключения по входу в Google (ACL-2915): репозиторий приходит
+    с хаба (сохраняется, только если он не тот, что уже действует на машине), а переносятся
+    ещё и шаблоны форм. Кнопка дешборда вызывает `connect(token)` как раньше."""
     token = _check_shape(token)
-    repo = current_repo()
+    old_repo_env = (os.environ.get("ACL_LIBRARY_REPO") or "").strip()
+    new_repo = ""
+    if repo is not None:
+        repo = (repo or "").strip()
+        if not _REPO_SHAPE.fullmatch(repo):
+            raise ConnectError("The library repository name is not valid.")
+        if repo != current_repo():
+            new_repo = repo
+    else:
+        repo = current_repo()
     # Снимок местных целей и текстов — до сохранения токена: с токеном любое открытие
     # раздела подтягивает общую копию поверх местной.
-    local = dict(_local_snapshots())
-    for kind, pending in _pending.items():
+    local = dict(_local_snapshots(tuple(kinds)) if kinds else _local_snapshots())
+    for kind, pending in list(_pending.items()):
+        if kind not in local:
+            continue  # вид, который этот вызов не переносит (кнопка не трогает формы), остаётся как есть
         key = seed.KINDS[kind][1]
-        current = local.get(kind, {})
+        current = local[kind]
         # Keep originals hidden by a remote refresh, alongside newly added local
         # records. A failed kind must not replace the entire current snapshot.
         local[kind] = {**current, **pending,
                        key: {**current.get(key, {}), **pending.get(key, {})}}
-    _pending.clear()
     _pending.update(local)
     branch = (os.environ.get("ACL_LIBRARY_BRANCH") or "").strip() or tl.DEFAULT_BRANCH
     try:
@@ -111,7 +182,7 @@ def connect(token: str) -> dict:
         raise ConnectError("Could not check the token. Try again in a moment.") from None
     old_token = os.environ.get(TOKEN_KEY, "")
     try:
-        paths.update_machine_env({TOKEN_KEY: token})
+        paths.update_machine_env({TOKEN_KEY: token, **({"ACL_LIBRARY_REPO": new_repo} if new_repo else {})})
     except Exception:
         raise ConnectError("The token is valid, but it could not be saved in this machine's settings.") from None
     tl.use_backend(None)
@@ -122,7 +193,7 @@ def connect(token: str) -> dict:
         # видны как права пользователя): не оставляем машину с токеном, которым
         # не сохранить ни одной правки.
         try:
-            paths.update_machine_env({TOKEN_KEY: old_token})
+            paths.update_machine_env({TOKEN_KEY: old_token, **({"ACL_LIBRARY_REPO": old_repo_env} if new_repo else {})})
         except Exception:
             pass
         if not old_token:
@@ -130,6 +201,7 @@ def connect(token: str) -> dict:
         tl.use_backend(None)
         raise ConnectError("The token was accepted for reading, but saving to the team library failed: "
                            + error + " Nothing was saved on this computer.")
+    _persist_pending()  # недоехавшее переживёт перезапуск; следующая синхронизация повторит
     return {"ok": True, "repo": repo, "seeded": not error, "seed_error": error, "added": added}
 
 
