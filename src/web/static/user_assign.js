@@ -1,13 +1,15 @@
-/* ACL-2900 / ACL-2920: назначение аккаунтов байеру, выбранному в «Logged as». Браузер говорит только
-   с /api/user-assign/*, ключ владельца хаба сюда не попадает. Разметка — _user_assign.html (может
+/* ACL-2900 / ACL-2920 / ACL-2924: назначение аккаунтов байеру, выбранному в «Logged as». Браузер говорит
+   только с /api/user-assign/*, ключ владельца хаба сюда не попадает. Разметка — _user_assign.html (может
    перерисоваться вместе с картой аккаунтов), поэтому обработчики делегированы на document.
-   Смена «Logged as» перезагружает страницу, так что байер читается из #buyer-select в момент действия. */
+   Смена «Logged as» перезагружает страницу, так что байер читается из #buyer-select в момент действия.
+   Почта байера на хабе показана в поле #ua-email и правится на месте. */
 (function () {
   'use strict';
   var STATES = {
     found: 'Found', not_found: 'Not found', ambiguous: 'Several match',
     duplicate: 'Duplicate line', clash: 'Ad account clash'
   };
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -23,22 +25,30 @@
     var sel = $('buyer-select');
     return ((sel && sel.value) || '').trim();
   }
-  function typedEmail() { return (($('ua-email') || {}).value || '').trim(); }
+  /* Почта уходит на сервер только если владелец сам её набрал: иначе юзера находит сервер (по имени или по памяти машины). */
+  function typedEmail() {
+    var el = $('ua-email');
+    return el && el.dataset.dirty === '1' ? (el.value || '').trim() : '';
+  }
+  function setEmail(value) {
+    var el = $('ua-email'); if (!el) return;
+    el.value = value || ''; el.dataset.dirty = '';
+  }
   async function post(url, body) {
     var r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin', body: JSON.stringify(body) });
     var d = null; try { d = await r.json(); } catch (e) {}
     return d || { ok: false, error: 'Unexpected answer (HTTP ' + r.status + ').' };
   }
-  function needEmail(on) {
-    var el = $('ua-email'); if (!el) return;
-    el.hidden = !on;
-    if (on) el.focus();
-  }
+  function askEmail() { var el = $('ua-email'); if (el) el.focus(); }
 
-  function renderList(accounts) {
+  function renderList(accounts, newUser) {
     var box = $('ua-list'); if (!box) return;
-    if (!accounts || !accounts.length) { box.innerHTML = '<div class="amap-note">No accounts assigned yet.</div>'; return; }
+    if (!accounts || !accounts.length) {
+      box.innerHTML = '<div class="amap-note">No accounts assigned yet.'
+        + (newUser ? ' The hub user is created on the first Assign.' : '') + '</div>';
+      return;
+    }
     box.innerHTML = '<div class="amap-note">Assigned on the hub (' + accounts.filter(function (a) { return !a.removed; }).length
       + ' active)</div>' + accounts.map(function (a) {
         if (a.removed) {
@@ -49,19 +59,33 @@
       }).join('');
   }
 
+  /* Не трогает строку результата (#ua-msg), кроме случаев, когда загрузить список не вышло: после Assign и Remove
+     «Assigned N…» / «Removed …» остаются на экране, пока список перечитывается. */
   async function loadAccounts() {
-    var who = buyer(), label = $('ua-who'), note = $('ua-hubuser');
+    var who = buyer(), label = $('ua-who');
     if (label) label.textContent = who || 'the selected buyer';
-    if (!who) { renderList([]); return; }
+    if (!who) { setEmail(''); renderList([]); return; }
     try {
       var r = await fetch('/api/user-assign/accounts?buyer=' + encodeURIComponent(who), { credentials: 'same-origin' });
       var d = await r.json();
-      if (d.need_email) { needEmail(true); if (note) note.textContent = ''; renderList([]); msg(d.error || '', false); return; }
+      if (d.need_email) { setEmail(''); renderList([]); msg(d.error || '', false); askEmail(); return; }
       if (!d.ok) { msg(d.error || 'Could not load the hub accounts.', true); renderList([]); return; }
-      needEmail(false); msg('');
-      if (note) note.textContent = d.user_email || '';
-      renderList(d.accounts);
+      setEmail(d.user_email);
+      renderList(d.accounts, d.new_user);
     } catch (e) { msg('Could not load the hub accounts: ' + (e && e.message || e), true); }
+  }
+
+  /* Новая почта заменяет запомненную для этого байера; список перечитывается уже по ней. */
+  async function saveEmail() {
+    var el = $('ua-email'), who = buyer(); if (!el || !who) return;
+    var value = (el.value || '').trim();
+    if (el.dataset.dirty !== '1') return;
+    if (!EMAIL_RE.test(value)) { msg('Enter a valid email address.', true); return; }
+    var d = await post('/api/user-assign/buyer-email', { buyer: who, user_email: value });
+    if (!d.ok) { msg(d.error || 'Could not save the email.', true); return; }
+    el.dataset.dirty = '';
+    msg('Hub user for ' + who + ': ' + d.user_email + '.');
+    loadAccounts();
   }
 
   function render(results) {
@@ -79,8 +103,18 @@
   }
 
   document.addEventListener('toggle', function (e) {
-    if (e.target && e.target.id === 'ua-root' && e.target.open) loadAccounts();
+    if (e.target && e.target.id === 'ua-root' && e.target.open) { msg(''); loadAccounts(); }
   }, true);
+
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'ua-email') e.target.dataset.dirty = '1';
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'ua-email') saveEmail();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target && e.target.id === 'ua-email') { e.preventDefault(); saveEmail(); }
+  });
 
   document.addEventListener('click', async function (e) {
     var t = e.target;
@@ -99,9 +133,8 @@
       btn.disabled = true; msg('Sending…');
       try {
         var s = await post('/api/user-assign/send', { buyer: who, user_email: typedEmail(), text: text });
-        if (s.need_email) { needEmail(true); msg(s.error || 'Enter the buyer\'s email.', true); return; }
+        if (s.need_email) { askEmail(); msg(s.error || 'Enter the buyer\'s email.', true); return; }
         if (!s.ok) { if (s.results) render(s.results); msg(s.error || 'Could not assign.', true); return; }
-        needEmail(false);
         render(s.results);
         msg('Assigned ' + (s.assigned || []).length + ' to ' + who + '.');
         loadAccounts();
@@ -111,7 +144,7 @@
       if (!who) { msg('Pick a buyer in "Logged as" first.', true); return; }
       btn.disabled = true;
       var rm = await post('/api/user-assign/remove', { buyer: who, user_email: typedEmail(), account_names: [name] });
-      if (rm.need_email) { btn.disabled = false; needEmail(true); msg(rm.error || 'Enter the buyer\'s email.', true); return; }
+      if (rm.need_email) { btn.disabled = false; askEmail(); msg(rm.error || 'Enter the buyer\'s email.', true); return; }
       if (!rm.ok) { btn.disabled = false; msg(rm.error || 'Could not remove.', true); return; }
       msg('Removed ' + name + ' from ' + who + '.');
       loadAccounts();
