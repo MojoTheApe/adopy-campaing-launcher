@@ -368,6 +368,39 @@ def forget_candidates() -> None:
 _OK_STATES = ("exact", "confirmed")
 
 
+# ACL-2925: автоматически берётся только кандидат, равный термину после мелкой нормализации.
+# Оценки сходства (SequenceMatcher) тут не работают: «Hiking»/«Biking», «Coffee»/«Toffee».
+_CORP_WORDS = ("l.p.", "lp", "inc", "inc.", "llc", "ltd", "co.", "corp", "corporation")
+_DOMAIN_SUFFIXES = (".com", ".net", ".org")
+#: Символы, которые несут смысл (C++, C#, AT&T, .NET), не вычёркиваются; остальная пунктуация и пробелы - да.
+_KEEP_CHARS = "+#&.@"
+
+
+def match_keys(text: str) -> set[str]:
+    """Формы имени для сравнения «равно после нормализации»; пустое множество - нечего сравнивать."""
+    n = norm(text)
+    if not n:
+        return set()
+    changed = True
+    while changed:                          # корпоративный/доменный хвост из короткого фиксированного списка
+        changed = False
+        for suf in _DOMAIN_SUFFIXES:
+            if n.endswith(suf) and len(n) > len(suf):
+                n, changed = n[: -len(suf)].strip(), True
+        words = n.split(" ")
+        if len(words) > 1 and words[-1] in _CORP_WORDS:
+            n, changed = " ".join(words[:-1]), True
+    key = "".join(ch for ch in n if ch.isalnum() or ch in _KEEP_CHARS)
+    if not key:
+        return {n}
+    out = {key}
+    if key.endswith("es") and len(key) > 4:      # множественное число последнего слова
+        out.add(key[:-2])
+    if key.endswith("s") and len(key) > 3:
+        out.add(key[:-1])
+    return out
+
+
 class TermResolver:
     """Ищет термины библиотеки в Meta. Кэш на задание; только чтения."""
 
@@ -767,29 +800,27 @@ class TermResolver:
 
     @staticmethod
     def _unambiguous(res: dict) -> tuple[dict | None, str]:
-        """Кандидат, которого можно взять без человека, либо (None, причина-неоднозначности).
+        """Кандидат, которого можно взять без человека, либо (None, текст для заметки).
 
-        Берём только единственного лидера: сходство по самим буквам >= STRONG_SCORE (оценка «по словам»
-        0.8 для подмножества/надмножества слов сюда не годится: «Hot Yoga» для «yoga», «The Wall» для
-        «The Wall Street Journal»), без ничьей по оценке и без второго кандидата с тем же именем
-        без «(категории)» («Apple (company)» / «Apple (fruit)»). Поведения - чужой вид, не берём.
+        Берём только кандидата, равного термину после нормализации (`match_keys`), и только одного
+        (разные id - неоднозначно). Поведения не берём. Сходство по буквам не решает ничего.
         """
-        best = res.get("suggested")
-        if not best or best["type"] == "behaviors":
-            return None, ""
-        if res.get("split"):
-            return best, ""
-        term = res["term"]
-        others = [c for c in res.get("candidates") or [] if (c["type"], c["id"]) != (best["type"], best["id"])]
-        tie = [c for c in others if c.get("score") == best.get("score")
-               or base_name(c["name"]) == base_name(best["name"])]
-        if tie:
-            names = ", ".join(c["name"] for c in [best] + tie)
-            return None, f"several possible matches ({names})"
-        letters = difflib.SequenceMatcher(None, norm(term), norm(best["name"])).ratio()
-        if letters < STRONG_SCORE and norm(term) != base_name(best["name"]):
-            return None, ""
-        return best, ""
+        if res.get("split") and res.get("suggested"):
+            return res["suggested"], ""
+        term_keys = match_keys(res["term"])
+        cands = [c for c in res.get("candidates") or []]
+        passing: dict[tuple, dict] = {}
+        for c in cands:
+            if c["type"] != "behaviors" and term_keys & match_keys(c["name"]):
+                passing.setdefault((c["type"], c["id"]), c)
+        if len(passing) == 1:
+            return next(iter(passing.values())), ""
+        if len(passing) > 1:
+            return None, "several possible matches (" + ", ".join(c["name"] for c in list(passing.values())[:3]) + ")"
+        if cands:
+            return None, ("Meta has no match on this account (Meta offered: "
+                          + ", ".join(f"{c['name']} [{c['type']}]" for c in cands[:3]) + ")")
+        return None, ""
 
     def _remember(self, term: str, cand: dict) -> None:
         """Запомнить как кнопка Confirm; сбой записи задание не роняет (пик всё равно берём)."""
@@ -815,20 +846,19 @@ class TermResolver:
         chosen: list[tuple[str, dict]] = []     # (термин, кандидат) к запоминанию
         bad = res.get("bad_parts")
         if bad:
-            if all(b["state"] == "pending" for b in bad):
-                got: list[dict] | None = []
-                for sub in res["parts"]:
-                    if sub["state"] in _OK_STATES:
-                        got += sub["picks"]
-                        continue
-                    cand, why = self._unambiguous(sub) if sub["state"] == "pending" else (None, "")
-                    if cand is None:
-                        got = None
-                        break
-                    chosen.append((sub["term"], cand))
-                    got += picks_of(cand)
-                picks = got
-        elif res["state"] == "pending":
+            got: list[dict] | None = []
+            for sub in res["parts"]:
+                if sub["state"] in _OK_STATES:
+                    got += sub["picks"]
+                    continue
+                cand, why = self._unambiguous(sub)
+                if cand is None:
+                    got = None
+                    break
+                chosen.append((sub["term"], cand))
+                got += picks_of(cand)
+            picks = got
+        elif res["state"] in ("pending", "unresolved"):
             cand, why = self._unambiguous(res)
             if cand is not None:
                 chosen.append((term, cand))
