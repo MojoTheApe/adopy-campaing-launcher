@@ -90,15 +90,12 @@ def test_a_refused_lookup_is_not_retried_inside_the_job(tmp_path):
     assert "adworkemployer" in c.types()
 
 
-def test_a_user_typed_term_that_only_a_refused_lookup_could_match_blocks_with_a_clear_reason(tmp_path):
+def test_a_user_typed_term_that_only_a_refused_lookup_could_match_is_removed_and_the_lookup_named(tmp_path):
+    # ACL-2925: the refused lookup no longer blocks; the term leaves the request, the refusal stays a warning
     c = Refusing(refuse=("adTargetingCategory",), behaviors=[{"id": "9", "name": "Frequent Travelers"}])
     resolver = cr.TargetingResolver(c, _store(tmp_path))
-    with pytest.raises(cr.TargetingUnresolved) as ei:
-        resolver.interests([["Frequent Travelers"]])
-    item = ei.value.items[0]
-    assert item["state"] == "unresolved" and item["term"] == "Frequent Travelers"
-    assert "behaviors lookup" in item["reason"] and "could not be checked there" in item["reason"]
-    assert "behaviors lookup" in str(ei.value), "the user sees which lookup Meta refused"
+    assert resolver.interests([["Frequent Travelers"]]) == []
+    assert resolver.targeting_notes()[0] == "Removed 'Frequent Travelers': Meta has no match on this account"
     assert resolver.targeting_warnings()[0].startswith("Meta refused the behaviors lookup (adTargetingCategory)")
 
 
@@ -205,11 +202,15 @@ def test_check_plan_passes_with_optional_lookups_refused_and_lists_them_as_warni
     assert got["interests_confirmed"]["status"] == "ok"
 
 
-def test_check_plan_blocks_a_typed_term_only_a_refused_lookup_could_match(tmp_path):
+def test_check_plan_removes_a_typed_term_only_a_refused_lookup_could_match(tmp_path):
+    # ACL-2925: a refused lookup no longer blocks; the term leaves the request with an info line
     meta = RefusingMeta(refuse=("adTargetingCategory", "adinterestvalid"))
     out, got = _plan_check(meta, tmp_path, "Frequent Travelers")
-    assert out.stop_kind == "plan" and "behaviors lookup" in out.error
-    assert got["interests_resolve"]["status"] == "error" and pf.blocks(out.audit)
+    assert out.error == "" and not pf.blocks(out.audit)
+    assert got["interests_resolve"]["status"] == "warning"
+    assert "Removed 'Frequent Travelers': Meta has no match on this account" in got["interests_resolve"]["detail"]
+    assert "No detailed targeting left on this ad set" in got["interests_resolve"]["detail"]
+    assert "Removed 'Frequent Travelers': Meta has no match on this account" in out.warnings
     assert any("(adTargetingCategory)" in w for w in out.warnings), "the refused lookup is named as a warning too"
 
 
