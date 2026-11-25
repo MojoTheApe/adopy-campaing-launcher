@@ -368,6 +368,35 @@ def forget_candidates() -> None:
 _OK_STATES = ("exact", "confirmed")
 
 
+# ACL-2925: автоматически берётся только кандидат, равный термину после мелкой нормализации.
+# Оценки сходства (SequenceMatcher) тут не работают: «Hiking»/«Biking», «Coffee»/«Toffee».
+_CORP_WORDS = ("l.p.", "lp", "inc", "inc.", "llc", "ltd", "co.", "corp", "corporation")
+_DOMAIN_SUFFIXES = (".com", ".net", ".org")
+#: Символы, которые несут смысл (C++, C#, AT&T, .NET), не вычёркиваются; остальная пунктуация и пробелы - да.
+_KEEP_CHARS = "+#&.@"
+
+
+def match_key(text: str, *, candidate: bool = False) -> str:
+    """Форма имени для сравнения «равно после нормализации»; пусто - сравнивать нечего.
+
+    Корпоративный/доменный хвост снимается ТОЛЬКО у кандидата (`candidate=True`), у термина - никогда:
+    «The Co.» не должно совпасть с «The». Множественное число не трогаем вовсе.
+    """
+    n = norm(text)
+    if not n:
+        return ""
+    changed = candidate
+    while changed:                          # короткий фиксированный список хвостов
+        changed = False
+        for suf in _DOMAIN_SUFFIXES:
+            if n.endswith(suf) and len(n) > len(suf):
+                n, changed = n[: -len(suf)].strip(), True
+        words = n.split(" ")
+        if len(words) > 1 and words[-1] in _CORP_WORDS:
+            n, changed = " ".join(words[:-1]), True
+    return "".join(ch for ch in n if ch.isalnum() or ch in _KEEP_CHARS) or n
+
+
 class TermResolver:
     """Ищет термины библиотеки в Meta. Кэш на задание; только чтения."""
 
@@ -415,6 +444,8 @@ class TermResolver:
         self._ids_unverified = False
         #: Interest ids Meta rejected as `Invalid id` (their cache entries are dropped).
         self._bad_ids: set[str] = set()
+        #: ACL-2925: info lines of the automatic decisions ("Used 'X' for 'Y'", "Removed 'Y': ..."), no repeats.
+        self.notes: list[str] = []
 
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
     def _lookup(self, search_type: str, params: dict, pages: int, *, path: str = "/search") -> list[dict]:
@@ -758,11 +789,93 @@ class TermResolver:
             return {**res, "state": "pending", "suggested": best}
         return res
 
+    # -- ACL-2925: система сама решает близкие совпадения и ненайденные термины
+    def _note(self, line: str) -> None:
+        if line not in self.notes:
+            self.notes.append(line)
+
+    @staticmethod
+    def _unambiguous(res: dict) -> tuple[dict | None, str]:
+        """Кандидат, которого можно взять без человека, либо (None, текст для заметки).
+
+        Берём только кандидата, равного термину после нормализации (`match_key`), и только одного
+        (разные id - неоднозначно). Поведения не берём. Сходство по буквам не решает ничего.
+        """
+        if res.get("split") and res.get("suggested"):
+            return res["suggested"], ""
+        term_key = match_key(res["term"])
+        cands = [c for c in res.get("candidates") or []]
+        passing: dict[tuple, dict] = {}
+        for c in cands:
+            if c["type"] != "behaviors" and term_key and term_key == match_key(c["name"], candidate=True):
+                passing.setdefault((c["type"], c["id"]), c)
+        if len(passing) == 1:
+            return next(iter(passing.values())), ""
+        if len(passing) > 1:
+            return None, "several possible matches (" + ", ".join(c["name"] for c in list(passing.values())[:3]) + ")"
+        if cands:
+            return None, ("Meta has no match on this account (Meta offered: "
+                          + ", ".join(f"{c['name']} [{c['type']}]" for c in cands[:3]) + ")")
+        return None, ""
+
+    def _remember(self, term: str, cand: dict) -> None:
+        """Запомнить как кнопка Confirm; сбой записи задание не роняет (пик всё равно берём)."""
+        try:
+            self.store.put(term, id=cand["id"], type=cand["type"], name=cand["name"], picks=cand.get("picks"))
+        except (OSError, ValueError):
+            pass
+
+    def settle(self, res: dict) -> list[dict]:
+        """Итог по термину без участия человека: пики для запроса или [] (термин снят только из запроса).
+
+        exact/confirmed - как есть; pending с однозначным кандидатом - берём и запоминаем в ConfirmedStore;
+        иначе (нет кандидатов, неоднозначно, чужой вид, отказ Meta) термин убирается из запроса, ничего не
+        запоминается; библиотека и черновик целы. Части «A or B» запоминаются только если принято всё целиком.
+        """
+        if res["state"] in _OK_STATES:
+            return res["picks"]
+        if "settled" in res:
+            return res["settled"]
+        term = res["term"]
+        picks: list[dict] | None = None
+        why = ""
+        chosen: list[tuple[str, dict]] = []     # (термин, кандидат) к запоминанию
+        bad = res.get("bad_parts")
+        if bad:
+            got: list[dict] | None = []
+            for sub in res["parts"]:
+                if sub["state"] in _OK_STATES:
+                    got += sub["picks"]
+                    continue
+                cand, why = self._unambiguous(sub)
+                if cand is None:
+                    got = None
+                    break
+                chosen.append((sub["term"], cand))
+                got += picks_of(cand)
+            picks = got
+        elif res["state"] in ("pending", "unresolved"):
+            cand, why = self._unambiguous(res)
+            if cand is not None:
+                chosen.append((term, cand))
+                picks = picks_of(cand)
+        if picks is None:
+            self._note(f"Removed '{term}': " + (why or "Meta has no match on this account"))
+            picks = []
+        else:
+            for t, cand in chosen:
+                self._remember(t, cand)
+                self._note(f"Used '{cand['name']}' for '{t}'")
+        res["settled"] = picks
+        return picks
+
     # -- отчёт для Check plan
     def report(self) -> list[dict]:
         """Все термины задания: как найдены, кандидаты, что ждёт подтверждения."""
         out = []
         for r in self._results.values():
+            if "settled" in r:      # ACL-2925: решено системой, человеку подтверждать нечего
+                continue
             item = {k: r[k] for k in ("term", "state", "picks", "candidates", "reason", "suggested", "split")
                     if k in r}
             if r.get("bad_parts"):
