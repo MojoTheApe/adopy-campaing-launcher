@@ -742,7 +742,10 @@ def test_every_ad_sets_unresolved_targeting_is_reported_in_one_go(tmp_path, monk
     d.ad_sets[0].targeting_label = "Zzzz One"
     d.ad_sets[1].targeting_label = "Qqqq Two"
     out = _publisher_for(NoMatch(), dry_run=True).publish_draft(d)
-    assert "Zzzz One" in out["error"] and "Qqqq Two" in out["error"], out["error"]
+    # ACL-2925: unknown terms no longer stop the publish; both are removed and named in the result
+    assert not out["error"], out["error"]
+    assert "Removed 'Zzzz One': Meta has no match on this account" in out["warnings"]
+    assert "Removed 'Qqqq Two': Meta has no match on this account" in out["warnings"]
 
 
 def test_a_pixel_of_an_ad_set_is_checked_even_when_the_account_lists_no_pixels(tmp_path):

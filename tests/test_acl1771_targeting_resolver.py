@@ -185,12 +185,14 @@ def test_split_of_exact_parts_is_a_candidate_needing_one_time_confirm(tmp_path):
                                                               ("interests", "Plus500")}
 
 
-def test_split_blocks_the_spec_until_confirmed_then_reuses_the_cache(tmp_path):
+def test_split_is_used_by_itself_remembered_and_reused_from_the_cache(tmp_path):
+    # ACL-2925: the split no longer waits for a Confirm press; it is used, noted and remembered.
     store = _store(tmp_path)
-    with pytest.raises(cr.TargetingUnresolved, match=r"picked 'Alpari Group \+ Plus500' \[split\] for 'Alpari Group or Plus500'\?"):
-        cr.TargetingResolver(_alpari(), store).interests([["Alpari Group or Plus500"]])
-    cand = _one(_resolver(_alpari(), tmp_path), "Alpari Group or Plus500")["suggested"]
-    store.put("Alpari Group or Plus500", id=cand["id"], type=cand["type"], name=cand["name"], picks=cand["picks"])
+    first = cr.TargetingResolver(_alpari(), store)
+    assert first.interests([["Alpari Group or Plus500"]]) == [
+        {"work_employers": [{"id": "31", "name": "Alpari Group"}], "interests": [{"id": "32", "name": "Plus500"}]}]
+    assert first.targeting_notes() == ["Used 'Alpari Group + Plus500' for 'Alpari Group or Plus500'"]
+    assert store.get("Alpari Group or Plus500")["type"] == tr.SPLIT
     later = FakeSearch(valid={"plus500": ("Plus500", "32")})
     spec = cr.TargetingResolver(later, store).interests([["alpari group OR plus500"]])
     assert spec == [{"work_employers": [{"id": "31", "name": "Alpari Group"}],
@@ -198,11 +200,21 @@ def test_split_blocks_the_spec_until_confirmed_then_reuses_the_cache(tmp_path):
     assert later.types() == ["adinterestvalid"], "один пакет перепроверки, поисков нет"
 
 
-def test_one_bad_part_of_a_split_is_reported_alone(tmp_path):
-    c = FakeSearch(valid={"plus500": ("Plus500", "32")}, interests={"Alpari Group": [{"id": "5", "name": "Alpari Grp Ltd"}]})
-    with pytest.raises(cr.TargetingUnresolved) as ei:
-        cr.TargetingResolver(c, _store(tmp_path)).interests([["Alpari Group or Plus500"]])
-    assert [i["term"] for i in ei.value.items] == ["Alpari Group"]
+def test_a_split_with_a_part_that_has_no_match_is_removed_whole(tmp_path):
+    c = FakeSearch(valid={"plus500": ("Plus500", "32")})
+    r = cr.TargetingResolver(c, _store(tmp_path))
+    assert r.interests([["Alpari Group or Plus500"]]) == []
+    assert "Removed 'Alpari Group or Plus500': Meta has no match on this account" in r.targeting_notes()
+
+
+def test_a_split_whose_part_is_a_near_match_uses_the_near_match(tmp_path):
+    c = FakeSearch(valid={"plus500": ("Plus500", "32")}, interests={"Alpari Group": [{"id": "5", "name": "Alpari Group Ltd"}]})
+    store = _store(tmp_path)
+    r = cr.TargetingResolver(c, store)
+    spec = r.interests([["Alpari Group or Plus500"]])
+    assert spec == [{"interests": [{"id": "5", "name": "Alpari Group Ltd"}, {"id": "32", "name": "Plus500"}]}]
+    assert "Used 'Alpari Group Ltd' for 'Alpari Group'" in r.targeting_notes()
+    assert store.get("Alpari Group")["id"] == "5"
 
 
 # ───────────────────────────── никакой молчаливой подмены ─────────────────────────────
@@ -216,15 +228,66 @@ def test_a_near_match_is_never_auto_picked(tmp_path):
     assert {x["name"] for x in res["candidates"]} == {"Forex Trading Tips", "Forex Trader"}
 
 
-def test_a_near_match_blocks_the_flexible_spec_with_picked_x_for_y(tmp_path):
-    with pytest.raises(cr.TargetingUnresolved) as ei:
-        cr.TargetingResolver(FakeSearch(interests=NEAR), _store(tmp_path)).interests([["forex trading"]])
-    assert "picked 'Forex Trad" in str(ei.value) and "for 'forex trading'?" in str(ei.value)
+def test_a_near_match_is_used_by_itself_and_remembered_like_a_confirm(tmp_path):
+    store = _store(tmp_path)
+    r = cr.TargetingResolver(FakeSearch(interests=NEAR), store)
+    spec = r.interests([["forex trading"]])
+    assert spec == [{"interests": [{"id": "6", "name": "Forex Trading Tips"}]}]
+    assert r.targeting_notes() == ["Used 'Forex Trading Tips' for 'forex trading'"]
+    row = store.get("forex trading")
+    assert (row["id"], row["type"], row["name"]) == ("6", "interests", "Forex Trading Tips")
+    # the same store row a Confirm press writes: a later job resolves it as confirmed
+    again = tr.TermResolver(FakeSearch(valid={"x": ("Forex Trading Tips", "6")}), store)
+    again.prefetch(["forex trading"])
+    assert again.resolve("forex trading")["state"] == "confirmed"
 
 
-def test_nothing_close_is_unresolved_and_named(tmp_path):
-    with pytest.raises(cr.TargetingUnresolved, match="Detailed targeting not found by Meta: Zzzz; no candidates"):
-        cr.TargetingResolver(FakeSearch(), _store(tmp_path)).interests([["Zzzz"]])
+def test_nothing_close_is_removed_from_the_request_and_named(tmp_path):
+    r = cr.TargetingResolver(FakeSearch(), _store(tmp_path))
+    assert r.interests([["Zzzz"]]) == []
+    assert r.targeting_notes() == ["Removed 'Zzzz': Meta has no match on this account",
+                                   "No detailed targeting left on this ad set"]
+
+
+def test_only_the_missing_term_is_dropped_from_a_group_and_other_groups_stay(tmp_path):
+    c = FakeSearch(valid={"plus500": ("Plus500", "31")})
+    r = cr.TargetingResolver(c, _store(tmp_path))
+    spec = r.interests([["Plus500", "Zzzz"], ["Zzzz"]])
+    assert spec == [{"interests": [{"id": "31", "name": "Plus500"}]}]
+    assert r.targeting_notes() == ["Removed 'Zzzz': Meta has no match on this account"]
+
+
+def test_a_candidate_of_another_kind_is_never_picked_automatically(tmp_path):
+    # a behavior that only resembles the term: removed, never swapped in
+    c = FakeSearch(behaviors=[{"id": "9", "name": "Portfolio managers"}])
+    store = _store(tmp_path)
+    r = cr.TargetingResolver(c, store)
+    assert _one(tr.TermResolver(c, store), "Portfolio manager")["state"] == "pending", "setup: a strong near candidate"
+    assert r.interests([["Portfolio manager"]]) == []
+    assert r.targeting_notes()[0] == "Removed 'Portfolio manager': Meta has no match on this account"
+    assert store.get("Portfolio manager") is None
+
+
+def test_publish_targeting_has_no_flexible_spec_when_every_term_is_removed(tmp_path):
+    # the publish request is built by targeting_for (Check plan and Publish share it): other settings stay
+    d = _draft(tmp_path, ads=1)
+    d.ad_sets[0].targeting_label = "Zzzz"
+    plan = cr.plan_from_draft(d)
+    meta = TargetMeta()
+    client = g.GraphClient(meta, allow_writes=False, sleep=lambda s: None, min_interval_s=0.0, max_calls=80)
+    resolver = cr.TargetingResolver(client, _store(tmp_path))
+    t = cr.targeting_for(plan, plan.ad_sets[0], resolver)
+    assert "flexible_spec" not in t and t["geo_locations"]["countries"] and t["age_min"] == plan.ad_sets[0].age_min
+    assert any(n.startswith("No detailed targeting left on this ad set") for n in resolver.targeting_notes())
+    assert d.ad_sets[0].targeting_label == "Zzzz", "the draft keeps the term"
+
+
+def test_the_library_term_is_not_touched_by_the_removal(tmp_path):
+    groups = [["Zzzz"], ["Yyyy"]]
+    r = cr.TargetingResolver(FakeSearch(), _store(tmp_path))
+    r.interests(groups)
+    assert groups == [["Zzzz"], ["Yyyy"]], "the caller's draft terms are not edited"
+    assert r.terms.report() == [], "nothing is left to confirm for removed terms"
 
 
 # ───────────────────────────── подтверждение, кэш, ключ, перепроверка ─────────────────────────────
@@ -240,14 +303,16 @@ def test_confirm_then_cache_then_reuse_with_one_revalidation_read(tmp_path):
     assert c.calls == 1
 
 
-def test_a_cached_id_that_meta_no_longer_returns_drops_to_needs_confirm(tmp_path):
+def test_a_cached_id_that_meta_no_longer_returns_is_replaced_by_the_near_match(tmp_path):
     store = _store(tmp_path)
     store.put("forex trading", id="6", type="interests", name="Forex Trading Tips")
     c = FakeSearch(interests=NEAR)          # id 6 Meta не знает (valid пуст)
-    with pytest.raises(cr.TargetingUnresolved) as ei:
-        cr.TargetingResolver(c, store).interests([["forex trading"]])
-    assert ei.value.items[0]["state"] == "pending"
-    assert "no longer returned" in ei.value.items[0]["reason"]
+    r = tr.TermResolver(c, store)
+    r.prefetch(["forex trading"])
+    res = r.resolve("forex trading")
+    assert res["state"] == "pending" and "no longer returned" in res["reason"]
+    spec = cr.TargetingResolver(FakeSearch(interests=NEAR), store).interests([["forex trading"]])
+    assert spec and spec[0]["interests"]
 
 
 def test_cache_key_has_the_type_so_other_type_does_not_overwrite(tmp_path):
@@ -409,36 +474,36 @@ def _audit(meta, tmp_path, label, store, max_calls=80):
     return out, {v["rule"]: v for v in out.audit}
 
 
-def test_preflight_unresolved_term_is_an_error_naming_term_and_candidates(tmp_path):
+def test_preflight_unresolved_term_is_removed_with_an_info_line_and_does_not_block(tmp_path):
     meta = TargetMeta(interests={"Qwerty": [{"id": "5", "name": "Qwertz Keyboards"}]})
     out, got = _audit(meta, tmp_path, "Qwerty", _store(tmp_path))
-    assert out.stop_kind == "plan" and "Qwerty" in out.error, "публикация не пойдёт"
+    assert out.error == "" and not pf.blocks(out.audit)
     v = got["interests_resolve"]
-    assert v["status"] == "error" and "'Qwerty'" in v["detail"]
+    assert v["status"] == "ok" and "Removed 'Qwerty': Meta has no match on this account" in v["detail"]
+    assert "Removed 'Qwerty': Meta has no match on this account" in out.warnings, "the same line in the publish result"
+    assert "No detailed targeting left on this ad set" in v["detail"]
 
 
-def test_preflight_pending_confirmation_is_an_error_with_a_confirm_action(tmp_path):
+def test_preflight_near_match_is_used_without_a_confirm_and_does_not_block(tmp_path):
+    store = _store(tmp_path)
     meta = TargetMeta(interests={"forex trading": [{"id": "6", "name": "Forex Trading Tips"}]})
-    out, got = _audit(meta, tmp_path, "forex trading", _store(tmp_path))
+    out, got = _audit(meta, tmp_path, "forex trading", store)
     v = got["interests_confirmed"]
-    assert v["status"] == "error" and v["action"] == "confirm"
-    assert "picked 'Forex Trading Tips'" in v["detail"] and v["items"][0]["candidates"]
-    assert got["interests_resolve"]["status"] == "ok" and pf.blocks(out.audit)
-    assert out.targeting and out.targeting[0]["state"] == "pending"
+    assert v["status"] == "ok" and "action" not in v
+    assert got["interests_resolve"]["status"] == "ok" and not pf.blocks(out.audit) and out.error == ""
+    assert "Used 'Forex Trading Tips' for 'forex trading'" in got["interests_resolve"]["detail"]
+    assert "Used 'Forex Trading Tips' for 'forex trading'" in out.warnings
+    assert store.get("forex trading")["id"] == "6", "remembered exactly as a Confirm press does"
+    assert out.targeting == [], "nothing is left waiting for a Confirm"
 
 
-def test_preflight_split_needs_confirm_then_passes(tmp_path):
+def test_preflight_split_is_used_and_remembered(tmp_path):
     store = _store(tmp_path)
     meta = TargetMeta(valid={"plus500": ("Plus500", "32")},
                       typed={("adworkemployer", "Alpari Group"): [{"id": "31", "name": "Alpari Group"}]})
     out, got = _audit(meta, tmp_path, "Alpari Group or Plus500", store)
-    assert got["interests_confirmed"]["status"] == "error" and got["interests_confirmed"]["action"] == "confirm"
-    cand = out.targeting[0]["suggested"]
-    store.put("Alpari Group or Plus500", id=cand["id"], type=cand["type"], name=cand["name"], picks=cand["picks"])
-    out, got = _audit(meta, tmp_path, "Alpari Group or Plus500", store)
     assert out.error == "" and got["interests_confirmed"]["status"] == "ok"
-    flex = out.plan["ad_sets"][0]["targeting"]["flexible_spec"] if "targeting" in out.plan["ad_sets"][0] else None
-    assert flex is None or flex[0].keys() == {"work_employers", "interests"}
+    assert store.get("Alpari Group or Plus500")["type"] == tr.SPLIT
 
 
 def test_preflight_passes_after_confirmation(tmp_path):
@@ -587,8 +652,11 @@ def test_ambiguous_term_lists_every_near_candidate_and_picks_none(tmp_path):
     res = _one(_resolver(FakeSearch(interests=near), tmp_path), "yoga")
     assert res["state"] in ("pending", "unresolved") and res["picks"] == []
     assert {c["name"] for c in res["candidates"]} == {"Yoga Classes", "Yoga Mats", "Hot Yoga"}
-    with pytest.raises(cr.TargetingUnresolved):
-        cr.TargetingResolver(FakeSearch(interests=near), _store(tmp_path)).interests([["yoga"]])
+    # ACL-2925: the system decides itself - a strong near match is used, otherwise the term is removed
+    r = cr.TargetingResolver(FakeSearch(interests=near), _store(tmp_path))
+    spec = r.interests([["yoga"]])
+    assert r.targeting_notes()[0].startswith("Used " if res["state"] == "pending" else "Removed ")
+    assert bool(spec) == (res["state"] == "pending")
 
 
 def test_audience_languages_and_detailed_targeting_share_one_resolver(tmp_path):
@@ -704,8 +772,8 @@ def test_guard_reports_not_found_terms_even_when_another_term_is_unknown(tmp_pat
                         lambda self, term: _unknown_find(term) if term == "Also gone" else real(self, term))
     out, got = _audit(TargetMeta(), tmp_path, "Nothing close, Also gone", _store(tmp_path))
     v = got["interests_resolve"]
-    assert v["status"] == "error" and "press Check plan again" in v["detail"]
-    assert "Nothing close" in v["detail"], "the term already known as not found stays visible"
+    assert v["status"] == "unknown" and "press Check plan again" in v["detail"]
+    assert out.stop_kind == "plan", "an unchecked term still blocks: a retry decides it"
 
 
 def test_search_cache_prunes_expired_entries_on_store():

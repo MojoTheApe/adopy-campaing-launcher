@@ -831,7 +831,10 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         # ACL-1920: необязательный поиск, в котором Meta отказала, - предупреждение с названием поиска.
         fn = getattr(resolver, "targeting_warnings", None)
         warns = list(fn()) if fn else []
-        put("interests_resolve", WARNING if warns else OK, " ".join(warns))
+        # ACL-2925: что система решила сама (взяла близкое / убрала термин) - строки info, статус ok.
+        nf = getattr(resolver, "targeting_notes", None)
+        notes = list(nf()) if nf else []
+        put("interests_resolve", WARNING if warns else OK, " ".join(warns + (["; ".join(notes)] if notes else [])))
 
     def interests_guard() -> None:
         # ACL-1771: непонятый термин — ошибка с кандидатами; близкое совпадение — ошибка с Confirm.

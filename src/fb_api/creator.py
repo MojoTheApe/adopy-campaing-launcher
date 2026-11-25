@@ -1643,41 +1643,46 @@ class TargetingResolver:
         self._touched.add(wkey)
         return self._locale[lang]
 
-    def interests(self, groups: list[list[str]]) -> list[dict]:
+    def interests(self, groups: list[list[str]], label: str = "") -> list[dict]:
         """Группы имён → `flexible_spec` (interests/behaviors/work_*/education_* с id).
 
-        Точное имя берётся само; всё остальное — `TargetingUnresolved` с кандидатами и
-        с «picked X for Y?» (ACL-1771): ничего не подставляется молча.
+        Точное имя берётся само. ACL-2925: близкое совпадение берётся само и запоминается (как Confirm),
+        ненайденный термин убирается из запроса (библиотека и черновик не меняются) - обе правки
+        видны строками в `targeting_notes()`. Не проверено до конца (`unknown`) - по-прежнему ошибка.
         """
         terms = [n for g in groups for n in g]
         try:
             self.terms.prefetch(terms)
             results = {n: self.terms.resolve(n) for n in terms}
+            unknown = [r for r in results.values() if r["state"] == "unknown"]
+            if unknown:
+                raise TargetingUnresolved(unknown)
+            picks = {n: self.terms.settle(r) for n, r in results.items()}
         except _tr.ConfirmedStoreUnreadable as exc:
             # ACL-2243: unknown store state must stop the plan, not resolve as if nothing was confirmed.
             raise PlanError(str(exc)) from exc
-        bad: list[dict] = []
-        for r in results.values():
-            if r["state"] in ("exact", "confirmed"):
-                continue
-            bad += r.get("bad_parts") or [r]
-        if bad:
-            raise TargetingUnresolved(bad)
         spec = []
         for g in groups:
             entry: dict[str, list] = {}
             for n in g:
-                for hit in results[n]["picks"]:
+                for hit in picks[n]:
                     bucket = entry.setdefault(hit["type"], [])
                     item = {"id": hit["id"], "name": hit["name"]}
                     if item not in bucket:
                         bucket.append(item)
-            spec.append(entry)
+            if entry:
+                spec.append(entry)
+        if terms and not spec:
+            self.terms._note("No detailed targeting left on this ad set" + (f" ({label})" if label else ""))
         return spec
 
     def targeting_report(self) -> list[dict]:
         """Что нашлось/ждёт подтверждения по всем терминам задания (для Check plan)."""
         return self.terms.report()
+
+    def targeting_notes(self) -> list[str]:
+        """ACL-2925: info lines about what the system decided by itself (used / removed terms)."""
+        return list(self.terms.notes)
 
     def targeting_warnings(self) -> list[str]:
         """ACL-1920: необязательные поиски, в которых Meta отказала (имя поиска в тексте)."""
@@ -1711,7 +1716,9 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
     if ad_set.gender:
         t["genders"] = [GENDER_IDS[ad_set.gender]]
     if ad_set.interest_groups:
-        t["flexible_spec"] = resolver.interests(ad_set.interest_groups)
+        spec = resolver.interests(ad_set.interest_groups, ad_set.name)
+        if spec:    # ACL-2925: все термины сняты - набор идёт без детального таргетинга
+            t["flexible_spec"] = spec
     t.update(placement_targeting(ad_set.placements))
     os_val = ad_set.os.casefold()
     if os_val in ("ios", "android"):
@@ -6000,7 +6007,8 @@ class CampaignCreator:
         """ACL-1920: отказ Meta в необязательном поиске - предупреждение, а не ошибка (без дублей)."""
         fn = getattr(self.resolver, "targeting_warnings", None)
         try:
-            for w in (fn() if fn else []):
+            notes = getattr(self.resolver, "targeting_notes", None)
+            for w in (fn() if fn else []) + (notes() if notes else []):
                 if w not in out.warnings:
                     out.warnings.append(w)
         except Exception:  # noqa: BLE001 — предупреждения вспомогательные
