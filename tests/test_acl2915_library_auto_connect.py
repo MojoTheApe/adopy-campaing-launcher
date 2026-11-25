@@ -193,16 +193,113 @@ def test_a_token_that_github_refuses_is_not_saved_and_retried_next_time(fake_lib
     assert stored_token(machine) == HUB_TOKEN
 
 
-def test_token_never_reaches_logs_responses_or_state_files(fake_lib, machine, caplog, tmp_path):
+def test_refused_token_never_reaches_logs_or_responses(fake_lib, machine, caplog):
+    """Чистая машина, токен хаба отвергнут GitHub: ConnectError реально проходит под caplog."""
+    caplog.set_level(logging.DEBUG)
+    refused = "ghp_" + "y" * 30 + "BAD"
+    out = run(Hub({"repo": REPO, "token": refused}))
+    assert fake_lib.checks == [(REPO, refused)]        # путь проверки действительно выполнен
+    assert stored_token(machine) == ""
+    assert "ghp_" not in json.dumps(out) + caplog.text
+
+
+def test_accepted_token_never_reaches_logs_responses_or_state_files(fake_lib, machine, caplog, tmp_path):
     caplog.set_level(logging.DEBUG)
     out = run(Hub())
-    bad = run(Hub({"repo": REPO, "token": "ghp_" + "y" * 30 + "BAD"}))
-    blob = json.dumps(out) + json.dumps(bad) + caplog.text
-    assert "ghp_" not in blob                          # ни выданный, ни отвергнутый токен не виден
+    assert stored_token(machine) == HUB_TOKEN
+    assert "ghp_" not in json.dumps(out) + caplog.text
     assert HUB_TOKEN not in env_text(machine)          # в настройках машины токен запечатан
     for f in (tmp_path / "local").glob("*"):
         text = f.read_text(encoding="utf-8", errors="ignore")
         assert HUB_TOKEN not in text, f.name
+
+
+FORM = {
+    "name": "Demo form", "headline": "Get more information", "intro": "",
+    "contact_fields": ["name", "email"],
+    "questions": [{"label": "Which product interests you?", "type": "short_answer"}],
+    "privacy_url": "https://example.com/privacy", "thank_you_text": "Thank you. We will contact you.",
+    "website_url": "", "locale": "EN_US",
+}
+
+
+def _form_names(snapshot):
+    return {str(r.get("name")) for r in snapshot["templates"].values()}
+
+
+def test_form_templates_are_added_missing_only(fake_lib, machine, tmp_path, monkeypatch):
+    from src.fb_api import form_templates as ft
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "acl"))
+    mine = ft.save({**FORM, "name": "Local form"})
+    clash = ft.save({**FORM, "name": "Team form", "headline": "Local wording"})
+    team_rec = {**ft.validate({**FORM, "name": "Team form", "headline": "Team wording"})[0], "id": clash["id"],
+                "added_by": "fixture", "updated_by": "fixture"}
+    remote = {"version": 1, "templates": {clash["id"]: team_rec}, "deleted": {}}
+    fake_lib.put(tl.FILES["form_templates"][0], json.dumps(remote), None, "fixture")
+
+    run(Hub())
+
+    saved = tl._parse("form_templates", fake_lib.get(tl.FILES["form_templates"][0]))
+    assert mine["id"] in saved["templates"]                          # недостающая форма добавлена
+    assert saved["templates"][clash["id"]]["headline"] == "Team wording"   # чужая не перезаписана
+    assert _form_names(saved) == {"Local form", "Team form"}
+    assert saved["deleted"] == {}
+
+
+def test_failed_kind_is_retried_on_the_next_sync_even_after_a_restart(fake_lib, machine, tmp_path, monkeypatch):
+    """Ревью: форма не доехала → токен уже стоит → следующая синхронизация добирает её, и после перезапуска тоже."""
+    from src.analysis_agent import team_library_seed as seed
+    from src.fb_api import form_templates as ft
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "acl"))
+    mine = ft.save({**FORM, "name": "Local form"})
+    real, calls = seed.seed, []
+
+    def flaky(kind, **kw):
+        calls.append(kind)
+        if kind == "form_templates" and calls.count("form_templates") == 1:
+            raise tl.LibraryError("Synthetic refusal for forms.")
+        return real(kind, **kw)
+
+    monkeypatch.setattr(seed, "seed", flaky)
+    hub = Hub()
+    run(hub)                                                          # токен сохранён, формы не доехали
+    assert stored_token(machine) == HUB_TOKEN
+    assert tlc._pending_path().exists() and "form_templates" in tlc._load_pending_file()
+    assert tl._parse("form_templates", fake_lib.get(tl.FILES["form_templates"][0]))["templates"] == {}
+
+    tlc._pending.clear()                                              # «перезапуск дешборда»
+    run(hub)                                                          # токен есть: добираем из файла
+    saved = tl._parse("form_templates", fake_lib.get(tl.FILES["form_templates"][0]))
+    assert mine["id"] in saved["templates"]
+    assert not tlc._pending_path().exists() and tlc._pending == {}
+    assert len(hub.library_calls()) == 1                              # хаб за токеном второй раз не ходили
+    n = calls.count("form_templates")
+    run(hub)
+    assert calls.count("form_templates") == n                         # дальше повторов нет
+
+
+def test_retry_does_nothing_and_stays_offline_when_nothing_is_pending(fake_lib, machine):
+    run(Hub())
+    assert tlc.retry_pending() == {}
+    assert not tlc._pending_path().exists()
+
+
+def test_failed_auto_connect_does_not_change_the_button_path(fake_lib, machine, tmp_path, monkeypatch):
+    """Ревью: автоподключение споткнулось на проверке токена; кнопка потом переносит только цели и тексты."""
+    from src.fb_api import form_templates as ft
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "acl"))
+    ft.save({**FORM, "name": "Local form"})
+    tr.add("Local only", "Chess")
+    run(Hub({"repo": REPO, "token": "ghp_" + "z" * 30 + "BAD"}))      # check() отвергает токен
+    assert stored_token(machine) == ""
+    out = tlc.connect(OWN_TOKEN)                                      # кнопка
+    assert out["ok"] and set(out["added"]) == {"targets", "ad_texts"}
+    forms = tl._parse("form_templates", fake_lib.get(tl.FILES["form_templates"][0]))
+    assert forms["templates"] == {}                                   # формы кнопкой не перенесены
+    assert "Local only" in tl._parse("targets", fake_lib.get(tl.FILES["targets"][0]))["targets"]
 
 
 def test_button_connect_still_works_as_before(fake_lib, machine):

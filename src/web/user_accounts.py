@@ -389,6 +389,14 @@ def _ensure_library(http: Http, key: str) -> None:
     шаблоны форм. Уже стоящий токен не заменяется. Тихо: любой сбой повторится при следующей
     синхронизации. Токен не пишется ни в лог, ни в ответ страницы: наружу только факт подключения."""
     if (os.environ.get("ACL_LIBRARY_TOKEN") or "").strip():
+        # Токен уже есть. Если прошлое подключение донесло не всё, добираем недостающее (ревью ACL-2915).
+        try:
+            from src.analysis_agent import team_library_connect as tlc
+
+            if tlc.retry_pending():
+                log.info("Team library: items left over from the first connect were added.")
+        except Exception:  # noqa: BLE001
+            log.info("Team library: retrying the left-over items did not finish; it will be tried again.")
         return
     try:
         status, _h, data = http("GET", hub_url() + "/v1/library-access",
