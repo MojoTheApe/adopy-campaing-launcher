@@ -14,7 +14,9 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 #: Поля строки, которые хаб принимает. Всё остальное (proxy_*, tracking_link) — 400.
@@ -90,12 +92,21 @@ class HubClient:
             raise HubError(f"The hub answered HTTP {status}" + (f": {detail}" if detail else "."))
         return data
 
-    def users(self) -> list[dict]:
-        users = self._call("GET", "/api/users").get("users")
+    def users(self, name: str = "") -> list[dict]:
+        path = "/api/users" + ("?name=" + urllib.parse.quote(name, safe="") if name else "")
+        users = self._call("GET", path).get("users")
         return [u for u in (users or []) if isinstance(u, dict)]
 
-    def assign(self, user_email: str, rows: list[dict]) -> dict:
-        return self._call("POST", "/api/assignments", {"user_email": user_email, "rows": rows})
+    def assignments(self, user_email: str) -> list[dict]:
+        """ACL-2920: строки назначений юзера, активные и снятые (у снятых removed_at)."""
+        data = self._call("GET", "/api/assignments?user_email=" + urllib.parse.quote(user_email, safe=""))
+        return [a for a in (data.get("accounts") or []) if isinstance(a, dict)]
+
+    def assign(self, user_email: str, rows: list[dict], user_name: str = "") -> dict:
+        payload: dict = {"user_email": user_email, "rows": rows}
+        if user_name.strip():
+            payload["user_name"] = user_name.strip()
+        return self._call("POST", "/api/assignments", payload)
 
     def remove(self, user_email: str, account_names: list[str]) -> dict:
         return self._call("POST", "/api/assignments/remove",
@@ -204,3 +215,79 @@ def found_rows(results: Iterable[dict]) -> list[dict]:
 def clean_email(value: str) -> str:
     email = (value or "").strip().lower()
     return email if "@" in email and " " not in email else ""
+
+
+# ── ACL-2920: «Logged as» → пользователь хаба ───────────────────────────────
+
+_BUYER_MAP_FILE = "user_assign_buyers.json"
+
+
+class NeedEmail(Exception):
+    """У выбранного байера в хабе ещё нет пользователя: нужна его почта (один раз)."""
+
+
+def _buyer_key(name: str) -> str:
+    return " ".join(str(name or "").split()).casefold()
+
+
+def _buyer_map_path() -> Path:
+    from config import paths
+
+    return Path(paths.get_local_config_dir()) / _BUYER_MAP_FILE
+
+
+def _load_buyer_map() -> dict:
+    try:
+        data = json.loads(_buyer_map_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def remember_buyer(buyer: str, email: str) -> None:
+    """Запомнить на этой машине «имя байера → почта». Страховка на случай, когда имя из Google
+    в хабе отличается от имени в «Logged as» и поиск по имени не находит юзера."""
+    key = _buyer_key(buyer)
+    if not key or not clean_email(email):
+        return
+    try:
+        from config.paths import _atomic_write
+
+        data = _load_buyer_map()
+        data[key] = clean_email(email)
+        path = _buyer_map_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
+    except Exception:  # noqa: BLE001 - запоминание необязательно
+        pass
+
+
+def find_user_email(client: "HubClient", buyer: str, email_hint: str = "") -> str:
+    """Почта пользователя хаба для байера из «Logged as».
+
+    Порядок: почта, которую только что ввёл владелец; запомненная на машине; поиск в хабе по имени
+    (совпадение без учёта регистра). Нет нигде — `NeedEmail`. Несколько юзеров с одним именем —
+    `HubError`: угадывать нельзя."""
+    hint = clean_email(email_hint)
+    if hint:
+        return hint
+    remembered = _load_buyer_map().get(_buyer_key(buyer), "")
+    if clean_email(remembered):
+        return clean_email(remembered)
+    found = [u for u in client.users(buyer) if clean_email(u.get("email", ""))]
+    if len(found) > 1:
+        raise HubError(f"Several hub users are named \"{buyer}\". Pick the buyer's email by hand.")
+    if not found:
+        raise NeedEmail(buyer)
+    return clean_email(found[0]["email"])
+
+
+def account_view(rows: Iterable[dict]) -> list[dict]:
+    """Строки назначений для показа: только нужное странице, активные и снятые (removed=True)."""
+    out = []
+    for r in rows:
+        name = str(r.get("account_name") or "").strip()
+        if name:
+            out.append({"account_name": name, "ad_account_id": str(r.get("ad_account_id") or ""),
+                        "removed": bool(r.get("removed_at")), "assigned_by": str(r.get("assigned_by") or "")})
+    return out
