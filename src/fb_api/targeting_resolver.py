@@ -415,6 +415,8 @@ class TermResolver:
         self._ids_unverified = False
         #: Interest ids Meta rejected as `Invalid id` (their cache entries are dropped).
         self._bad_ids: set[str] = set()
+        #: ACL-2925: info lines of the automatic decisions ("Used 'X' for 'Y'", "Removed 'Y': ..."), no repeats.
+        self.notes: list[str] = []
 
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
     def _lookup(self, search_type: str, params: dict, pages: int, *, path: str = "/search") -> list[dict]:
@@ -758,11 +760,61 @@ class TermResolver:
             return {**res, "state": "pending", "suggested": best}
         return res
 
+    # -- ACL-2925: система сама решает близкие совпадения и ненайденные термины
+    def _note(self, line: str) -> None:
+        if line not in self.notes:
+            self.notes.append(line)
+
+    def _accept(self, term: str, cand: dict) -> list[dict] | None:
+        """Близкое совпадение: запомнить так же, как кнопка Confirm, и взять. Поведение чужого вида - никогда."""
+        if cand["type"] == "behaviors":
+            return None
+        try:
+            self.store.put(term, id=cand["id"], type=cand["type"], name=cand["name"], picks=cand.get("picks"))
+        except (OSError, ValueError):
+            pass    # не удалось запомнить - пик всё равно берём, задание не падает
+        self._note(f"Used '{cand['name']}' for '{term}'")
+        return picks_of(cand)
+
+    def settle(self, res: dict) -> list[dict]:
+        """Итог по термину без участия человека: пики для запроса или [] (термин снят только из запроса).
+
+        exact/confirmed - как есть; pending - берём кандидата и запоминаем в ConfirmedStore;
+        иначе (нет кандидатов, чужой вид, отказ Meta) термин убирается из запроса, библиотека и черновик целы.
+        """
+        if res["state"] in _OK_STATES:
+            return res["picks"]
+        if "settled" in res:
+            return res["settled"]
+        term = res["term"]
+        picks: list[dict] | None = None
+        bad = res.get("bad_parts")
+        if bad:
+            if all(b["state"] == "pending" for b in bad):
+                got: list[dict] | None = []
+                for sub in res["parts"]:
+                    part = sub["picks"] if sub["state"] in _OK_STATES else (
+                        self._accept(sub["term"], sub["suggested"]) if sub["state"] == "pending" else None)
+                    if part is None:
+                        got = None
+                        break
+                    got += part
+                picks = got
+        elif res["state"] == "pending":
+            picks = self._accept(term, res["suggested"])
+        if picks is None:
+            self._note(f"Removed '{term}': Meta has no match on this account")
+            picks = []
+        res["settled"] = picks
+        return picks
+
     # -- отчёт для Check plan
     def report(self) -> list[dict]:
         """Все термины задания: как найдены, кандидаты, что ждёт подтверждения."""
         out = []
         for r in self._results.values():
+            if "settled" in r:      # ACL-2925: решено системой, человеку подтверждать нечего
+                continue
             item = {k: r[k] for k in ("term", "state", "picks", "candidates", "reason", "suggested", "split")
                     if k in r}
             if r.get("bad_parts"):

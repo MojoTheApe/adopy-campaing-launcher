@@ -892,7 +892,7 @@ def test_plan_errors_are_raised_before_any_call(tmp_path):
         cr.plan_from_draft(d)
 
 
-def test_unresolved_targeting_stops_before_writes(tmp_path):
+def test_unresolved_targeting_is_removed_and_the_ad_set_goes_without_it(tmp_path):
     meta = FakeMeta()
     orig = meta._get
 
@@ -903,7 +903,13 @@ def test_unresolved_targeting_stops_before_writes(tmp_path):
 
     meta._get = _get
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert out.stop_kind == "plan" and "Detailed targeting" in out.error and meta.posts == []
+    # ACL-2925: unknown terms no longer stop the plan; the ad set is created without detailed targeting
+    assert out.stop_kind != "plan", out.error
+    assert "Removed 'Day trading': Meta has no match on this account" in out.warnings
+    assert "Removed 'Swing trading': Meta has no match on this account" in out.warnings
+    assert "No detailed targeting left on this ad set (MX Leads 1)" in out.warnings
+    adsets = [params for path, params in meta.posts if path.endswith("/adsets")]
+    assert adsets and all("flexible_spec" not in str(p) for p in adsets)
 
 
 def test_preflight_refuses_an_account_the_profile_does_not_have():
