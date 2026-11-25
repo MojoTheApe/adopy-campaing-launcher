@@ -376,13 +376,17 @@ _DOMAIN_SUFFIXES = (".com", ".net", ".org")
 _KEEP_CHARS = "+#&.@"
 
 
-def match_keys(text: str) -> set[str]:
-    """Формы имени для сравнения «равно после нормализации»; пустое множество - нечего сравнивать."""
+def match_key(text: str, *, candidate: bool = False) -> str:
+    """Форма имени для сравнения «равно после нормализации»; пусто - сравнивать нечего.
+
+    Корпоративный/доменный хвост снимается ТОЛЬКО у кандидата (`candidate=True`), у термина - никогда:
+    «The Co.» не должно совпасть с «The». Множественное число не трогаем вовсе.
+    """
     n = norm(text)
     if not n:
-        return set()
-    changed = True
-    while changed:                          # корпоративный/доменный хвост из короткого фиксированного списка
+        return ""
+    changed = candidate
+    while changed:                          # короткий фиксированный список хвостов
         changed = False
         for suf in _DOMAIN_SUFFIXES:
             if n.endswith(suf) and len(n) > len(suf):
@@ -390,15 +394,7 @@ def match_keys(text: str) -> set[str]:
         words = n.split(" ")
         if len(words) > 1 and words[-1] in _CORP_WORDS:
             n, changed = " ".join(words[:-1]), True
-    key = "".join(ch for ch in n if ch.isalnum() or ch in _KEEP_CHARS)
-    if not key:
-        return {n}
-    out = {key}
-    if key.endswith("es") and len(key) > 4:      # множественное число последнего слова
-        out.add(key[:-2])
-    if key.endswith("s") and len(key) > 3:
-        out.add(key[:-1])
-    return out
+    return "".join(ch for ch in n if ch.isalnum() or ch in _KEEP_CHARS) or n
 
 
 class TermResolver:
@@ -802,16 +798,16 @@ class TermResolver:
     def _unambiguous(res: dict) -> tuple[dict | None, str]:
         """Кандидат, которого можно взять без человека, либо (None, текст для заметки).
 
-        Берём только кандидата, равного термину после нормализации (`match_keys`), и только одного
+        Берём только кандидата, равного термину после нормализации (`match_key`), и только одного
         (разные id - неоднозначно). Поведения не берём. Сходство по буквам не решает ничего.
         """
         if res.get("split") and res.get("suggested"):
             return res["suggested"], ""
-        term_keys = match_keys(res["term"])
+        term_key = match_key(res["term"])
         cands = [c for c in res.get("candidates") or []]
         passing: dict[tuple, dict] = {}
         for c in cands:
-            if c["type"] != "behaviors" and term_keys & match_keys(c["name"]):
+            if c["type"] != "behaviors" and term_key and term_key == match_key(c["name"], candidate=True):
                 passing.setdefault((c["type"], c["id"]), c)
         if len(passing) == 1:
             return next(iter(passing.values())), ""

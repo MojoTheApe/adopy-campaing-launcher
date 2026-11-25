@@ -219,7 +219,7 @@ def test_a_split_whose_part_is_a_near_match_uses_the_near_match(tmp_path):
 
 # ───────────────────────────── никакой молчаливой подмены ─────────────────────────────
 
-PLURAL = {"forex trader": [{"id": "6", "name": "Forex Traders"}]}
+SUFFIXED = {"forex trader": [{"id": "6", "name": "Forex Trader Inc."}]}
 NEAR = {"forex trading": [{"id": "6", "name": "Forex Trading Tips"}, {"id": "7", "name": "Forex Trader"}]}
 
 
@@ -231,14 +231,14 @@ def test_a_near_match_is_never_auto_picked(tmp_path):
 
 def test_a_near_match_is_used_by_itself_and_remembered_like_a_confirm(tmp_path):
     store = _store(tmp_path)
-    r = cr.TargetingResolver(FakeSearch(interests=PLURAL), store)
+    r = cr.TargetingResolver(FakeSearch(interests=SUFFIXED), store)
     spec = r.interests([["forex trader"]])
-    assert spec == [{"interests": [{"id": "6", "name": "Forex Traders"}]}]
-    assert r.targeting_notes() == ["Used 'Forex Traders' for 'forex trader'"]
+    assert spec == [{"interests": [{"id": "6", "name": "Forex Trader Inc."}]}]
+    assert r.targeting_notes() == ["Used 'Forex Trader Inc.' for 'forex trader'"]
     row = store.get("forex trader")
-    assert (row["id"], row["type"], row["name"]) == ("6", "interests", "Forex Traders")
+    assert (row["id"], row["type"], row["name"]) == ("6", "interests", "Forex Trader Inc.")
     # the same store row a Confirm press writes: a later job resolves it as confirmed
-    again = tr.TermResolver(FakeSearch(valid={"x": ("Forex Traders", "6")}), store)
+    again = tr.TermResolver(FakeSearch(valid={"x": ("Forex Trader Inc.", "6")}), store)
     again.prefetch(["forex trader"])
     assert again.resolve("forex trader")["state"] == "confirmed"
 
@@ -290,9 +290,9 @@ def test_a_failed_remember_still_uses_the_near_match(tmp_path, exc):
     def boom(*a, **k):
         raise exc
     store.put = boom
-    r = cr.TargetingResolver(FakeSearch(interests=PLURAL), store)
-    assert r.interests([["forex trader"]]) == [{"interests": [{"id": "6", "name": "Forex Traders"}]}]
-    assert r.targeting_notes() == ["Used 'Forex Traders' for 'forex trader'"]
+    r = cr.TargetingResolver(FakeSearch(interests=SUFFIXED), store)
+    assert r.interests([["forex trader"]]) == [{"interests": [{"id": "6", "name": "Forex Trader Inc."}]}]
+    assert r.targeting_notes() == ["Used 'Forex Trader Inc.' for 'forex trader'"]
 
 
 def test_check_plan_names_the_ad_set_once_when_nothing_is_left(tmp_path):
@@ -508,13 +508,13 @@ def test_preflight_unresolved_term_is_removed_with_an_info_line_and_does_not_blo
 
 def test_preflight_near_match_is_used_without_a_confirm_and_does_not_block(tmp_path):
     store = _store(tmp_path)
-    meta = TargetMeta(interests={"forex trader": [{"id": "6", "name": "Forex Traders"}]})
+    meta = TargetMeta(interests={"forex trader": [{"id": "6", "name": "Forex Trader Inc."}]})
     out, got = _audit(meta, tmp_path, "forex trader", store)
     v = got["interests_confirmed"]
     assert v["status"] == "ok" and "action" not in v
     assert got["interests_resolve"]["status"] == "ok" and not pf.blocks(out.audit) and out.error == ""
-    assert "Used 'Forex Traders' for 'forex trader'" in got["interests_resolve"]["detail"]
-    assert "Used 'Forex Traders' for 'forex trader'" in out.warnings
+    assert "Used 'Forex Trader Inc.' for 'forex trader'" in got["interests_resolve"]["detail"]
+    assert "Used 'Forex Trader Inc.' for 'forex trader'" in out.warnings
     assert store.get("forex trader")["id"] == "6", "remembered exactly as a Confirm press does"
     assert out.targeting == [], "nothing is left waiting for a Confirm"
 
@@ -1075,6 +1075,13 @@ def test_an_error_of_a_required_search_still_fails(tmp_path):
     ("Stock trading", "Stock trading app"), ("Forex trading", "Forex trading scams"), ("yoga", "Hot Yoga"),
     ("The Wall Street Journal", "The Wall"), ("Portfolio management", "Management"),
     ("Financial Times", "Financial"), ("Harvard", "Harvard University"),
+    # plural-only differences are removals, never picks (ACL-2925 round 4)
+    ("Car", "Cares"), ("Plan", "Planes"), ("Jam", "James"), ("Merced", "Mercedes"), ("Glass", "Glas"),
+    ("Paris", "Pari"), ("News", "New"), ("New", "News"), ("Cares", "Car"), ("Planes", "Plan"),
+    ("James", "Jam"), ("Mercedes", "Merced"), ("Glas", "Glass"), ("Pari", "Paris"),
+    ("Doctor", "Doctors"), ("Software engineer", "Software Engineers"), ("Box", "Boxes"),
+    # the suffix list is applied to the candidate only
+    ("The Co.", "The"), ("Acme Inc", "Acme"),
 ])
 def test_a_similar_but_different_name_is_never_used(tmp_path, term, name):
     r, spec, store = _settle(tmp_path, term, {term: [{"id": "1", "name": name}]})
@@ -1083,10 +1090,15 @@ def test_a_similar_but_different_name_is_never_used(tmp_path, term, name):
     assert name in r.targeting_notes()[0], "the owner sees what Meta offered"
 
 
+def test_bloomberg_is_still_used_when_bloomberg_terminal_is_also_offered(tmp_path):
+    r, spec, store = _settle(tmp_path, "Bloomberg", {"Bloomberg": [{"id": "1", "name": "Bloomberg L.P."},
+                                                                  {"id": "2", "name": "Bloomberg Terminal"}]})
+    assert spec == [{"interests": [{"id": "1", "name": "Bloomberg L.P."}]}]
+
+
 @pytest.mark.parametrize("term,name", [
     ("Investing", "Investing.com"), ("Bloomberg", "Bloomberg L.P."), ("E*TRADE", "E-Trade"), ("e-trade", "E*TRADE"),
-    ("INVESTING", "Investing.com"), ("Acme", "Acme Inc."), ("Acme", "Acme Corporation"), ("Doctor", "Doctors"),
-    ("Software engineer", "Software Engineers"), ("Box", "Boxes"),
+    ("INVESTING", "Investing.com"), ("Acme", "Acme Inc."), ("Acme", "Acme Corporation"),
 ])
 def test_a_name_equal_after_normalisation_is_used_and_remembered(tmp_path, term, name):
     r, spec, store = _settle(tmp_path, term, {term: [{"id": "7", "name": name}]})
@@ -1097,7 +1109,7 @@ def test_a_name_equal_after_normalisation_is_used_and_remembered(tmp_path, term,
 def test_c_plus_plus_c_sharp_and_c_stay_distinct(tmp_path):
     for term, others in (("C++", ["C", "C+", "C#"]), ("C#", ["C", "C+", "C++"]), ("C", ["C+", "C++", "C#"])):
         for other in others:
-            assert not (tr.match_keys(term) & tr.match_keys(other)), (term, other)
+            assert tr.match_key(term) != tr.match_key(other, candidate=True), (term, other)
     r, spec, store = _settle(tmp_path, "C++", {"C++": [{"id": "1", "name": "C"}, {"id": "2", "name": "C#"}]})
     assert spec == [] and store.entries() == []
 
