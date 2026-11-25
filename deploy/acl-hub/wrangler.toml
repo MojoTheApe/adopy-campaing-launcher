@@ -22,4 +22,5 @@ database_id = "REPLACE_WITH_D1_ID"
 migrations_dir = "migrations"
 
 # Секреты (только `wrangler secret put`, в файл не писать): OWNER_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
-# TG_ALLOWED_CHATS (id чатов через запятую), USER_KEY_SECRET (подпись ключей юзеров, длинная случайная строка).
+# TG_ALLOWED_CHATS (id чатов через запятую), USER_KEY_SECRET (подпись ключей юзеров, длинная случайная строка),
+# LIBRARY_TOKEN (токен общей библиотеки, который хаб отдаёт юзерам ACL на GET /v1/library-access; ACL-2914).

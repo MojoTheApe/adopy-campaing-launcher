@@ -53,6 +53,7 @@ ACL_HUB_OWNER_KEY=<тот же OWNER_KEY>
 | `POST /api/assignments` `{user_email, rows:[{account_name, ad_account_id, page_id, page_name, country, multilogin_instance, folder_id, profile_id}]}` | админ | `200 {ok, assigned}`, одной транзакцией; повтор снимает `removed_at`; лишние поля (в т.ч. `proxy_*`, `tracking_link`) — `400`; неизвестный юзер создаётся как `buyer` |
 | `POST /api/assignments/remove` `{user_email, account_names}` | админ | `200 {ok, removed}`; ставит `removed_at`, строки не удаляются |
 | `POST /api/users/role` `{email, role}` | только `OWNER_KEY` | `200`, `400`, `404`; так задаётся первый админ (`admin` / `buyer`) |
+| `GET /v1/library-access` (ACL-2914) | юзер, `Bearer <ключ юзера>` | `200 {repo, token}` с `Cache-Control: no-store`: токен общей библиотеки (`LIBRARY_TOKEN`) и репозиторий (`LIBRARY_REPO`); `401` — нет/битый/просроченный ключ; `403` — юзер отключён или домен не из `ALLOWED_EMAIL_DOMAINS`; `503 {error: "not configured"}` — секрет или репозиторий не заданы. Токен нигде не хранится и не логируется: только секрет Worker |
 
 Админ = владелец (`OWNER_KEY` или cookie) либо юзер с ролью `admin`; юзер без прав получает `403`, без ключа — `401`. Ключ юзера: `<email>.<exp>.<hmac>`, HMAC-SHA256 секретом `USER_KEY_SECRET`; отключённый юзер не проходит. Токен Google хаб не хранит. Миграция `0008` (номера 0006/0007 заняты другими ветками). Секрет `USER_KEY_SECRET` ставится `wrangler secret put`; `ALLOWED_EMAIL_DOMAINS` и `GOOGLE_CLIENT_ID` — в `wrangler.local.toml`.
 
