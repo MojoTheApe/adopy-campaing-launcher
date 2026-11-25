@@ -604,3 +604,51 @@ def test_publish_reads_per_ad_never_go_to_the_network(team, monkeypatch):
     tr.pull(force=True)
     assert calls == ['targets.json']
     assert not tl.status('targets')['ok']
+
+
+# ── ACL-2907: причина сетевого сбоя ───────────────────────────────────────
+
+import socket as _socket
+import ssl as _ssl
+import urllib.error as _uerr
+import pytest as _pytest
+
+_TOKEN = "ghp_SECRETTOKEN123"
+
+
+def _unreachable(monkeypatch, exc):
+    def boom(*a, **k):
+        raise exc
+    monkeypatch.setattr(tl.urllib.request, "urlopen", boom)
+    with _pytest.raises(tl.LibraryError) as info:
+        tl.GitHubBackend("o/r", _TOKEN)._call("GET", "https://api.github.com/x?access_token=" + _TOKEN)
+    return str(info.value)
+
+
+@_pytest.mark.parametrize("exc,label", [
+    (_uerr.URLError(_ssl.SSLCertVerificationError(1, "CERTIFICATE_VERIFY_FAILED")), "certificate verification failed"),
+    (_uerr.URLError(_socket.gaierror(11001, "getaddrinfo failed")), "DNS lookup failed"),
+    (_uerr.URLError(TimeoutError("timed out")), "timed out"),
+    (TimeoutError("The read operation timed out"), "timed out"),
+    (OSError("Tunnel connection failed: 407 Proxy Authentication Required"), "proxy refused"),
+    (_uerr.URLError(ConnectionRefusedError(10061, "refused")), "connection refused"),
+    (_uerr.URLError(OSError("weird failure")), "other: weird failure"),
+])
+def test_unreachable_names_reason(monkeypatch, exc, label):
+    monkeypatch.setattr(tl.urllib.request, "getproxies", lambda: {})
+    msg = _unreachable(monkeypatch, exc)
+    assert msg.startswith(f"GitHub is unreachable: {label}.")
+    assert msg.endswith("Try again when the connection is restored.")
+
+
+def test_refused_with_configured_proxy_is_proxy_refused(monkeypatch):
+    monkeypatch.setattr(tl.urllib.request, "getproxies", lambda: {"https": "http://p:8080"})
+    msg = _unreachable(monkeypatch, _uerr.URLError(ConnectionRefusedError(10061, "refused")))
+    assert "unreachable: proxy refused." in msg
+
+
+def test_unreachable_message_has_no_secrets(monkeypatch):
+    exc = _uerr.URLError(OSError(f"bad https://api.github.com/x?access_token={_TOKEN} Bearer {_TOKEN}"))
+    msg = _unreachable(monkeypatch, exc)
+    assert _TOKEN not in msg and "access_token" not in msg and "Bearer" not in msg.replace("Bearer [redacted]", "")
+    assert msg.startswith("GitHub is unreachable: other:")

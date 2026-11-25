@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2907 — Team library shows the real network reason — 2026-11-24
+
+"GitHub is unreachable" in the team library now names the cause: certificate verification failed, proxy refused, connection refused, DNS lookup failed, timed out, or other: <reason>. The text reaches the Target library, Ad titles and Forms banners, the Add error line and the diagnostic bundle's library line. No token, URL or header is included. The library and the update path share the same TLS trust (plain urllib, system store; no custom SSL context in either).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1907).
+
 ## ACL-2687 — No ACL call budgets for account reads and publishing — 2026-11-24
 
 Owner decision 8 of the ACL-2668 audit: ACL sets no call budget of its own. An account read no longer stops after
