@@ -53,8 +53,13 @@ def _check_shape(token: str) -> str:
     return token
 
 
-def _local_snapshots() -> dict:
-    return {kind: seed.KINDS[kind][0]() for kind in _CONNECT_KINDS}
+#: ACL-2915: подключение по входу в Google переносит и шаблоны форм, как общий CLI.
+AUTO_CONNECT_KINDS = ("targets", "ad_texts", "form_templates")
+_REPO_SHAPE = re.compile(r"[A-Za-z0-9_.\-]{1,100}/[A-Za-z0-9_.\-]{1,100}")
+
+
+def _local_snapshots(kinds: tuple = _CONNECT_KINDS) -> dict:
+    return {kind: seed.KINDS[kind][0]() for kind in kinds}
 
 
 #: Снимок, не доехавший до библиотеки: повторное «Connect» берёт его, а не копию,
@@ -68,7 +73,7 @@ def _seed_counts(local: dict) -> tuple[dict, str]:
     (сколько добавлено по видам, текст первой ошибки). Вид, который не доехал,
     остаётся в `_pending` до следующей попытки."""
     out, error = {}, ""
-    for kind in _CONNECT_KINDS:
+    for kind in (*_CONNECT_KINDS, *(k for k in AUTO_CONNECT_KINDS if k not in _CONNECT_KINDS)):
         if kind not in local:
             continue
         try:
@@ -84,13 +89,26 @@ def _seed_counts(local: dict) -> tuple[dict, str]:
     return out, error
 
 
-def connect(token: str) -> dict:
-    """Проверить токен, сохранить на машине, добавить недостающее в библиотеку."""
+def connect(token: str, *, repo: str | None = None, kinds: tuple | None = None) -> dict:
+    """Проверить токен, сохранить на машине, добавить недостающее в библиотеку.
+
+    `repo` и `kinds` — для подключения по входу в Google (ACL-2915): репозиторий приходит
+    с хаба (сохраняется, только если он не тот, что уже действует на машине), а переносятся
+    ещё и шаблоны форм. Кнопка дешборда вызывает `connect(token)` как раньше."""
     token = _check_shape(token)
-    repo = current_repo()
+    old_repo_env = (os.environ.get("ACL_LIBRARY_REPO") or "").strip()
+    new_repo = ""
+    if repo is not None:
+        repo = (repo or "").strip()
+        if not _REPO_SHAPE.fullmatch(repo):
+            raise ConnectError("The library repository name is not valid.")
+        if repo != current_repo():
+            new_repo = repo
+    else:
+        repo = current_repo()
     # Снимок местных целей и текстов — до сохранения токена: с токеном любое открытие
     # раздела подтягивает общую копию поверх местной.
-    local = dict(_local_snapshots())
+    local = dict(_local_snapshots(tuple(kinds)) if kinds else _local_snapshots())
     for kind, pending in _pending.items():
         key = seed.KINDS[kind][1]
         current = local.get(kind, {})
@@ -111,7 +129,7 @@ def connect(token: str) -> dict:
         raise ConnectError("Could not check the token. Try again in a moment.") from None
     old_token = os.environ.get(TOKEN_KEY, "")
     try:
-        paths.update_machine_env({TOKEN_KEY: token})
+        paths.update_machine_env({TOKEN_KEY: token, **({"ACL_LIBRARY_REPO": new_repo} if new_repo else {})})
     except Exception:
         raise ConnectError("The token is valid, but it could not be saved in this machine's settings.") from None
     tl.use_backend(None)
@@ -122,7 +140,7 @@ def connect(token: str) -> dict:
         # видны как права пользователя): не оставляем машину с токеном, которым
         # не сохранить ни одной правки.
         try:
-            paths.update_machine_env({TOKEN_KEY: old_token})
+            paths.update_machine_env({TOKEN_KEY: old_token, **({"ACL_LIBRARY_REPO": old_repo_env} if new_repo else {})})
         except Exception:
             pass
         if not old_token:

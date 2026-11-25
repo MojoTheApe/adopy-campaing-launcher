@@ -129,7 +129,9 @@ def test_304_does_nothing(env):
     assert r["status"] == "not_modified" and not r["changed"]
     assert (env / "map.csv").read_bytes() == raw
     assert (env / "server_accounts.json").read_bytes() == state
-    assert hub.calls[-1][2]["If-None-Match"] == '"e1"'
+    # ACL-2915: после my-accounts дашборд может спросить библиотеку; ETag смотрим у последнего my-accounts
+    last = [c for c in hub.calls if c[1].endswith("/v1/my-accounts")][-1]
+    assert last[2]["If-None-Match"] == '"e1"'
 
 
 @pytest.mark.parametrize("status", [500, 503, 404])
