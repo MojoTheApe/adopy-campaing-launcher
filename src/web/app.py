@@ -4170,9 +4170,10 @@ def _user_assign_target(client, buyer: str, email_hint: str) -> "tuple[str, dict
 
     try:
         return _ua.find_user_email(client, buyer, email_hint), None
-    except _ua.NeedEmail:
-        return "", {"ok": False, "need_email": True, "buyer": buyer,
-                    "error": f"{buyer} has no hub user yet. Enter the buyer's email once."}
+    except _ua.NeedEmail as need:
+        text = (f"Several hub users are named {buyer}. Type the right email below." if need.ambiguous
+                else f"{buyer} has no hub user yet. Enter the buyer's email once.")
+        return "", {"ok": False, "need_email": True, "buyer": buyer, "error": text}
     except _ua.HubError as exc:
         return "", {"ok": False, "error": str(exc)}
 
@@ -4194,8 +4195,33 @@ async def api_user_assign_accounts(buyer: str = "") -> JSONResponse:
     try:
         rows = await _in_report_pool(client.assignments, email)
     except _ua.HubError as exc:
+        if exc.status == 404:
+            # Почта известна (введена руками), а юзера в хабе ещё нет: он создастся при первом назначении.
+            return JSONResponse({"ok": True, "buyer": buyer, "user_email": email, "accounts": [], "new_user": True})
         return JSONResponse({"ok": False, "error": str(exc), "accounts": []})
     return JSONResponse({"ok": True, "buyer": buyer, "user_email": email, "accounts": _ua.account_view(rows)})
+
+
+@app.post("/api/user-assign/buyer-email")
+async def api_user_assign_buyer_email(request: Request) -> JSONResponse:
+    """ACL-2924: запомнить (или заменить) почту байера из «Logged as» на этой машине."""
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    buyer = " ".join(str(data.get("buyer") or "").split())
+    email = _ua.clean_email(data.get("user_email") or "")
+    if not buyer:
+        return JSONResponse({"ok": False, "error": "No buyer is selected."}, status_code=400)
+    if not email:
+        return JSONResponse({"ok": False, "error": "That does not look like an email address."}, status_code=400)
+    if not _ua.remember_buyer(buyer, email):
+        return JSONResponse({"ok": False, "error": "Could not save the email on this computer."})
+    return JSONResponse({"ok": True, "buyer": buyer, "user_email": email})
 
 
 @app.post("/api/user-assign/send")
