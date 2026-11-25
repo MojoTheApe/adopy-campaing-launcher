@@ -23,7 +23,7 @@ export async function makeUserKey(env, email, nowSec) {
 
 // Юзер по ключу из Bearer: подпись, срок, юзер есть и не отключён. Иначе null.
 // Email может содержать точки, поэтому ключ разбирается справа: <email>.<exp>.<hmac>.
-export async function userFromRequest(request, env) {
+export async function userFromRequest(request, env, { allowDisabled = false } = {}) {
   const token = bearer(request);
   if (!token || !env.USER_KEY_SECRET) return null;
   const m = /^(.+)\.(\d{1,12})\.([0-9a-f]{64})$/.exec(token);
@@ -31,7 +31,7 @@ export async function userFromRequest(request, env) {
   const expected = await hmacHex(env.USER_KEY_SECRET, `acl-hub-user:${m[1]}.${m[2]}`);
   if (!(await sameSecret(m[3], expected))) return null;
   const user = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(m[1]).first();
-  return user && !user.disabled ? user : null;
+  return user && (allowDisabled || !user.disabled) ? user : null;
 }
 
 // Админ = владелец (OWNER_KEY / cookie) или юзер с ролью admin. { by } — кто назначает.
@@ -115,6 +115,23 @@ export async function handleSeed(request, env) {
   ).bind(user.email, r.account_name, r.ad_account_id, r.page_id, r.page_name, r.country, r.multilogin_instance,
     r.folder_id, r.profile_id, nowIso, user.email)));
   return json({ ok: true, seeded: res.reduce((s, r) => s + r.meta.changes, 0) });
+}
+
+const allowedDomains = (env) => String(env.ALLOWED_EMAIL_DOMAINS || "").split(",")
+  .map((d) => d.trim().toLowerCase()).filter(Boolean);
+
+// GET /v1/library-access (ACL-2914): доступ к общей библиотеке (репозиторий и токен) для юзера ACL.
+// Токен лежит только в секрете Worker `LIBRARY_TOKEN`: не в D1, не в логах, не в тексте ошибок.
+// Нет/битый/просроченный ключ — 401; отключённый юзер или чужой домен — 403; секрет не задан — 503.
+export async function handleLibraryAccess(request, env) {
+  const user = await userFromRequest(request, env, { allowDisabled: true });
+  if (!user) return json({ error: "unauthorized" }, 401);
+  if (user.disabled || !allowedDomains(env).includes(domainOf(user.email))) return json({ error: "forbidden" }, 403);
+  const token = String(env.LIBRARY_TOKEN || "").trim();
+  const repo = String(env.LIBRARY_REPO || "").trim();
+  if (!token || !repo) return json({ error: "not configured" }, 503);
+  return new Response(JSON.stringify({ repo, token }),
+    { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
 
 // GET /api/users
