@@ -144,7 +144,8 @@ def test_buyer_without_a_hub_user_asks_for_the_email(hub):
 def test_two_hub_users_with_one_name_are_not_guessed(hub):
     hub.users["twin@adopy.test"] = "Dan Dicker"
     status, data = _accounts("Dan Dicker")
-    assert data["ok"] is False and "Several hub users" in data["error"] and not data.get("need_email")
+    # ACL-2924: не угадываем, а просим почту (поле на странице показывается), а не оставляем владельца ни с чем
+    assert data["ok"] is False and "Several hub users" in data["error"] and data["need_email"] is True
 
 
 # ── назначение и почта один раз ──────────────────────────────────────────

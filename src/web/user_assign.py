@@ -33,7 +33,11 @@ Request = Callable[[str, str, "bytes | None", dict], "tuple[int, dict]"]
 
 
 class HubError(Exception):
-    """Ошибка хаба, уже по-английски и пригодная для показа как есть."""
+    """Ошибка хаба, уже по-английски и пригодная для показа как есть. `status` — HTTP-код хаба (0 — не было ответа)."""
+
+    def __init__(self, message: str = "", status: int = 0):
+        super().__init__(message)
+        self.status = status
 
 
 # ── настройки ────────────────────────────────────────────────────────────
@@ -86,10 +90,11 @@ class HubClient:
             raise HubError(f"Could not reach the hub ({type(exc).__name__}). Check the connection and try again.")
         data = data if isinstance(data, dict) else {}
         if status in (401, 403):
-            raise HubError(f"The hub refused the owner key (HTTP {status}). Check ACL_HUB_OWNER_KEY on this computer.")
+            raise HubError(f"The hub refused the owner key (HTTP {status}). Check ACL_HUB_OWNER_KEY on this computer.",
+                           status)
         if status != 200:
             detail = str(data.get("error") or "").strip()
-            raise HubError(f"The hub answered HTTP {status}" + (f": {detail}" if detail else "."))
+            raise HubError(f"The hub answered HTTP {status}" + (f": {detail}" if detail else "."), status)
         return data
 
     def users(self, name: str = "") -> list[dict]:
@@ -223,7 +228,12 @@ _BUYER_MAP_FILE = "user_assign_buyers.json"
 
 
 class NeedEmail(Exception):
-    """У выбранного байера в хабе ещё нет пользователя: нужна его почта (один раз)."""
+    """Почту байера надо ввести руками: пользователя в хабе ещё нет, либо имя носят несколько юзеров."""
+
+    def __init__(self, buyer: str = "", ambiguous: bool = False):
+        super().__init__(buyer)
+        self.buyer = buyer
+        self.ambiguous = ambiguous
 
 
 def _buyer_key(name: str) -> str:
@@ -244,12 +254,13 @@ def _load_buyer_map() -> dict:
         return {}
 
 
-def remember_buyer(buyer: str, email: str) -> None:
-    """Запомнить на этой машине «имя байера → почта». Страховка на случай, когда имя из Google
-    в хабе отличается от имени в «Logged as» и поиск по имени не находит юзера."""
+def remember_buyer(buyer: str, email: str) -> bool:
+    """Запомнить на этой машине «имя байера → почта» (новая почта заменяет прежнюю). Страховка на случай,
+    когда имя из Google в хабе отличается от имени в «Logged as» и поиск по имени не находит юзера.
+    True — записано."""
     key = _buyer_key(buyer)
     if not key or not clean_email(email):
-        return
+        return False
     try:
         from config.paths import _atomic_write
 
@@ -258,8 +269,9 @@ def remember_buyer(buyer: str, email: str) -> None:
         path = _buyer_map_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
-    except Exception:  # noqa: BLE001 - запоминание необязательно
-        pass
+        return True
+    except Exception:  # noqa: BLE001 - при назначении запоминание необязательно
+        return False
 
 
 def find_user_email(client: "HubClient", buyer: str, email_hint: str = "") -> str:
@@ -267,16 +279,19 @@ def find_user_email(client: "HubClient", buyer: str, email_hint: str = "") -> st
 
     Порядок: почта, которую только что ввёл владелец; запомненная на машине; поиск в хабе по имени
     (совпадение без учёта регистра). Нет нигде — `NeedEmail`. Несколько юзеров с одним именем —
-    `HubError`: угадывать нельзя."""
+    тоже `NeedEmail(ambiguous=True)`: угадывать нельзя, почту вводят руками (ACL-2924), и она запоминается."""
     hint = clean_email(email_hint)
     if hint:
         return hint
     remembered = _load_buyer_map().get(_buyer_key(buyer), "")
     if clean_email(remembered):
         return clean_email(remembered)
-    found = [u for u in client.users(buyer) if clean_email(u.get("email", ""))]
+    # Старый хаб игнорирует ?name= и отдаёт всех: имя сверяем сами, точно и без учёта регистра.
+    want = _buyer_key(buyer)
+    found = [u for u in client.users(buyer)
+             if clean_email(u.get("email", "")) and _buyer_key(str(u.get("name") or "")) == want]
     if len(found) > 1:
-        raise HubError(f"Several hub users are named \"{buyer}\". Pick the buyer's email by hand.")
+        raise NeedEmail(buyer, ambiguous=True)
     if not found:
         raise NeedEmail(buyer)
     return clean_email(found[0]["email"])
