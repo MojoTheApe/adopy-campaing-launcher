@@ -282,6 +282,25 @@ def test_publish_targeting_has_no_flexible_spec_when_every_term_is_removed(tmp_p
     assert d.ad_sets[0].targeting_label == "Zzzz", "the draft keeps the term"
 
 
+@pytest.mark.parametrize("exc", [OSError("disk full"), ValueError("bad row")])
+def test_a_failed_remember_still_uses_the_near_match(tmp_path, exc):
+    store = _store(tmp_path)
+
+    def boom(*a, **k):
+        raise exc
+    store.put = boom
+    r = cr.TargetingResolver(FakeSearch(interests=NEAR), store)
+    assert r.interests([["forex trading"]]) == [{"interests": [{"id": "6", "name": "Forex Trading Tips"}]}]
+    assert r.targeting_notes() == ["Used 'Forex Trading Tips' for 'forex trading'"]
+
+
+def test_check_plan_names_the_ad_set_once_when_nothing_is_left(tmp_path):
+    out, got = _audit(TargetMeta(), tmp_path, "Zzzz", _store(tmp_path))
+    lines = [w for w in out.warnings if w.startswith("No detailed targeting left on this ad set")]
+    assert len(lines) == 1 and "(" in lines[0], out.warnings
+    assert got["interests_resolve"]["detail"].count("No detailed targeting left on this ad set") == 1
+
+
 def test_the_library_term_is_not_touched_by_the_removal(tmp_path):
     groups = [["Zzzz"], ["Yyyy"]]
     r = cr.TargetingResolver(FakeSearch(), _store(tmp_path))

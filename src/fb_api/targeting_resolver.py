@@ -769,7 +769,10 @@ class TermResolver:
         """Близкое совпадение: запомнить так же, как кнопка Confirm, и взять. Поведение чужого вида - никогда."""
         if cand["type"] == "behaviors":
             return None
-        self.store.put(term, id=cand["id"], type=cand["type"], name=cand["name"], picks=cand.get("picks"))
+        try:
+            self.store.put(term, id=cand["id"], type=cand["type"], name=cand["name"], picks=cand.get("picks"))
+        except (OSError, ValueError):
+            pass    # не удалось запомнить - пик всё равно берём, задание не падает
         self._note(f"Used '{cand['name']}' for '{term}'")
         return picks_of(cand)
 

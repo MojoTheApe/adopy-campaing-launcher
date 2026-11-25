@@ -823,7 +823,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     def interests() -> None:
         for s in plan.ad_sets:
             if s.interest_groups:
-                resolver.interests(s.interest_groups)
+                resolver.interests(s.interest_groups, s.name)
         put_resolved()
         put("interests_confirmed", OK)
 
