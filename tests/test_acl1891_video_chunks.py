@@ -537,19 +537,9 @@ def test_chunks_and_the_rest_of_the_plan_share_one_budget_and_the_refusal_comes_
 
 def test_the_default_budget_fits_a_typical_big_video_and_the_largest(tmp_path):
     """Бюджет считается по плану (ACL-1768): кусков и остальной кампании вместе - не больше него."""
-    import tests.test_acl1768_ad_sets as T
-    from src.web import publish_api
-
-    one = T._draft(tmp_path, sets=2, ads=1)
-    one.ad_sets = one.ad_sets[:1]
-    plan = cr.plan_from_draft(one)
-    budget, refusal = publish_api.create_call_budget(plan)
-    rest = cr.estimate_create_calls(plan)
-    assert refusal == ""
-    # 247 МБ = 31 кусок + 3: влезает. ACL-2370: самый большой файл (1,5 ГБ = 195 вызовов) тоже принимается
-    # по умолчанию - куски входят в бюджет плана; отказ - для двух таких видео сразу (test_acl2370_chunk_budget).
-    assert cr.upload_calls(247 * 1024 * 1024, worker=False) + rest <= budget
-    assert cr.upload_calls(cr.VIDEO_MAX_BYTES_STAGED, worker=False) + rest <= publish_api.DEFAULT_CREATE_MAX_CALLS + 90
+    # ACL-2668 (решение 8): своего бюджета вызовов на кампанию нет - куски считаются, но не ограничиваются.
+    assert cr.upload_calls(247 * 1024 * 1024, worker=False) == 31 + 3
+    assert cr.upload_calls(cr.VIDEO_MAX_BYTES_STAGED, worker=False) > 150
 
 
 # ───────────────────────── мутации: охранники обязаны падать ─────────────────────────

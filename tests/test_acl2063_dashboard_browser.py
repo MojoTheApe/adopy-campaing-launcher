@@ -141,6 +141,8 @@ class Dashboard:
 @pytest.fixture
 def dashboard(tmp_path, monkeypatch):
     from src.web import app as web
+    from src.fb_api import account_blocks
+    monkeypatch.setattr(account_blocks, '_PATH_OVERRIDE', tmp_path / 'account_holds.json')    # never the machine's real holds
     site = Dashboard(web, monkeypatch, tmp_path)
     with sync_playwright() as pw:
         browser = launch_chromium(pw)
@@ -158,7 +160,7 @@ def dashboard(tmp_path, monkeypatch):
 def wait_ready(page):
     # ACL-2742: сразу после смены адреса predicate попадает в новый документ до
     # разбора <body>, где `.amap-campaigns` ещё нет, — отсюда «reading '_hc'» у null.
-    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state.rows.Acc")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.rows?.Acc")
 
 
 def apply_period(page, day, span=''):
@@ -235,8 +237,8 @@ def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashbo
     assert not retry.is_visible() and site.errors == []
 
 
-def test_a_checkpoint_on_one_account_never_stops_the_other_accounts_and_retry_reads_only_it(dashboard):
-    """ACL-2653/2660: the lock is that account's own state; the queue goes on, Retry reads the same account."""
+def test_checkpoint_shows_on_its_account_only_and_other_reads_continue(dashboard):
+    # ACL-2661: a checkpoint holds only its own account. No page banner, no machine-wide halt.
     site, page = dashboard
     site.checkpoint.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
@@ -244,12 +246,13 @@ def test_a_checkpoint_on_one_account_never_stops_the_other_accounts_and_retry_re
     page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
     assert sorted(a for a, _ in site.reads) == ['Acc', 'Fresh']
     assert site.q.state()['halt'] is None and site.q.state()['queued'] == []
-    assert page.locator('#account-refresh-status').count() == 1
+    assert page.locator('#account-refresh-status[role=alert]').count() == 0
+    assert page.locator('#account-lock-status').count() == 0
     site.checkpoint.clear()
     page.locator('tr:has(td[data-account="Acc"]) button.hc-rc').click()
     page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
-    assert ('Acc', 'retry') in site.reads and [a for a, _ in site.reads].count('Fresh') == 1
-    assert site.q.state()['halt'] is None and site.errors == []
+    assert [r for r in site.reads if r[0] == 'Acc'][-1] == ('Acc', 'retry')
+    assert [a for a, _ in site.reads].count('Fresh') == 1 and site.errors == []
 
 
 @pytest.mark.parametrize('width', [1280, 390])

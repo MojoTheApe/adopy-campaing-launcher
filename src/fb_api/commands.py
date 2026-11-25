@@ -33,7 +33,7 @@ from contextlib import AbstractContextManager
 import logging
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from src.fb_api import write_policy as _wp
 from src.fb_api.creator import ZERO_DECIMAL, budget_minor
@@ -50,8 +50,6 @@ FINAL_STATES = frozenset({SUCCEEDED, FAILED, UNKNOWN})
 
 LEVELS = ("campaign", "adset", "ad")
 COMMANDS = ("set_status", "set_budget", "set_bid")
-#: Сколько объектов за одну команду: вызовов на объект — чтение, запись, сверка.
-MAX_TARGETS = 20
 #: Сколько живёт превью, секунд.
 PREVIEW_TTL_S = 900.0
 #: Пауза перед сверкой записи без ответа: запрос мог ещё лететь.
@@ -66,7 +64,7 @@ AUTOMATIC_BID_TEXT = "Automatic · no manual bid"
 READ_FIELDS = {
     "campaign": "name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_strategy",
     "adset": ("name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_amount,"
-              "bid_strategy,campaign_id,campaign{id,name,status,effective_status,daily_budget,bid_strategy}"),
+              "bid_strategy,campaign_id,campaign{id,name,status,effective_status,daily_budget,lifetime_budget,bid_strategy}"),
     "ad": ("name,account_id,status,effective_status,adset_id,campaign_id,"
            "adset{id,name,status,effective_status},campaign{id,name,status,effective_status}"),
 }
@@ -292,8 +290,6 @@ def clean_actor(actor: Any) -> str:
 def parse_targets(raw: Any) -> list[dict]:
     if not isinstance(raw, list) or not raw:
         raise CommandRefused("Pick at least one campaign, ad set or ad.")
-    if len(raw) > MAX_TARGETS:
-        raise CommandRefused(f"At most {MAX_TARGETS} objects per command.")
     seen: set[str] = set()
     out: list[dict] = []
     for item in raw:
@@ -361,6 +357,7 @@ def read_object(client: Any, act: str, level: str, oid: str) -> dict:
                             "status": str(p.get("status") or ""),
                             "effective_status": str(p.get("effective_status") or ""),
                             "daily_budget": _int(p.get("daily_budget")),
+                            "lifetime_budget": _int(p.get("lifetime_budget")),
                             "bid_strategy": str(p.get("bid_strategy") or "")})
     return {"id": oid, "level": level, "name": str(raw.get("name") or oid)[:160],
             "status": str(raw.get("status") or ""),
@@ -372,11 +369,11 @@ def read_object(client: Any, act: str, level: str, oid: str) -> dict:
             "parents": parents}
 
 
-def current_value(command: str, snap: dict) -> Any:
+def current_value(command: str, snap: dict, field: str = "daily_budget") -> Any:
     if command == "set_status":
         return snap["status"]
     if command == "set_budget":
-        return snap["daily_budget"]
+        return snap[field if field in ("daily_budget", "lifetime_budget") else "daily_budget"]
     return snap["bid_amount"]
 
 
@@ -412,18 +409,20 @@ def plan_one(command: str, snap: dict, new: Any, currency: str) -> tuple[dict | 
     if command == "set_budget":
         if level == "ad":
             return None, "Ads have no budget"
-        if snap["lifetime_budget"]:
-            return None, "Lifetime budget is not supported here"
-        before = snap["daily_budget"]
+        # Дневной бюджет приоритетнее; иначе объект владеет lifetime-бюджетом (как в bulk_edit).
+        field = "daily_budget" if snap["daily_budget"] else "lifetime_budget" if snap["lifetime_budget"] else ""
+        before = snap[field] if field else None
         if not before:
             camp = next((p for p in snap["parents"] if p["level"] == "campaign"), None)
-            if level == "adset" and camp and camp["daily_budget"]:
+            if level == "adset" and camp and (camp["daily_budget"] or camp.get("lifetime_budget")):
                 return None, "Budget is set on the campaign"
             return None, "No daily budget on this object"
         if before == new:
             return None, "Already at this budget"
-        entry = {**head, "field": "daily_budget", "before": before, "after": new,
-                 "before_display": fmt_minor(before, currency), "after_display": fmt_minor(new, currency),
+        kind = " lifetime" if field == "lifetime_budget" else ""
+        entry = {**head, "field": field, "before": before, "after": new,
+                 "before_display": fmt_minor(before, currency) + kind,
+                 "after_display": fmt_minor(new, currency) + kind,
                  "constraints": []}
         return entry, ""
     # set_bid
@@ -485,15 +484,30 @@ def call_ceiling() -> int:
 
 
 def call_budget(n_targets: int) -> int:
-    """Вызовы на команду: кабинет + чтение, запись и сверка на каждый объект + запас.
+    """Вызовы на кусок команды: кабинет + чтение, запись и сверка на каждый объект + запас.
 
-    Не выше потолка оператора: команда, которой нужно больше, отказывается в превью.
+    Не выше потолка оператора: потолок теперь на кусок, а не на всю команду (ACL-2668, решение 30).
     """
     return min(1 + 3 * n_targets + 6, call_ceiling())
 
 
-def max_targets_for_ceiling() -> int:
+def chunk_size() -> int:
+    """Сколько объектов в одном куске: столько, сколько влезает в потолок вызовов."""
     return max(1, (call_ceiling() - 1) // 3)
+
+
+def _in_chunks(client: Any, items: list) -> Iterator:
+    """Объекты по кускам; перед каждым куском — свежий бюджет вызовов на этот кусок.
+
+    ACL-2668, решение 30 (владелец, 16.11): число объектов в команде не ограничено —
+    ACL сам проходит их кусками, ничего не спрашивая. Пауза между вызовами Graph
+    (`min_interval_s` клиента) остаётся как была. Стопы Meta `reset_budget` не снимает.
+    """
+    size = chunk_size()
+    for start in range(0, len(items), size):
+        chunk = items[start:start + size]
+        client.reset_budget(call_budget(len(chunk)))
+        yield from chunk
 
 
 def preview(store: OperationStore, open_session: OpenSession, *, account: str, actor: str,
@@ -504,10 +518,6 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
     if not account:
         raise CommandRefused("Pick an account.")
     items = parse_targets(targets)
-    if len(items) > max_targets_for_ceiling():
-        raise CommandRefused(
-            f"At most {max_targets_for_ceiling()} objects per command with the current call limit "
-            f"({MAX_CALLS_ENV}={call_ceiling()}). Pick fewer objects or split the command.")
     if command == "set_status":
         value = str(value or "").strip()
         if value not in _wp.OBJECT_STATUSES:
@@ -518,7 +528,7 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
             raise CommandRefused("Enter a positive amount with at most two decimals.")
     with open_session(account, False) as sess:
         client = sess.client
-        client.reset_budget(call_budget(len(items)))
+        client.reset_budget(call_budget(min(len(items), chunk_size())))
         currency, status = _check_account(client, sess.act)
         if command == "set_status" and value == "ACTIVE" and status != 1:
             raise CommandRefused("The ad account is not active, so nothing can be switched on.",
@@ -526,7 +536,7 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
         new: Any = value if command == "set_status" else parse_money(value, currency)
         affected: list[dict] = []
         skipped: list[dict] = []
-        for t in items:
+        for t in _in_chunks(client, items):
             try:
                 snap = read_object(client, sess.act, t["level"], t["id"])
             except GraphError as exc:
@@ -535,7 +545,7 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
                                           f"(Graph error {exc.code})"})
                 continue
             saved = (baseline or {}).get(t["level"] + ":" + t["id"], {})
-            for field in ("status", "daily_budget", "bid_amount", "bid_strategy"):
+            for field in ("status", "daily_budget", "lifetime_budget", "bid_amount", "bid_strategy"):
                 known = saved.get(field)
                 if known not in (None, "") and snap.get(field) != known:
                     raise CommandRefused(
@@ -748,7 +758,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
                              status=409, code="stale")
     if not getattr(client, "allow_writes", False):
         raise CommandRefused("This session cannot write.")
-    client.reset_budget(call_budget(len(op["affected"])))
+    client.reset_budget(call_budget(min(len(op["affected"]), chunk_size())))
     command, currency = op["command"], op["currency"]
     _currency, acc_status = _check_account(client, act, expect_currency=currency)
     if command == "set_status" and op["value"] == "ACTIVE" and acc_status != 1:
@@ -756,14 +766,14 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
                              status=409, code="stale")
 
     # 1) Перечитать ВСЁ до первой записи: изменилось хоть что-то — не пишем ничего.
-    for item in op["affected"]:
+    for item in _in_chunks(client, op["affected"]):
         snap = read_object(client, act, item["level"], item["id"])
         new = item["after"]
         entry, why = plan_one(command, snap, new, currency)
         if (entry is None or entry["before"] != item["before"] or entry["after"] != item["after"]
                 or entry["constraints"] != item["constraints"]
                 or entry.get("strategy") != item.get("strategy")):
-            now_value = current_value(command, snap)
+            now_value = current_value(command, snap, item["field"])
             item["note"] = (f"was {item['before_display']}, now "
                             f"{why or _display(command, now_value, currency)}")
             _fail_all(op, f"{LEVEL_WORD[item['level']]} \"{item['name']}\" changed since the "
@@ -774,7 +784,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
     # 2) Одна запись на объект. Первая неудача — остальные не пробуем.
     stop_rest = False
     history_blocked = False   # локально: флаг не попадает ни в журнал, ни в снимки
-    for item in op["affected"]:
+    for item in _in_chunks(client, op["affected"]):
         if stop_rest:
             item["result"] = "not_attempted"
             continue
@@ -799,7 +809,8 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
             stop_rest = True
         except GraphError as exc:
             item["result"], item["note"] = "refused", f"Meta refused: {exc}"[:240]
-            stop_rest = True
+            # ACL-2806: отказ Meta по сумме lifetime-бюджета остаётся на строке объекта, остальные идут дальше.
+            stop_rest = item["field"] != "lifetime_budget"
         except (GraphStop, WritesBlocked, ValueError) as exc:
             item["result"], item["note"] = "not_sent", f"Not sent: {exc}"[:240]
             stop_rest = True
@@ -808,7 +819,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
     # 3) Сверка чтением того, что ушло (или могло уйти).
     op["state"], op["message"] = VERIFYING, "Reading the values back from Meta"
     store.try_save(op)
-    for item in op["affected"]:
+    for item in _in_chunks(client, op["affected"]):
         if item["result"] not in ("sent", "unknown"):
             continue
         was_unknown = item["result"] == "unknown"
@@ -820,7 +831,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
             item["result"] = "unknown"
             item["note"] = f"Could not read it back: {exc}"[:240]
             continue
-        saved = current_value(command, snap)
+        saved = current_value(command, snap, item["field"])
         item["saved"] = saved
         if saved == item["after"]:
             item["result"] = "saved"

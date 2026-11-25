@@ -319,32 +319,40 @@ def test_reads_match_a_real_client_page_by_page(tmp_path):
     assert r.reads == client.calls == meta.gets and meta.gets >= 5
 
 
-def test_per_term_cap_is_eight_reads_and_the_result_is_unknown(tmp_path):
+def test_acl2668_a_term_with_many_rows_runs_every_search_without_a_term_cap(tmp_path):
+    # ACL-2668 #36: потолка чтений на термин нет - все поиски идут до конца, результат не «unknown».
     rows = [{"id": str(i), "name": f"Other {i}"} for i in range(6)]
     c = FakeSearch(interests={"Nothing": rows}, behaviors=rows, typed={("adworkposition", "Nothing"): rows})
-    r = _resolver(c, tmp_path, term_cap=3)
+    r = _resolver(c, tmp_path)
     res = _one(r, "Nothing")
-    assert res["state"] == "unknown" and res["reason"] == tr.UNKNOWN_MESSAGE
-    assert r.reads <= 1 + 3 + 3, "пакет + не больше потолка термина + общий список поведений"
+    assert res["state"] == "unresolved" and res["reason"] != tr.UNKNOWN_MESSAGE
+    assert {"adinterest", "adTargetingCategory", "adworkposition", "adworkemployer",
+            "adeducationschool", "adeducationmajor"} <= set(c.types())
+    assert r.reads == c.calls
 
 
-def test_unknown_blocks_with_the_press_check_plan_again_message(tmp_path):
+def test_unknown_blocks_with_the_press_check_plan_again_message(tmp_path, monkeypatch):
     c = FakeSearch()
     r = cr.TargetingResolver(c, _store(tmp_path))
-    r.terms.term_cap = 1
+    monkeypatch.setattr(r.terms, "_find", _unknown_find)
     with pytest.raises(cr.TargetingUnresolved) as ei:
         r.interests([["Nothing close"]])
     assert str(ei.value) == "Couldn't check all interests — press Check plan again"
 
 
-def test_client_reserve_and_job_cap_stop_the_search(tmp_path):
+def test_acl2668_the_resolver_does_not_stop_at_the_clients_call_ceiling(tmp_path):
+    # Резолвер не сверяется с потолком клиента (прежний CLIENT_RESERVE): все термины - за один проход.
     c = FakeSearch(max_calls=5)
     r = _resolver(c, tmp_path)
-    res = _one(r, "Nothing here")
-    assert c.calls <= 5 - tr.CLIENT_RESERVE and res["state"] == "unknown"
-    j = _resolver(FakeSearch(), tmp_path, job_cap=2)
-    assert _one(j, "One")["state"] == "unknown" or j.reads <= 2
-    assert j.reads <= 2
+    terms = [f"Nothing here {i}" for i in range(5)]
+    r.prefetch(terms)
+    assert [r.resolve(t)["state"] for t in terms] == ["unresolved"] * 5
+    assert c.calls > 5 and c.types().count("adinterest") == 5
+
+
+def _unknown_find(term):
+    """Состояние «unknown» резолвер больше не отдаёт (ACL-2668 #36); его читателей проверяем подменой."""
+    return {"term": term, "state": "unknown", "picks": [], "candidates": [], "reason": tr.UNKNOWN_MESSAGE}
 
 
 def test_each_term_is_resolved_once_per_job(tmp_path):
@@ -442,9 +450,10 @@ def test_preflight_passes_after_confirmation(tmp_path):
     assert out.targeting[0]["state"] == "confirmed"
 
 
-def test_preflight_budget_ran_out_is_unknown_and_the_plan_still_blocks(tmp_path):
+def test_preflight_unknown_term_is_unknown_and_the_plan_still_blocks(tmp_path, monkeypatch):
+    monkeypatch.setattr(tr.TermResolver, "_find", lambda self, term: _unknown_find(term))
     meta = TargetMeta()
-    out, got = _audit(meta, tmp_path, "Nothing close", _store(tmp_path), max_calls=9)
+    out, got = _audit(meta, tmp_path, "Nothing close", _store(tmp_path))
     assert got["interests_resolve"]["status"] == "unknown"
     assert "press Check plan again" in got["interests_resolve"]["detail"]
     assert out.stop_kind == "plan" and "press Check plan again" in out.error, "план с ошибкой: Publish не пройдёт"
@@ -616,36 +625,42 @@ def test_three_missing_terms_and_a_near_composite_all_resolve_within_budget(tmp_
     assert "unknown" not in states.values(), states
     assert states["Zzzz1"] == states["Zzzz2"] == states["Zzzz3"] == "unresolved"
     assert states["Alpari or Plus500"] in ("pending", "unresolved")
-    assert r.reads <= tr.JOB_READ_ABS_CAP
 
 
 def cr_budget():
     from src.web import publish_api
-    return publish_api.PLAN_PREFLIGHT_MAX_CALLS
+    return publish_api.PLAN_MAX_CALLS
 
 
-def test_job_cap_has_a_sane_absolute_ceiling(tmp_path):
+def test_acl2668_check_plan_checks_forty_missing_terms_in_one_pass(tmp_path):
+    # Прежний потолок задания (90 чтений) давал «press Check plan again»; теперь все 40 - за один проход.
     c = _client_with_budget(FakeSearch(), cr_budget())
     r = _resolver(c, tmp_path)
-    r.prefetch([f"Missing {i}" for i in range(40)])
-    assert r.job_cap == tr.JOB_READ_ABS_CAP
-    assert cr_budget() >= tr.JOB_READ_ABS_CAP + 20, "the client allowance sits above the resolver ceiling"
+    terms = [f"Missing {i}" for i in range(40)]
+    r.prefetch(terms)
+    assert {r.resolve(t)["state"] for t in terms} == {"unresolved"}
+    assert c.types().count("adinterest") == 40 and r.reads > 90
+    assert not hasattr(tr, "JOB_READ_ABS_CAP") and not hasattr(tr, "CLIENT_RESERVE")
 
 
-def test_retry_after_unknown_makes_progress_through_the_shared_cache(tmp_path):
+def test_acl2668_check_plan_client_has_no_call_ceiling():
+    from src.web import publish_api
+    assert publish_api.PLAN_MAX_CALLS >= 10**9
+    assert publish_api.PLAN_PREFLIGHT_MAX_CALLS == publish_api.PLAN_MAX_CALLS
+
+
+def test_acl2668_a_second_check_plan_reads_nothing_through_the_shared_cache(tmp_path):
     cache = tr.SearchCache()
     terms = [f"Zzzz{i}" for i in range(4)]
     first = FakeSearch()
-    r1 = tr.TermResolver(first, _store(tmp_path), job_cap=14, cache=cache, scope="act_1")
+    r1 = tr.TermResolver(first, _store(tmp_path), cache=cache, scope="act_1")
     r1.prefetch(terms)
-    s1 = [r1.resolve(t)["state"] for t in terms]
-    assert "unknown" in s1
+    assert [r1.resolve(t)["state"] for t in terms] == ["unresolved"] * 4
     second = FakeSearch()
-    r2 = tr.TermResolver(second, _store(tmp_path), job_cap=14, cache=cache, scope="act_1")
+    r2 = tr.TermResolver(second, _store(tmp_path), cache=cache, scope="act_1")
     r2.prefetch(terms)
-    s2 = [r2.resolve(t)["state"] for t in terms]
-    assert s2.count("unknown") < s1.count("unknown"), "the retry must go further than the first run"
-    assert second.calls < first.calls + 1 and r2.reads <= 14
+    assert [r2.resolve(t)["state"] for t in terms] == ["unresolved"] * 4
+    assert first.calls > 0 and second.calls == 0 and r2.reads == 0
 
 
 def test_search_cache_expires_and_is_scoped_per_account(tmp_path):
@@ -683,17 +698,14 @@ def test_concurrent_confirms_do_not_lose_entries(tmp_path):
     assert len(store.entries()) == 12
 
 
-def test_guard_reports_not_found_terms_even_when_another_term_is_unknown(tmp_path):
-    seen = set()
-    for mc in range(9, 40):
-        out, got = _audit(TargetMeta(), tmp_path, "Nothing close, Also gone", _store(tmp_path), max_calls=mc)
-        v = got["interests_resolve"]
-        if "press Check plan again" in v["detail"]:
-            seen.add(v["status"])
-            if v["status"] == "error":
-                assert "Nothing close" in v["detail"], "the term already known as not found stays visible"
-                return
-    pytest.fail(f"no budget stopped the job halfway with a not-found term reported; statuses {seen}")
+def test_guard_reports_not_found_terms_even_when_another_term_is_unknown(tmp_path, monkeypatch):
+    real = tr.TermResolver._find
+    monkeypatch.setattr(tr.TermResolver, "_find",
+                        lambda self, term: _unknown_find(term) if term == "Also gone" else real(self, term))
+    out, got = _audit(TargetMeta(), tmp_path, "Nothing close, Also gone", _store(tmp_path))
+    v = got["interests_resolve"]
+    assert v["status"] == "error" and "press Check plan again" in v["detail"]
+    assert "Nothing close" in v["detail"], "the term already known as not found stays visible"
 
 
 def test_search_cache_prunes_expired_entries_on_store():
@@ -845,22 +857,15 @@ def test_rows_of_other_types_are_never_picked(tmp_path):
     assert "targetingsearch" in c.types()                                  # поиск был, строки отвергнуты
 
 
-def test_the_job_budget_grows_by_one_read_per_term_when_the_account_is_known(tmp_path):
-    base = _resolver(FakeSearch(), tmp_path)
-    acct = _resolver(FakeSearch(), tmp_path, act=ACT_ID)
-    assert acct.per_term_reads == base.per_term_reads + 1 == tr.JOB_READ_PER_TERM + 1
-    assert acct.job_cap == base.job_cap + 1
-    names = [f"Nowhere topic {i}" for i in range(8)]
-    base.prefetch(names)
-    acct.prefetch(names)
-    assert acct.job_cap == tr.JOB_READ_BASE + (tr.JOB_READ_PER_TERM + 1) * 8
-    assert base.job_cap == tr.JOB_READ_BASE + tr.JOB_READ_PER_TERM * 8
-
-
-def test_job_cap_keeps_the_absolute_ceiling_with_the_extra_read(tmp_path):
-    r = _resolver(FakeSearch(), tmp_path, act=ACT_ID)
-    r.prefetch([f"Topic number {i}" for i in range(200)])
-    assert r.job_cap == tr.JOB_READ_ABS_CAP
+def test_acl2668_many_terms_with_the_account_search_all_resolve_in_one_pass(tmp_path):
+    c = FakeAccountSearch()
+    r = _resolver(c, tmp_path, act=ACT_ID)
+    names = [f"Topic number {i}" for i in range(30)]
+    r.prefetch(names)
+    out = [r.resolve(n) for n in names]
+    assert {x["state"] for x in out} == {"unresolved"}
+    assert not any(x["reason"] == tr.UNKNOWN_MESSAGE for x in out)
+    assert c.types().count("targetingsearch") == 30
 
 
 def test_eight_terms_found_nowhere_are_not_unknown_when_interest_search_reads_two_pages(tmp_path):
@@ -873,7 +878,6 @@ def test_eight_terms_found_nowhere_are_not_unknown_when_interest_search_reads_tw
     assert [x["state"] for x in out] == ["unresolved"] * 8
     assert not any(x["reason"] == tr.UNKNOWN_MESSAGE for x in out)
     assert c.types().count("targetingsearch") == 8
-    assert r.reads <= r.job_cap
 
 
 def test_the_read_context_names_the_targetingsearch_operation():

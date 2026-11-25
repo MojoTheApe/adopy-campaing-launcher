@@ -27,6 +27,9 @@ class CoordinationError(RuntimeError):
 
 _ACTIVE = threading.local()
 
+#: ACL-2668: единственный вид стопа, который держит всю машину (Multilogin, выключенный API, общее состояние).
+MACHINE_STOP_KIND = "global"
+
 
 def default_root() -> Path:
     if os.name != "nt":
@@ -225,7 +228,6 @@ _SAFE_FAILURES = {
     "mlx_session_lost": "Multilogin lost its session. Reopen Multilogin, then press Retry.",
     "mlx_token_expired": "The Multilogin token has expired. Update it in Multilogin, then press Retry.",
     "mlx_token_workspace": "The Multilogin token belongs to another workspace. Fix it, then press Retry.",
-    "call_budget": "The call budget for account reads is used up. Raise the limit, then press Retry.",
     "checkpoint": "This profile is on a Facebook checkpoint. Solve it inside Multilogin, then press Retry.",
     "rate_limited": "Meta asked to slow down. Wait for the account-read cooldown before retrying.",
     "policy_block": "Meta refused the account-list requests. Wait for the cooldown before retrying.",
@@ -402,6 +404,8 @@ class MachineStore:
         self.path = self.root / "state.json"
         self.runs_path = self.root / "runs.json"
         self.marker = self.root / "initialized.json"
+        #: ACL-2668: the last `halt()` saw per-account stops left by older builds (to be pruned).
+        self.stale_stops = False
 
     def lease(self, name: str):
         from src.analysis_agent.account_refresh_state import lease
@@ -739,15 +743,18 @@ class MachineStore:
         with self.transaction() as state:
             state["stops"] = {k: v for k, v in state["stops"].items()
                               if v["until"] is None or now < v["until"]}
+            # ACL-2668 (решение 1): машину останавливает только поломка машины (вид `global`).
+            # Стопы одного аккаунта (чекпоинт, лимит Meta, политика, потолок вызовов), записанные
+            # прежними сборками, ничего не держат; их убирает `prune_stops` (чекпоинт -> удержание профиля).
+            self.stale_stops = any(v["kind"] != MACHINE_STOP_KIND for v in state["stops"].values())
             halt = self._selected_stop(state)
             state["halt"] = halt
             return dict(halt) if halt else None
 
     @staticmethod
     def _selected_stop(state: dict) -> dict | None:
-        return min(state["stops"].values(), default=None,
-                   key=lambda h: (0 if h["kind"] == "checkpoint" else (1 if h["until"] is None else 2),
-                                  h["generation"]))
+        return min((h for h in state["stops"].values() if h["kind"] == MACHINE_STOP_KIND), default=None,
+                   key=lambda h: (0 if h["until"] is None else 1, h["generation"]))
 
     def stop_generation(self, key: str) -> int | None:
         with self.transaction() as state:
@@ -768,15 +775,17 @@ class MachineStore:
             return dropped
 
     def prune_stops(self) -> list[dict]:
-        """ACL-2653: drop every `checkpoint` stop, of any key (owner decision: a checkpoint never stops the queue;
-        it holds only its own profile, see `account_holds.json`).
+        """ACL-2653/ACL-2668: drop every per-account stop (any kind but `global`: checkpoint, rate limit, policy,
+        call budget), of any key. Owner decision: one account's problem never stops the queue; a checkpoint holds
+        only its own profile (`account_holds.json`), the others are shown on their own row.
 
         `state.json` is shared by all dashboards of the machine, so "removed" is never inferred from one config's
-        map: stops of other kinds go only through the explicit removal path (`drop_stops`).
+        map: `global` stops go only through the explicit removal path (`drop_stops`) or a successful read.
         The caller holds the machine read lease; the state transaction keeps the schema validation.
         """
         with self.transaction() as state:
-            dropped = [dict(v) for v in state["stops"].values() if v["kind"] == "checkpoint"]
+            dropped = [dict(v) for v in state["stops"].values() if v["kind"] != MACHINE_STOP_KIND]
+            self.stale_stops = False
             for item in dropped:
                 state["stops"].pop(item["key"], None)
             if dropped:
@@ -809,15 +818,12 @@ class MachineStore:
             state["results"][key] = _result_record(previous, key, payload, revision)
             if classify(snap) == "global":
                 reason, wait = _global_stop(snap)
-                old = state["stops"].get(key)
-                if not old or old["kind"] != "checkpoint" or _halt_kind(snap) == "checkpoint":
-                    state["stops"][key] = {"kind": _halt_kind(snap), "reason": reason,
-                                          "until": now + wait if wait else None,
-                                          "key": key, "generation": revision}
+                state["stops"][key] = {"kind": _halt_kind(snap), "reason": reason,
+                                      "until": now + wait if wait else None,
+                                      "key": key, "generation": revision}
             elif payload["ok"] and force:
                 halt = self._selected_stop(state)
-                if (halt and halt["generation"] == recovery
-                        and (halt["kind"] != "checkpoint" or halt["key"] == key)):
+                if halt and halt["generation"] == recovery:
                     state["stops"].pop(halt["key"], None)
                 own = state["stops"].get(key)
                 if own and own["generation"] == own_recovery:

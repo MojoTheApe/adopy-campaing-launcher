@@ -51,7 +51,12 @@ def test_stops_that_need_a_person_become_persisted_holds_without_a_timer(stop, k
     held = blocks.hold_of(KEY)
     assert held["kind"] == kind and held["code"] == code and held["label"] == "B97"
     msg, err = blocks.refusal(KEY, "B97", "publish")
-    assert err == "account_blocked" and "Nothing was created." in msg
+    assert err == "account_blocked"
+    # ACL-2847: a logged-out profile has one text everywhere and no "Nothing was created." suffix.
+    if kind == "logged_out":
+        assert msg == "Logged out of Facebook. Open the profile, log in to Ads Manager, then publish again."
+    else:
+        assert "Nothing was created." in msg
     assert "min" not in msg.lower().replace("minutes", "") or kind == "policy_block"   # no "waiting about N min"
     assert "waiting" not in msg.lower()
     if kind == "policy_block":
@@ -176,12 +181,18 @@ def test_the_1732_case_a_background_read_froze_and_a_publish_at_1734_explains_it
     api._FROZEN_RELEASED.add(key)                       # the replacement was already spent
     with blocks.problem_action("attention"):
         api._start_cooldown(key, PageUnresponsive("f"), "B97")
+    # ACL-2652: a frozen-tab hold is not a refusal for Publish / Check plan: it opens a fresh tab itself.
+    monkeypatch.setattr(publish_api.ApiPublisher, "_open_warm", lambda self, *a: (_ for _ in ()).throw(
+        publish_api.ApiPublishError("fresh tab attempted", code="page_unresponsive")))
     pub = publish_api.ApiPublisher()
     with pytest.raises(publish_api.ApiPublishError) as err:
         pub.open("B97")
-    text = str(err.value)
+    assert str(err.value) == "fresh tab attempted" and err.value.code == "page_unresponsive"
+    assert blocks.is_held(key)
+    # the refusal text of the hold itself (shown by Retry / reads) still explains it and is not account_blocked
+    text, code = blocks.refusal(key, "B97", "publish")
     assert "stopped answering during a background read" in text and "Nothing was created." in text
-    assert err.value.code == "account_blocked"
+    assert code == "page_unresponsive"
 
 
 # ───────────────────────── refusals in the read path ─────────────────────────
@@ -321,13 +332,13 @@ def test_a_hold_reads_as_an_endless_cooldown_and_the_refresh_queue_skips_automat
     from src.analysis_agent import account_refresh, account_spend
 
     monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
-    base = account_refresh.recently_failed("B97")
+    base = account_refresh._profile_held("B97")
     api._start_cooldown(KEY, Checkpoint("c"), "B97")
     left, kind = api._cooldown_state(KEY)
     assert left == float("inf") and kind == "checkpoint" and api._cooldown_left(KEY) == float("inf")
-    assert account_refresh.recently_failed("B97") is True                  # automatic requests are not queued
+    assert account_refresh._profile_held("B97") is True                  # automatic requests are not queued
     blocks.clear(KEY, "test")
-    assert api._cooldown_state(KEY) == (0.0, "") and account_refresh.recently_failed("B97") is base
+    assert api._cooldown_state(KEY) == (0.0, "") and account_refresh._profile_held("B97") is base
 
 
 # ───────────────────────── lazy frozen_error (finding 3) ─────────────────────────

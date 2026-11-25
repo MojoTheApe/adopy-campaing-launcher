@@ -41,7 +41,7 @@ def _checkpoint(account: str) -> ci.Snapshot:
     return ci.Snapshot(account=account, state="failed", error="The profile is on a Facebook checkpoint", stop="checkpoint")
 
 
-def _plant_stop(root, key: str, kind: str = "call_budget", until=None) -> None:
+def _plant_stop(root, key: str, kind: str = "global", until=None) -> None:   # ACL-2668: only machine stops halt
     with MachineStore(root).transaction() as state:
         state["revision"] += 1
         state["stops"][key] = {"kind": kind, "reason": "synthetic", "until": until, "key": key,
@@ -71,7 +71,7 @@ def test_a_checkpoint_publishes_no_machine_stop(tmp_path):
 
 
 def test_genuinely_global_stops_still_halt_everything(env):
-    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="call budget", error_code="call_budget")
+    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="Synthetic MLX", error_code="mlx_session_lost")
     q = _queue(env)
     q.request("A", "attention")
     q._drain_once()
@@ -86,7 +86,7 @@ def test_removing_an_account_clears_its_machine_stop_and_hold(tmp_path, monkeypa
     key = "b" * 64
     _plant_stop(tmp_path / "machine", key)
     other = "c" * 64
-    _plant_stop(tmp_path / "machine", other, kind="rate_limited", until=NOW + 600)
+    _plant_stop(tmp_path / "machine", other, until=NOW + 600)
     blocks.note_person_lock("prof-f94", "KLD_BFL_F94", "a background read")
     assert blocks.is_held("prof-f94")
     ar.forget_accounts({"KLD_BFL_F94": (key, "prof-f94")}, remaining=[])
@@ -103,20 +103,24 @@ def test_a_shared_profile_keeps_its_hold_while_another_label_uses_it(tmp_path, m
     assert blocks.is_held("prof-shared")
 
 
-def test_the_automatic_prune_drops_only_checkpoint_stops_never_other_kinds(dashboards):
-    """state.json is shared by all dashboards: a key unknown to THIS config's map is not "removed"."""
+def test_the_automatic_prune_drops_per_account_stops_never_machine_stops(dashboards):
+    """state.json is shared by all dashboards: a key unknown to THIS config's map is not "removed".
+
+    ACL-2668: per-account kinds left by older builds (checkpoint, policy, ...) go; a machine stop stays."""
     select, new, reads = dashboards
     q = new("one", ["A", "B"])
     select("one")
     root = q._machine.root
     foreign = "d" * 64                                         # a stop of another dashboard's account
-    _plant_stop(root, foreign, kind="policy_block", until=NOW + 1800)
+    _plant_stop(root, foreign, until=NOW + 1800)
     other_cp = "e" * 64
     _plant_stop(root, other_cp, kind="checkpoint")             # a checkpoint stop of any key goes
+    old_policy = "9" * 64
+    _plant_stop(root, old_policy, kind="policy_block", until=NOW + 1800)   # ACL-2668: so does an old Meta stop
     two = new("two", ["A"])                                    # a second config that does not map B
     st = two.state()
     stops = json.loads((root / "state.json").read_text())["stops"]
-    assert foreign in stops and other_cp not in stops
+    assert foreign in stops and other_cp not in stops and old_policy not in stops
     assert st["halt"] is not None and st["halt"]["key"] == foreign
 
 
@@ -326,7 +330,7 @@ def test_a_recent_or_unstamped_updating_row_is_left_alone_then_stamped(env):
 
 
 def test_a_queued_or_paused_row_is_never_expired_and_keeps_its_queue_entry(env):
-    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="call budget", error_code="call_budget")
+    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="Synthetic MLX", error_code="mlx_session_lost")
     q = _queue(env)
     q.request("A", "attention")
     q._drain_once()
@@ -370,7 +374,7 @@ def test_open_reads_status_now_while_another_profile_is_checkpointed_and_the_que
 
 def test_open_reads_even_through_a_hold_and_a_global_halt(env, monkeypatch):
     monkeypatch.setattr(ar, "_profile_held", lambda account: account == "B93")
-    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="call budget", error_code="call_budget")
+    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="Synthetic MLX", error_code="mlx_session_lost")
     q = _queue(env)
     q.request("A", "attention")
     q._drain_once()
@@ -437,7 +441,7 @@ def test_a_persons_open_is_read_past_an_untimed_stop_end_to_end(tmp_path):
     assert '{"action", "retry", "open"}' in src
     machine = MachineStore(tmp_path / "machine")
     key = "a" * 64
-    machine.publish(key, ci.Snapshot(account="A", state="failed", error="call budget", error_code="call_budget"), now=NOW)
+    machine.publish(key, ci.Snapshot(account="A", state="failed", error="Synthetic MLX", error_code="mlx_session_lost"), now=NOW)
     assert machine.halt(now=NOW)["until"] is None
     assert campaign_inventory is not None
 
@@ -447,11 +451,82 @@ def test_a_timed_stop_that_holds_back_a_persons_open_says_why_with_the_time(env)
     q = _queue(env)
     q.request("A", "attention")
     q._drain_once()
-    halt = q.state()["halt"]
-    assert halt and halt["until"] is not None
+    assert q.state()["halt"] is None          # ACL-2668: a Meta rate limit marks only A's row
+    halt = {"reason": "Synthetic timed machine stop.", "until": NOW + 600, "kind": "global", "key": "a" * 64}
     paused = ci.Snapshot(account="B", state="failed", error="x")
     paused._machine_paused = {**halt, "generation": 1}
     with q._state_guard():
         q._settle("B", "open", paused, False)
     row = q.state()["rows"]["B"]
     assert row["state"] == "failed" and "Until " in row["error"] and halt["reason"] in row["error"]
+
+
+# ───────── ACL-2841: login-page hold and Meta's own text ─────────
+
+LOGIN_URL = "https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2F"
+RECOVER_URL = "https://www.facebook.com/recover/initiate"
+
+
+@pytest.mark.parametrize("url", [LOGIN_URL, RECOVER_URL])
+def test_a_login_or_recover_tab_records_a_hold_shown_red_as_logged_out(url, monkeypatch):
+    import socket
+
+    def no_network(*a, **k):
+        raise AssertionError("nothing may be called")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    assert blocks.note_tab_url(KEY, LABEL, url, "Open profile") is True
+    held = blocks.hold_of(KEY)
+    assert blocks.is_person_lock(held) and held["page"] == "login"
+    hold = blocks.view({LABEL: KEY})[LABEL]
+    state = astate.account_state({"account": LABEL, "status": {}, "has_data": False, "hold": hold})
+    assert state["key"] == "issue"
+    assert state["status_line"].startswith("Logged out of Facebook")
+    assert "logged out of Facebook" in state["status_tip"]
+
+
+def test_the_row_shows_metas_title_and_falls_back_without_one():
+    assert blocks.note_tab_url(KEY, LABEL, CHECKPOINT_URL, "Open profile", "  Your account has been\n locked  ") is True
+    hold = blocks.view({LABEL: KEY})[LABEL]
+    assert hold["title"] == "Your account has been locked"
+    state = astate.account_state({"account": LABEL, "status": {}, "has_data": False, "hold": hold})
+    assert 'Facebook says: "Your account has been locked".' in state["status_tip"]
+    # No readable title: the current wording.
+    blocks.note_tab_url("k-nt", "NT", CHECKPOINT_URL, "Open profile", "")
+    plain = astate.account_state({"account": "NT", "status": {}, "has_data": False,
+                                  "hold": blocks.view({"NT": "k-nt"})["NT"]})
+    assert "Facebook says" not in plain["status_tip"] and "is locked" in plain["status_tip"]
+    blocks.note_tab_url("k-lg", "LG", LOGIN_URL, "Open profile", "")
+    login = astate.account_state({"account": "LG", "status": {}, "has_data": False,
+                                  "hold": blocks.view({"LG": "k-lg"})["LG"]})
+    assert "logged out of Facebook" in login["status_tip"]
+
+
+def test_a_later_sight_updates_the_title_and_keeps_the_first_date():
+    blocks.note_tab_url(KEY, LABEL, LOGIN_URL, "Open profile")
+    first = blocks.hold_of(KEY)["at"]
+    blocks.note_tab_url(KEY, LABEL, LOGIN_URL, "Open profile", "Log in to Facebook")
+    held = blocks.hold_of(KEY)
+    assert held["at"] == first and held["title"] == "Log in to Facebook" and held["page"] == "login"
+
+
+def test_open_profile_passes_the_tab_title_and_local_targets_read_it(monkeypatch):
+    from src.fb_api import warm
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_profile_id", lambda label: "pid")
+    monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
+    assert warm_api.note_tab_lock(LABEL, urls=[("about:blank", ""), (LOGIN_URL, "Log in to Facebook")]) is True
+    assert blocks.hold_of(KEY)["title"] == "Log in to Facebook"
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self):
+            return json.dumps([{"type": "page", "url": LOGIN_URL, "title": "Log in to Facebook"},
+                               {"type": "service_worker", "url": "x", "title": "y"}]).encode()
+
+    import urllib.request
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open", lambda self, req, timeout=None: Resp())
+    assert warm.local_page_targets(9222) == [(LOGIN_URL, "Log in to Facebook")]
+    assert warm.local_page_urls(9222) == [LOGIN_URL]

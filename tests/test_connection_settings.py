@@ -317,7 +317,7 @@ class LeadPublishTests(Base):
 
 
 class WizardTests(Base):
-    def test_wizard_lines_and_bi_makes_workbook_optional(self):
+    def test_wizard_lines_and_no_workbook_needed(self):
         import setup_wizard as sw
 
         lines = sw.connect_with_google(
@@ -331,9 +331,9 @@ class WizardTests(Base):
             "Team library: connected (3 targets, 5 texts)", "BI: connected (last data date 2026-10-28)"])
         self.assertTrue(all(l.ok for l in lines))
         self.assertIn(FAKE_TOKEN, self.env_text())
-        self.assertEqual(sw.validate_stats_workbook("", optional=True), "")
-        with self.assertRaises(sw.WizardValidationError):
-            sw.validate_stats_workbook("")  # required when BI is not connected
+        # ACL-2867: мастер больше не просит книгу Excel ни с BI, ни без него.
+        self.assertFalse(hasattr(sw, "validate_stats_workbook"))
+        self.assertEqual(sw.build_manual_setup(campaign_manager_name="Anna Smith").accounts, ())
 
     def test_wizard_no_access_shows_reason(self):
         import setup_wizard as sw
@@ -458,7 +458,7 @@ class StatusTests(Base):
         client.write_text('{"installed": {"client_id": "fake-id.apps.example"}}', encoding="utf-8")
         seen = {}
 
-        def fake(path, token, timeout_seconds=None):
+        def fake(path, token, timeout_seconds=None, **_kw):
             seen["t"] = timeout_seconds
             raise RuntimeError("timed out")
 

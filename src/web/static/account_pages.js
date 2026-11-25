@@ -56,8 +56,13 @@
   window.cbRefreshPages = function (slot, force, cachedOnly) {
     var key = account(slot);
     var known = states[key];
-    if (!key || (known && (known.state === 'loading' || (!force && !(known.state === 'not_loaded' && !cachedOnly))))) return;
+    if (!key) return;
+    // ACL-2896: идущее чтение профиля не дублируем; но ожидание ответа только из кэша не держит
+    // нажатие Refresh / поле: настоящее чтение стартует, поздний ответ кэша отбрасывается (states[key] !== request).
+    if (known && known.state === 'loading') { if (cachedOnly || !known.cachedOnly) return; }
+    else if (known && !force && !(known.state === 'not_loaded' && !cachedOnly)) return;
     var request = {state: 'loading', pages: []};
+    if (cachedOnly) request.cachedOnly = true;
     states[key] = request;
     paintAccount(key);
     var body = new FormData();

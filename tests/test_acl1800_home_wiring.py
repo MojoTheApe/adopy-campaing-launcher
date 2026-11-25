@@ -34,7 +34,7 @@ TEMPLATE = (ROOT / "src" / "web" / "templates" / "_campaign_table.html").read_te
 @pytest.mark.parametrize("backend,host,ok,code", [
     ("api", "127.0.0.1", True, ""), ("api", "localhost", True, ""),
     ("api", "0.0.0.0", False, "not_loopback"), ("api", "", False, "not_loopback"),
-    ("rpa", "127.0.0.1", False, "rpa_backend"), (None, "127.0.0.1", False, "rpa_backend"),
+    ("rpa", "127.0.0.1", False, "rpa_backend"), (None, "127.0.0.1", True, ""),
 ])
 def test_availability_says_why_commands_are_off(monkeypatch, backend, host, ok, code):
     from src.web import campaign_commands as cc
@@ -47,7 +47,8 @@ def test_availability_says_why_commands_are_off(monkeypatch, backend, host, ok, 
     monkeypatch.delenv("ACL_FB_API_MAX_CALLS", raising=False)
     got = cc.availability()
     assert got["available"] is ok and got["code"] == code
-    assert (got["max_targets"] == 7) if ok else (got["reason"] and got["max_targets"] == 0)
+    assert "max_targets" not in got                 # ACL-2668: потолка объектов на команду нет
+    assert ok or got["reason"]
 
 
 def test_availability_route_is_registered_before_the_op_route(monkeypatch):
@@ -102,7 +103,7 @@ root.document = { createElement: () => ({}), body: {}, getElementById: () => nul
 new Function('globalThis', 'window', src.replace(/\(typeof window[^\n]*$/m, '(globalThis);'))(root, root);
 const H = root.acmCommands.home;
 const IN = __INPUT__;
-const AV = { available: true, reason: '', max_targets: 7 };
+const AV = { available: true, reason: '' };
 const row = (o) => Object.assign({ level: 'adset', id: '2000001', account: 'Acc', status: 'off', status_raw: 'PAUSED',
   currency: 'USD', budget: { kind: 'daily', amount: 30 }, bid_strategy_raw: 'LOWEST_COST_WITH_BID_CAP', bid_amount: 1.5 }, o || {});
 const st = (r, a, av) => H.controlState(r, a, av === undefined ? AV : av);
@@ -138,9 +139,9 @@ const st = (r, a, av) => H.controlState(r, a, av === undefined ? AV : av);
   out.step = [H.stepValue(1.5, 1, 'USD'), H.stepValue(1.5, -1, 'USD'), H.stepValue(1000, 1, 'JPY'), H.stepValue(null, 1, 'USD')];
   // пакет: один аккаунт, потолок
   const rows = (n, acc) => Array.from({ length: n }, (_, i) => row({ id: String(1000001 + i), level: 'campaign', account: acc || 'Acc' }));
-  out.batch = { seven: H.batchPlan(rows(7), AV).ok, eight: H.batchPlan(rows(8), AV), none: H.batchPlan([], AV),
+  out.batch = { seven: H.batchPlan(rows(7), AV).ok, many: H.batchPlan(rows(250), AV), none: H.batchPlan([], AV),
     mixed: H.batchPlan(rows(1).concat(rows(1, 'Other')), AV), off: H.batchPlan(rows(2), { available: false, reason: 'x' }),
-    small: H.batchPlan(rows(3), { available: true, max_targets: 2 }), targets: H.batchPlan(rows(2), AV).targets };
+    targets: H.batchPlan(rows(2), AV).targets };
   // сценарии с настоящими итогами движка: преврат -> диалог -> запись -> опрос -> строка
   out.flows = {};
   for (const name of Object.keys(IN)) {
@@ -246,7 +247,7 @@ def test_budget_controls_follow_who_owns_the_budget(page_out):
     assert b["owner_adset"]["enabled"] and b["owner_campaign"]["enabled"]
     assert b["campaign_no_budget"] == {"enabled": True, "reason": "", "openKids": True, "label": "View ad set budgets"}
     assert b["under_cbo"] == {"enabled": False, "reason": "Budget is set on the campaign"}
-    assert b["lifetime"]["enabled"] is False and "Lifetime" in b["lifetime"]["reason"]
+    assert b["lifetime"] == {"enabled": True, "reason": ""}   # ACL-2806: lifetime-владелец бюджета редактируется
     assert b["none"]["enabled"] is False and b["unit"]["enabled"] is False
     assert b["ad"] == {"enabled": False, "reason": "Ads have no budget"}
 
@@ -269,13 +270,12 @@ def test_switch_state_and_unavailable_reasons(page_out):
     assert page_out["step"] == ["1.58", "1.42", "1050", ""]
 
 
-def test_batch_is_one_account_and_capped_by_the_call_budget(page_out):
+def test_batch_is_one_account_and_has_no_object_cap(page_out):
     b = page_out["batch"]
     assert b["seven"] is True
-    assert b["eight"] == {"ok": False, "reason": "At most 7 objects per command with the current call limit"}
+    assert b["many"]["ok"] is True and len(b["many"]["targets"]) == 250     # ACL-2668: без потолка
     assert b["none"]["reason"] == "Select rows first" and b["mixed"]["reason"] == "Select rows from one account"
     assert b["off"]["ok"] is False and "Commands unavailable" in b["off"]["reason"]
-    assert "At most 2 objects" in b["small"]["reason"]
     assert b["targets"] == [{"level": "campaign", "id": "1000001"}, {"level": "campaign", "id": "1000002"}]
 
 

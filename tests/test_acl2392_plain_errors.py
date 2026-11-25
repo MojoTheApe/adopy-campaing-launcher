@@ -278,7 +278,7 @@ def _halted_job_error(stop):
     (g.RateLimited(f"Graph API rate limit (17): User request limit reached [type=OAuthException, {RAW_TRACE}]",
                    code=17), "Meta is limiting requests"),
     (g.PolicyBlocked(f"Graph API refused (368): temporarily blocked [{RAW_TRACE}]", code=368),
-     "do not retry now"),
+     "check this account in Ads Manager"),
     (g.CallBudget(f"call budget used up [{RAW_TRACE}]", code=None), "Meta is limiting requests"),
     (g.PageFailed(f"page helper failed (#100) [{RAW_TRACE}]", code=None), "see details in Recent runs"),
 ])

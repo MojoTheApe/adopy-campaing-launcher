@@ -271,10 +271,13 @@ def upload_calls(size: int, worker: bool | None = None, *, chunked: bool = False
 #: ACL-2637: calls reserved for a growing upload window (1, 2, 4 ... 64 MB) on the worker path.
 CALLS_UPLOAD_WINDOW_RAMP = 6
 
-#: Ожидание обработки видео — с потолком по времени и по числу вызовов.
-VIDEO_WAIT_S = 300.0
+#: Ожидание обработки видео (ACL-2668, решение 16): без потолка - публикация не останавливается, пока Meta
+#: обрабатывает видео; стоп только по ошибке обработки. Опрос раз в 15 с, после `VIDEO_POLL_SLOW_AFTER`
+#: опросов - раз в `VIDEO_POLL_MAX_S` (большие видео обрабатываются десятки минут). Отмена задания работает всегда.
 VIDEO_POLL_S = 15.0
-VIDEO_MAX_POLLS = 20
+VIDEO_POLL_MAX_S = 60.0
+VIDEO_POLL_SLOW_AFTER = 20
+VIDEO_CANCEL_SLICE_S = 1.0      # пауза опроса режется на куски: отмена слышна за секунду
 
 #: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
 #: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
@@ -291,8 +294,8 @@ CALLS_PREPARE_EXTRA_READS = 4   # ACL-2244: page / profile-page checks and simil
 def estimate_targeting_reads(plan: "CampaignPlan") -> int:
     """Запас на чтения таргетинга (ACL-1771) по ВСЕМ наборам: они идут из того же бюджета, что и записи.
 
-    Как потолок задания у резолвера: база + шаг на каждую различную строку (целую и каждую её часть),
-    но не выше `JOB_READ_ABS_CAP`. Без интересов - 0.
+    Оценка для бюджета публикации, не потолок поиска (у резолвера потолка нет, ACL-2668 #36): база + шаг на
+    каждую различную строку (целую и каждую её часть), но не выше `PUBLISH_READS_ALLOWANCE`. Без интересов - 0.
     """
     seen: set[str] = set()
     for ad_set in plan.ad_sets:
@@ -303,7 +306,7 @@ def estimate_targeting_reads(plan: "CampaignPlan") -> int:
     seen.discard("")
     if not seen:
         return 0
-    return min(_tr.JOB_READ_ABS_CAP, _tr.JOB_READ_BASE + _tr.JOB_READ_PER_TERM * len(seen))
+    return min(_tr.PUBLISH_READS_ALLOWANCE, _tr.JOB_READ_BASE + _tr.JOB_READ_PER_TERM * len(seen))
 
 
 def estimate_create_calls(plan: "CampaignPlan") -> int:
@@ -390,6 +393,52 @@ def video_compress_limit_mb() -> float:
     return limit
 
 
+#: ACL-2644: решение владельца 16.11 - каждое видео больше порога сжимается до загрузки (не больше порога),
+#: видео до порога уходит как есть. Порог один и не зависит от числа кампаний и видео в прогоне.
+COMPRESS_OVER_FLAG = "ACL_VIDEO_COMPRESS_OVER_MB"
+COMPRESS_OVER_DEFAULT_MB = 500.0
+#: Цель двухпроходного кодека - чуть ниже порога (битрейт точен не до байта); копия принимается, если не больше порога.
+COMPRESS_OVER_TARGET_SHARE = 0.95
+
+
+def video_compress_over_mb(env: dict | None = None) -> float:
+    """ACL-2644: the size (MB) above which a video is compressed before upload: `ACL_VIDEO_COMPRESS_OVER_MB`, default 500.
+    A missing, unreadable or non-positive value means the default."""
+    raw = str((env if env is not None else os.environ).get(COMPRESS_OVER_FLAG, "")).strip()
+    try:
+        if raw and float(raw) > 0:
+            return float(raw)
+    except ValueError:
+        pass
+    return COMPRESS_OVER_DEFAULT_MB
+
+
+def video_compress_over_bytes() -> int:
+    return int(video_compress_over_mb() * 1048576)
+
+
+_DURATION_CACHE: dict[tuple[str, int], float] = {}
+
+
+def video_cannot_compress(path: str, size: int) -> bool:
+    """ACL-2644: True when a video above the threshold is KNOWN to be too long to be compressed under it (the two-pass
+    bitrate would fall below the compressor's minimum): the original is planned (and budgeted) instead. An unknown
+    duration (no ffmpeg, no probe) is not a prediction: False."""
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    over = video_compress_over_mb()
+    if size <= over * 1048576 or not _cc.ffmpeg_exe():
+        return False
+    try:
+        key = (path, size)
+        if key not in _DURATION_CACHE:
+            _DURATION_CACHE[key] = float(_cc.duration_s(path))
+        duration = _DURATION_CACHE[key]
+    except Exception:  # noqa: BLE001 - a courtesy estimate
+        return False
+    return duration > 0 and _cc.video_bitrate_kbps(duration, over * COMPRESS_OVER_TARGET_SHARE) == 0
+
+
 def planned_upload_size(path: str, original: int) -> int:
     """ACL-2621: размер файла, который реально уйдёт в Meta (байты).
 
@@ -400,7 +449,20 @@ def planned_upload_size(path: str, original: int) -> int:
     from src.fb_ads_rpa import creative_compress as _cc
 
     if worker_upload_enabled():
-        return original       # ACL-2629: the original goes up from the worker, nothing is compressed
+        # ACL-2644: the original goes up from the worker unless it is above the threshold: then the compressed copy
+        over = video_compress_over_bytes()
+        if original <= over or video_cannot_compress(path, original):
+            return original
+        try:
+            copy = _cc.cache_path(path, video_compress_over_mb() * COMPRESS_OVER_TARGET_SHARE)
+            cached = _disk_size(str(copy)) if copy.is_file() else 0
+            if 0 < cached <= min(over, original):
+                return cached
+            if _cc.ffmpeg_exe():
+                return over
+        except Exception:  # noqa: BLE001 - оценка не должна ронять проверку плана
+            pass
+        return original
     limit = video_compress_limit_mb()
     if original <= limit * 1048576:
         return original
@@ -418,8 +480,8 @@ def planned_upload_size(path: str, original: int) -> int:
 
 def video_upload_calls(size: int, compressed: bool = False, worker: bool | None = None) -> int:
     """THE count of Graph calls for uploading one video of `size` bytes (no retry slack): the plan (`publish_api`, via
-    `estimate_upload_calls`), `_prepare` and the chunked allowance all use this one. A compressed copy is always
-    uploaded in chunks, so at least start + transfer + finish."""
+    `estimate_upload_calls`), `_prepare` and the chunked allowance all use this one. A compressed copy is counted on
+    the chunked path (the planning assumption), so at least start + transfer + finish."""
     if compressed:
         return max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
     return upload_calls(size, worker)
@@ -441,8 +503,10 @@ def plan_upload_sizes(plan: "CampaignPlan", size_of: Callable[[str], int] | None
     `_fit_for_chunks` aims at). Only on the chunked primary path (the fast upload off), the worker path, and a known
     spare; otherwise the originals are planned, as before."""
     size_of = size_of or _disk_size
-    sizes = {p: planned_upload_size(p, size_of(p)) for p in video_files_of(plan)}
-    result = {p: (s, False) for p, s in sizes.items()}
+    originals = {p: size_of(p) for p in video_files_of(plan)}
+    sizes = {p: planned_upload_size(p, o) for p, o in originals.items()}
+    # ACL-2644: a video above the threshold is planned at its compressed size (and marked as compressed)
+    result = {p: (s, bool(worker_upload_enabled() and 0 < s < originals[p])) for p, s in sizes.items()}
     if (spare is None or not worker_upload_enabled() or resumable_upload_enabled()
             or not compress_fallback_enabled()):
         return result
@@ -453,16 +517,18 @@ def plan_upload_sizes(plan: "CampaignPlan", size_of: Callable[[str], int] | None
 
     if not _cc.ffmpeg_exe():
         return result                                      # nothing to compress with: the originals are planned (and refused)
+    # ACL-2644: a video known to be too long to compress stays at its original size whatever the cap
+    fixed = {p for p in large if video_cannot_compress(p, originals[p])}
     best = 0
     for cap in range(1, COMPRESS_FALLBACK_CAP_MB + 1):
-        total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576
+        total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576 or p in fixed
                     else _chunked_cost(int(cap * COMPRESS_FALLBACK_SHARE * 1048576), True) for p in large)
         if total > spare:
             break
         best = cap
     if best:
         for p in large:
-            if sizes[p] > best * 1048576:
+            if sizes[p] > best * 1048576 and p not in fixed:
                 result[p] = (int(best * COMPRESS_FALLBACK_SHARE * 1048576), True)
     return result
 
@@ -1252,6 +1318,8 @@ class AccountFacts:
     #: Минимальный дневной бюджет кабинета в мелких единицах (`min_daily_budget` Meta); None - не прочитан (ACL-1443).
     min_daily_budget: int | None = None
     page_names: dict[str, str] = field(default_factory=dict)
+    #: ACL-2814: имена пикселей кабинета (уже прочитаны в preflight, без нового запроса) - для текста отказа Meta.
+    pixel_names: dict[str, str] = field(default_factory=dict)
     # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
     page_sources: dict[str, str] = field(default_factory=dict)
     profile_loader: Callable[["AccountFacts"], None] | None = field(default=None, repr=False, compare=False)
@@ -1299,6 +1367,8 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
         offset = None
     facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                          pixels=[str(p.get("id")) for p in pixels if p.get("id")],
+                         pixel_names={str(p.get("id")): str(p.get("name") or "").strip() for p in pixels
+                                      if p.get("id") and str(p.get("name") or "").strip()},
                          pages=[], page_names={}, page_sources={},
                          utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip(),
                          min_daily_budget=_minor_or_none(acc.get("min_daily_budget")))
@@ -1388,15 +1458,19 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
-                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.", key="pixel_unavailable")
+                            f"({len(facts.pixels)} found). Choose another pixel in the Pixel field "
+                            "instead of letting another one be picked.", key="pixel_unavailable")
     elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
         return
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
     else:
-        raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
-                        "the API backend needs exactly one", key="pixel_unavailable")
+        if facts.pixels:
+            raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets. "
+                            "Choose one in the Pixel field of the campaign, then Check again.", key="pixel_unavailable")
+        raise PlanError("The ad account has no pixel/dataset. Website ad sets need one: create a pixel "
+                        "in Events Manager, then Refresh pixels in the Pixel field.", key="pixel_unavailable")
 
 
 def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
@@ -1973,9 +2047,49 @@ MSG_MISMATCH = ('"{name}" was changed or removed in Ads Manager after it was cre
                 "Fix or delete it there, then publish again.")
 MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campaign. '
                      "Delete or move it, then publish again.")
-MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected by Meta. "
-                       "Publish again once it is ready, or replace the video.")
-MSG_BUSY = ("Another run is creating {what} right now. Wait for it to finish, then publish again. "
+def video_error_reason(status: dict) -> str:
+    """Причина Meta из `status` видео с ошибкой обработки (ACL-2668): тексты ошибок фаз, иначе пусто."""
+    texts: list[str] = []
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        for err in part.get("errors") or []:
+            text = str((err or {}).get("message") or "").strip() if isinstance(err, dict) else str(err).strip()
+            if text and text not in texts:
+                texts.append(text)
+    err = status.get("error")
+    text = str(err.get("message") or "").strip() if isinstance(err, dict) else str(err or "").strip()
+    if text and text not in texts:
+        texts.append(text)
+    return "; ".join(texts)
+
+
+def video_failed(status: dict, state: str) -> bool:
+    """Конечное состояние без готовности (ACL-2668): `error`, `expired` или ошибка любой фазы - ждать дальше нечего."""
+    if state in ("error", "expired"):
+        return True
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        if str(part.get("status") or "").lower() in ("error", "expired"):
+            return True
+    return False
+
+
+def video_progress_text(status: dict) -> str:
+    """` (45%)` по `processing_progress` Meta, если она его дала; иначе пусто."""
+    try:
+        pct = int(status.get("processing_progress"))
+    except (TypeError, ValueError):
+        return ""
+    return f" ({max(0, min(100, pct))}%)"
+
+
+def _wait_span(seconds: float) -> str:
+    s = max(0, int(seconds))
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60:02d} s"
+
+
+MSG_VIDEO_NOT_READY = ("Meta could not process the video for {name}. Replace the video, then publish again.")
+MSG_BUSY = ("Another run is creating {what} right now. Publish again when it is done. "
             "Nothing was created twice.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
                   "is no longer in Ads Manager; this is a new publish.")
@@ -1996,8 +2110,7 @@ class CampaignCreator:
                  read_range: Callable[[str, int, int], bytes] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
-                 video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
-                 video_max_polls: int = VIDEO_MAX_POLLS,
+                 video_poll_s: float = VIDEO_POLL_S, video_poll_max_s: float = VIDEO_POLL_MAX_S,
                  reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None,
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
@@ -2028,9 +2141,8 @@ class CampaignCreator:
         self.read_range = read_range
         self.sleep = sleep
         self.clock = clock
-        self.video_wait_s = video_wait_s
         self.video_poll_s = video_poll_s
-        self.video_max_polls = video_max_polls
+        self.video_poll_max_s = max(video_poll_s, video_poll_max_s)
         self.reconcile_wait_s = RECONCILE_WAIT_S if reconcile_wait_s is None else reconcile_wait_s
         #: Имя → id наших креативов (список кабинета читается раз на кампанию).
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
@@ -2227,7 +2339,7 @@ class CampaignCreator:
             if not settled:
                 self._step(out, f"{what}: result of the earlier write is unknown, reading it back once more")
                 self._pause(sum(TRANSIENT_READ_WAITS_S))
-                if hasattr(self.client, "max_calls"):
+                if isinstance(getattr(self.client, "max_calls", None), int):   # None: без потолка (ACL-2668)
                     self.client.max_calls += 1
                 found = find()
                 if found:
@@ -2328,7 +2440,7 @@ class CampaignCreator:
             except GraphError as exc:
                 if _object_gone(exc) or attempt == len(waits):
                     raise
-                if hasattr(self.client, "max_calls"):
+                if isinstance(getattr(self.client, "max_calls", None), int):   # None: без потолка (ACL-2668)
                     self.client.max_calls += 1          # the retry read is part of this run's call budget
                 self._pause(float(waits[attempt]))
         raise AssertionError("unreachable")  # pragma: no cover
@@ -2448,7 +2560,8 @@ class CampaignCreator:
         acct = normalize_act(plan.act).removeprefix("act_")
         # The reads of this check come out of the budget of the run: the allowance follows the confirmed objects
         # (one read each, the ad set listing and one ad listing per ad set), not a flat number (ACL-1856).
-        self.client.max_calls += resume_verify_calls(stages)
+        if isinstance(getattr(self.client, "max_calls", None), int):       # None: без потолка (ACL-2668)
+            self.client.max_calls += resume_verify_calls(stages)
 
         def mismatch(name: str, text: str = MSG_MISMATCH) -> CreationStopped:
             self._snapshot_operation(out)
@@ -2527,8 +2640,11 @@ class CampaignCreator:
                 if oid not in video_ids[0] and video_ids[1]:     # complete listing and the video is not in it
                     raise mismatch(key, MSG_OTHER_ACCOUNT)
                 status = row.get("status") if isinstance(row.get("status"), dict) else {}
-                if str(status.get("video_status") or "").lower() != "ready":
-                    raise mismatch(key, MSG_VIDEO_NOT_READY)
+                # ACL-2668 (решение 16): видео, которое Meta ещё обрабатывает, - не стоп: его дождётся `_wait_video`.
+                # Стоп только по ошибке обработки.
+                if str(status.get("video_status") or "").lower() == "error":
+                    reason = video_error_reason(status).replace("{", "{{").replace("}", "}}")
+                    raise mismatch(key, MSG_VIDEO_NOT_READY + (f" Meta's reason: {reason}" if reason else ""))
         if adset_names or ad_names:
             # Кампания: найденная выбором имени, иначе подтверждённая в журнале (запись о ней могла не сохраниться).
             campaign_id = campaign_id or next((st["object_id"] for _k, st in stages if st["kind"] == "campaign"), "")
@@ -3433,7 +3549,10 @@ class CampaignCreator:
     def _video_large_inner(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
                            find: Callable[[], str | None], who: str) -> str:
         """ACL-2639: a large original from the profile goes up with Meta's resumable protocol (a few calls); the
-        chunked advideos protocol is the fallback when the resumable one is refused or cannot move a single byte."""
+        chunked advideos protocol is the fallback when the resumable one is refused or cannot move a single byte.
+        ACL-2644: a video above the compress threshold (500 MB) is compressed first, whichever protocol follows."""
+        self._compress_note = ""
+        big = self._compress_over_threshold(out, plan, big, who)
         if self.worker_path and resumable_upload_enabled():
             before = getattr(self.client, "calls", 0)
             try:
@@ -3470,9 +3589,9 @@ class CampaignCreator:
         upload THAT through the chunked path. The video keeps its ACL tag title (of the original), so a republish
         finds it. Not compressible (no ffmpeg, bitrate would be unusable, failure): the original goes on and the
         chunked pre-check stops with its clear message. `ACL_VIDEO_COMPRESS_FALLBACK=0` turns it off."""
-        self._compress_note = ""
-        if not compress_fallback_enabled():
-            return big
+        if (not compress_fallback_enabled() or big.path in getattr(self, "_encoded_paths", ())
+                or big.path in getattr(self, "_over_failed", ())):
+            return big                                      # ACL-2644: a copy made this run is never encoded a second time
         spare = self._chunk_spare(plan)
         if spare is None:
             return big
@@ -3490,6 +3609,125 @@ class CampaignCreator:
                 self._step(out, f"{who}: no spare Meta calls to upload even a compressed copy ({spare} left)")
                 return big
             target = max(1.0, fit_mb * COMPRESS_FALLBACK_SHARE)
+        return self._compress_big(out, big, who, target, target * 0.95,
+                                  "to fit this run", "to fit this run's Meta call budget")
+
+    def _warn_compressed_videos(self, out: Outcome, plan: CampaignPlan, files: dict, sent_len: Callable) -> None:
+        """ACL-2639/2644: Check plan names every video planned at the size of a compressed copy, with the size it shrinks to."""
+        names = {}
+        for s_ in plan.ad_sets:
+            for a in s_.ads:
+                names[a.path] = f"Ad {a.index}"
+                if a.vertical_path:
+                    names[a.vertical_path] = f"Ad {a.index} Stories / Reels"
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        for k, v in files.items():
+            pl = (getattr(self, "_video_plan", None) or {}).get(k)
+            if isinstance(v, LargeFile) and pl and pl[1]:
+                try:
+                    eta = _cc.eta_text(_cc.duration_s(k))
+                except Exception:  # noqa: BLE001
+                    eta = ""
+                out.warnings.append(
+                    f"{names.get(k, 'A')} video ({sent_len(k, v) / 1048576:.0f} MB) will be compressed to "
+                    f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same"
+                    + (f"; {eta}" if eta else "") + ").")
+
+    def _require_compressor_for_big_videos(self, plan: CampaignPlan, out: Outcome) -> None:
+        """ACL-2644: a video above the compress threshold cannot go up without ffmpeg: refuse BEFORE any write (and any
+        profile probe), the same way as the missing-ffmpeg stop of the call budget."""
+        over = video_compress_over_mb()
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        big = []
+        for path in video_files_of(plan):
+            try:
+                size = self.size_of(path) or 0
+            except OSError:
+                continue                                   # unreadable: the creative read reports it, as before
+            if size > over * 1048576:
+                big.append((path, size))
+        if big and not _cc.ffmpeg_exe():
+            names = ", ".join(f"{os.path.basename(p)} ({n / 1048576:.0f} MB)" for p, n in big[:3])
+            raise PlanError(f"Videos above {over:.0f} MB are compressed before upload, and ACL needs ffmpeg for that "
+                            f"(it was not found): {names}. Install ffmpeg or use a video of {over:.0f} MB or less. "
+                            "Nothing was created.", key="creative_file")
+        labels = {}
+        for s_ in plan.ad_sets:
+            for a in s_.ads:
+                labels[a.path] = f"Ad {a.index}"
+                if a.vertical_path:
+                    labels[a.vertical_path] = f"Ad {a.index} Stories / Reels"
+        for path, size in big:
+            if video_cannot_compress(path, size):
+                out.warnings.append(f"{labels.get(path, 'A')} video ({size / 1048576:.0f} MB) is too long to compress "
+                                    f"under {over:.0f} MB; the original will be uploaded.")
+
+    def _compress_over_threshold(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str) -> "LargeFile":
+        """ACL-2644: a video above `ACL_VIDEO_COMPRESS_OVER_MB` (default 500) is compressed to at most that size
+        (the ACL-2000 ffmpeg 2-pass compressor: resolution and aspect ratio kept, cache, Stop). At or below it nothing
+        happens. ONE encode per video: when the plan already marked a smaller target (the budget fallback), the copy is
+        made at that target straight from the original, and the copy is never encoded again.
+
+        A failed compression: the original goes on only when its chunked upload fits what the run can still spare
+        (the budget never under-counts), with a visible warning naming the reason; otherwise a clean stop
+        (`video_error`) that names the reason, before anything of this video is uploaded."""
+        over_mb = video_compress_over_mb()
+        if not self.worker_path or len(big) <= over_mb * 1048576:
+            return big
+        label = f"{who[:1].upper()}{who[1:]}"
+        mb = len(big) / 1048576
+        if video_cannot_compress(big.path, len(big)):
+            res, reason = big, f"it is too long to fit under {over_mb:.0f} MB"      # announced by Check plan already
+        else:
+            limit, target = over_mb, over_mb * COMPRESS_OVER_TARGET_SHARE
+            planned = (getattr(self, "_video_plan", None) or {}).get(big.path)
+            if (planned and planned[1] and 1 <= planned[0] / 1048576 < target
+                    and not self._is_threshold_copy_size(big.path, planned[0])):
+                limit = planned[0] / 1048576                        # the plan's smaller target: encode once, at that
+                target = limit * COMPRESS_OVER_TARGET_SHARE
+            res = self._compress_big(out, big, who, limit, target, f"because it is above {over_mb:.0f} MB",
+                                     f"because it is above {over_mb:.0f} MB", max_bytes=int(over_mb * 1048576))
+            reason = getattr(self, "_compress_note", "") or "unknown reason"
+        if res is not big:
+            self._encoded_paths = set(getattr(self, "_encoded_paths", ())) | {res.path}
+            return res
+        self._over_failed = set(getattr(self, "_over_failed", ())) | {big.path}
+        self._compress_note = reason
+        need = upload_calls(len(big), True, chunked=True)
+        spare = self._chunk_spare(plan)
+        if spare is not None and spare < need:
+            raise CreationStopped(
+                f"{label} video ({mb:.0f} MB) could not be compressed under {over_mb:.0f} MB ({reason}), and uploading "
+                f"the original needs about {need} Meta calls while this run can spare {spare}. Nothing was uploaded. "
+                "Use a smaller or shorter video file or publish fewer ads in this run.", created=out.created,
+                kind="video_error",
+                failure=_plain.Failure(
+                    "plan_text", f"{label} video: could not be compressed under {over_mb:.0f} MB ({reason}) and the "
+                                 "original is too large for this run's Meta call budget",
+                    "use a smaller or shorter video, or publish fewer ads in this run, then republish"))
+        out.warnings.append(f"{label} video ({mb:.0f} MB) could not be compressed under {over_mb:.0f} MB ({reason}); "
+                            "the original is uploaded instead.")
+        return big
+
+    @staticmethod
+    def _is_threshold_copy_size(path: str, planned: int) -> bool:
+        """ACL-2644: the plan's size is that of an existing threshold-cache copy (a resumed run): reuse it, do not
+        re-encode at a smaller target (a different cache name and size would lose the resumable session)."""
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        try:
+            copy = _cc.cache_path(path, video_compress_over_mb() * COMPRESS_OVER_TARGET_SHARE)
+            return copy.is_file() and _disk_size(str(copy)) == planned
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _compress_big(self, out: Outcome, big: "LargeFile", who: str, limit_mb: float, target_mb: float,
+                      why_short: str, why_long: str, max_bytes: int = 0) -> "LargeFile":
+        """The shared compression step of `_fit_for_chunks` (budget) and `_compress_over_threshold` (size threshold)."""
+        size = len(big)
+        label = f"{who[:1].upper()}{who[1:]}"
         original_mb = size / (1024 * 1024)
         from src.fb_ads_rpa import creative_compress as _cc
 
@@ -3497,7 +3735,7 @@ class CampaignCreator:
             eta = _cc.eta_text(_cc.duration_s(big.path))
         except Exception:  # noqa: BLE001 - the estimate is a courtesy
             eta = ""
-        self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target:.0f} MB to fit this run"
+        self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target_mb:.0f} MB {why_short}"
                         f" ({eta or 'this can take several minutes'})")
 
         fn = self.compress_to_fit or (lambda p, limit, tgt: _cc.ensure_uploadable(p, limit_mb=limit, target_mb=tgt))
@@ -3511,7 +3749,7 @@ class CampaignCreator:
 
         try:
             with _cc.observe_progress(on_progress):
-                prepared = fn(big.path, target, target * 0.95)
+                prepared = fn(big.path, limit_mb, target_mb)
         except Exception as exc:  # noqa: BLE001 - a failed compression is a fallback to the clear stop, not a crash
             if type(exc).__name__ == "JobCancelled":
                 raise
@@ -3524,12 +3762,14 @@ class CampaignCreator:
             self._step(out, f"{who}: not compressed ({why})")
             return big
         new_size = self.size_of(prepared.path) or 0
-        if not new_size or new_size >= size:
-            self._step(out, f"{who}: the compressed copy is not smaller; the original goes on")
+        if not new_size or new_size >= size or (max_bytes and new_size > max_bytes):
+            self._compress_note = ("the compressed copy is not smaller" if not new_size or new_size >= size
+                                   else f"the compressed copy is {new_size / 1048576:.0f} MB, above the limit")
+            self._step(out, f"{who}: {self._compress_note}; the original goes on")
             return big
-        self._step(out, f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to fit this run")
-        out.warnings.append(f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to "
-                            "fit this run's Meta call budget (resolution and aspect ratio are unchanged).")
+        self._step(out, f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB {why_short}")
+        out.warnings.append(f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB "
+                            f"{why_long} (resolution and aspect ratio are unchanged).")
         return LargeFile(prepared.path, new_size, self.read_range)
 
     def _video_resumable(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str, title: str = "") -> str:
@@ -4117,26 +4357,48 @@ class CampaignCreator:
         return vid
 
     def _wait_video(self, out: Outcome, ad: AdPlan, vid: str, *, who: str = "") -> str:
-        """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
+        """Ждать обработку видео до готовности (ACL-2668, решение 16): без потолка по времени и опросам.
+
+        Стоп только по ошибке обработки у Meta (с её причиной) и по отмене задания. Пока ждём - живая строка
+        статуса с процентом Meta и временем; сторож тишины видит ожидание, а не зависание. Опросы сверх запаса
+        плана (`CALLS_PER_VIDEO_POLLS`) добавляются к бюджету вызовов запуска: ожидание не упирается в бюджет.
+        """
         who = who or f"ad {ad.index}"
-        deadline = self.clock() + self.video_wait_s
+        began = self.clock()
         polls = 0
-        while True:
-            self._check_cancel(out)
-            row = self.client.get(f"/{vid}", {"fields": "status"})
-            polls += 1
-            status = row.get("status") if isinstance(row.get("status"), dict) else {}
-            state = str(status.get("video_status") or "").lower()
-            if state == "ready":
-                break
-            if state == "error":
-                raise CreationStopped(f"{who}: Meta could not process the video", created=out.created,
-                                      kind="video_error")
-            if polls >= self.video_max_polls or self.clock() + self.video_poll_s > deadline:
-                raise CreationStopped(
-                    f"{who}: the video is still processing after {int(self.video_wait_s)} s; "
-                    "publish again later (nothing is duplicated)", created=out.created, kind="video_timeout")
-            self.sleep(self.video_poll_s)
+        announced = False
+        try:
+            while True:
+                self._check_cancel(out)
+                if polls >= CALLS_PER_VIDEO_POLLS and isinstance(getattr(self.client, "max_calls", None), int):
+                    self.client.max_calls += 1          # опрос сверх запаса плана - часть бюджета этого запуска
+                row = self.client.get(f"/{vid}", {"fields": "status"})
+                polls += 1
+                status = row.get("status") if isinstance(row.get("status"), dict) else {}
+                state = str(status.get("video_status") or "").lower()
+                if state == "ready":
+                    break
+                if video_failed(status, state):
+                    reason = video_error_reason(status) or (f"video status {state}" if state else "")
+                    raise CreationStopped(
+                        f"{who}: Meta could not process the video" + (f": {reason}" if reason else ""),
+                        created=out.created, kind="video_error")
+                if not announced:
+                    self._waiting("video_processing")
+                    announced = True
+                self._beat()
+                self.live_progress(f"{who}: video processing at Meta{video_progress_text(status)}, "
+                                   f"{_wait_span(self.clock() - began)}")
+                # Пауза короткими кусками: Stop слышен за секунду, а не после полного шага опроса (до 60 с).
+                left = self.video_poll_s if polls < VIDEO_POLL_SLOW_AFTER else self.video_poll_max_s
+                while left > 0:
+                    self._check_cancel(out)
+                    piece = min(left, VIDEO_CANCEL_SLICE_S)
+                    self.sleep(piece)
+                    left -= piece
+        finally:
+            if announced:
+                self._waiting("")
         self._step(out, f"{who}: video processed")
         thumbs = self.client.get_all(f"/{vid}/thumbnails", {"fields": "uri,is_preferred"}, max_pages=1)
         pick = next((t for t in thumbs if t.get("is_preferred")), thumbs[0] if thumbs else None)
@@ -4331,6 +4593,24 @@ class CampaignCreator:
                                                     self._start_dt(ad_set))
         except _tt.ShiftError as exc:
             raise PlanError(f"Ad set {ad_set.name!r}: {exc}.") from exc
+
+    def schedule_zone_note(self, ad_set: AdSetPlan) -> str:
+        """ACL-2666: Check plan называет пояс кабинета и разницу, по которой переведены часы расписания.
+
+        Разница берётся на момент старта (так её применяет `schedule_windows`). Нет расписания или
+        старта, пояс кабинета неизвестен или разница не целая - пусто (отказ покажет сама запись окон).
+        """
+        account = self.facts.timezone_name
+        if not (ad_set.schedule and ad_set.time_zone and ad_set.start_time) or _tt.load_zone(account) is None:
+            return ""
+        try:
+            start = self._start_dt(ad_set)
+            shift = _tt.whole_hour_shift(ad_set.time_zone, account, start)
+        except (PlanError, _tt.ShiftError):
+            return ""
+        off = start.astimezone(_tt.load_zone(account)).utcoffset().total_seconds() / 3600
+        return (f"Hours ticked in Israel time are converted to the ad account time zone {account} "
+                f"(UTC{off:+g}, {shift:+d} h from Israel on {start.date().isoformat()}).")
 
     def schedule_shift_warnings(self, plan: CampaignPlan) -> list[str]:
         """ACL-1448: предупреждения (не ошибки), если разница Израиль-кабинет меняется между стартом и концом."""
@@ -4529,14 +4809,18 @@ class CampaignCreator:
         первый текст каждого вида - ещё и вертикальная; ссылка несёт обе метки. Площадки правил - как у Website с
         двумя файлами (`rule_positions`). Набор не Dynamic Creative.
         """
-        spec: dict[str, Any] = {}
+        # Live 20.11 (KLD_BFL_I03): without `optimization_type: PLACEMENT` Meta takes Arabic texts for a language
+        # asset feed and refuses with 2490266 "Missing Default Rule"; Ads Manager (HAR) and the Instant Form send it.
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
         media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
         main_l, vert_l = _wpol.instant_labels("link_urls")
         spec["link_urls"] = [{"website_url": plan.link, "adlabels": [{"name": main_l}, {"name": vert_l}]}]
         spec["call_to_action_types"] = [ad.cta]
         spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
         present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
-        main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
+        # Live 19.11: Meta refuses non-Latin (Arabic) texts here with 2490266 "Missing Default Rule in Language Asset
+        # Feed" unless the main rule is the empty catch-all, as Ads Manager sends it (HAR) and the Instant Form already does.
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
         spec["asset_customization_rules"] = [
             {"customization_spec": positions,
              **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
@@ -4853,11 +5137,12 @@ class CampaignCreator:
         if problem:
             raise CreationStopped(problem, kind="review_stale")
 
-    @staticmethod
-    def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
+    def _failure(self, plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
         """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
         stage = getattr(exc, "stage", "") or CampaignCreator._stage_from_outcome(out)
-        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage})
+        pid = str(plan.pixel_id or next((s_.pixel_id for s_ in plan.ad_sets if s_.pixel_id), "") or "")
+        names = getattr(getattr(self, "facts", None), "pixel_names", None) or {}
+        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage, "pixel": names.get(pid) or pid})
         if failure.key == "targeting_merged":
             planned = [str(n) for s_ in plan.ad_sets for g in s_.interest_groups for n in g]
             hits, note = _plain.offending_note(planned, str((failure.details or {}).get("error_user_msg") or ""))
@@ -5076,8 +5361,13 @@ class CampaignCreator:
         """
         calls_at_start = getattr(self.client, "calls", 0)
         self._writes_base = getattr(self.client, "writes", 0)
+        self._require_compressor_for_big_videos(plan, out)      # ACL-2644: before any read or probe
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
+        for ad_set in plan.ad_sets:  # ACL-2666: Check plan называет пояс кабинета и разницу часов
+            note = self.schedule_zone_note(ad_set)
+            if note and note not in out.warnings:
+                out.warnings.append(note)
         self.check_profile_page(plan)
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
@@ -5118,6 +5408,10 @@ class CampaignCreator:
                 return planned_upload_size(path, len(data))
             return len(data)
 
+        def checked_len(path: str, data: Any) -> int:
+            # ACL-2644: the worker path checks the ORIGINAL against Meta's 4 GB, in Check plan and in Publish alike
+            return len(data) if worker_plan else sent_len(path, data)
+
         def load(path: str, kind: str):
             # Check plan does not probe the worker path, but it plans for it: a video the worker would upload in chunks
             # is read as a large file here, so the plan can name it and count its calls.
@@ -5136,7 +5430,7 @@ class CampaignCreator:
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
                 limit = video_limit if ad.kind == "video" else IMAGE_MAX_BYTES
-                if not data or sent_len(ad.path, data) > limit:
+                if not data or checked_len(ad.path, data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB", key="creative_file")
                 if ad.kind != "video":
@@ -5151,7 +5445,7 @@ class CampaignCreator:
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
                     vlimit = video_limit if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
-                    if not vdata or sent_len(ad.vertical_path, vdata) > vlimit:
+                    if not vdata or checked_len(ad.vertical_path, vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB", key="creative_file")
                     if ad.vertical_kind != "video":
@@ -5182,7 +5476,7 @@ class CampaignCreator:
         self._video_plan = {}
         if isinstance(budget, int) and worker_plan:
             spare_total = budget - getattr(self.client, "calls", 0) - estimate_create_calls(plan)
-            self._video_plan = plan_upload_sizes(plan, lambda p: sent_len(p, files[p]) if p in files else _disk_size(p),
+            self._video_plan = plan_upload_sizes(plan, lambda p: len(files[p]) if p in files else _disk_size(p),
                                               spare_total)
 
         def video_calls(k: str, v: Any) -> int:
@@ -5194,7 +5488,7 @@ class CampaignCreator:
         self._large_pending = large
         self._upload_writes = 0
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
-        # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
+        # задаёт вызывающий; публикация с ACL-2668 идёт без потолка (`None`), и эти проверки молчат).
         # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
         # и запуск (раньше - фиксированные 40, и проверка принимала то, что запуск потом отказывал).
         # Здесь куски без запаса на повторы: это страховка, размер после сжатия может отличаться.
@@ -5217,10 +5511,11 @@ class CampaignCreator:
                 chunk_size = min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker_plan else VIDEO_CHUNK_STAGED_MAX
                 n_chunks = sum(-(-n // chunk_size) for n in sizes)
                 fast = bool(worker_plan and resumable_upload_enabled())
+                self._warn_compressed_videos(out, plan, files, sent_len)
                 if fast:
                     out.warnings.append(
                         f"Large video: the fast upload takes about {chunk_calls} Meta calls, {chunk_calls + rest} of "
-                        f"{budget} calls planned for this run (the original file is uploaded without compression).")
+                        f"{budget} calls planned for this run (videos above the compress threshold are compressed first, the others go up unchanged).")
                     fallback = sum(upload_calls(sent_len(k, v), True, chunked=True) for k, v in files.items()
                                    if isinstance(v, LargeFile))
                     if fallback + rest > budget:
@@ -5247,31 +5542,11 @@ class CampaignCreator:
                                 "the upload would stop before it starts (nothing is uploaded). Use a smaller video "
                                 "file or publish fewer ads in this run.")
                 else:
-                    # ACL-2639: videos planned at the size of a compressed copy are named, with the size they shrink to
-                    names = {}
-                    for s_ in plan.ad_sets:
-                        for a in s_.ads:
-                            names[a.path] = f"Ad {a.index}"
-                            if a.vertical_path:
-                                names[a.vertical_path] = f"Ad {a.index} Stories / Reels"
-                    from src.fb_ads_rpa import creative_compress as _cc
-
-                    for k, v in files.items():
-                        pl = self._video_plan.get(k)
-                        if isinstance(v, LargeFile) and pl and pl[1]:
-                            try:
-                                eta = _cc.eta_text(_cc.duration_s(k))
-                            except Exception:  # noqa: BLE001
-                                eta = ""
-                            out.warnings.append(
-                                f"{names.get(k, 'A')} video ({sent_len(k, v) / 1048576:.0f} MB) will be compressed to "
-                                f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same"
-                                + (f"; {eta}" if eta else "") + ").")
                     out.warnings.append(
                         f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
                         f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
-                        + ("for this run (upper bound: the original file is uploaded without compression; "
-                           "Meta may ask for smaller chunks)." if worker_plan else
+                        + ("for this run (upper bound: videos above the compress threshold are compressed first, "
+                           "the others go up unchanged; Meta may ask for smaller chunks)." if worker_plan else
                            "for this run (upper bound; ACL compresses large videos before upload, "
                            "so the real upload is usually smaller)."))
         self._check_planned(plan, targetings, early=True)
@@ -5284,7 +5559,8 @@ class CampaignCreator:
     def _require_remaining_budget(self, plan: CampaignPlan, chunk_calls: int, calls_at_start: int = 0) -> None:
         """ACL-2244: stop before the first write when preparation ate into the calls the writes were sized with.
 
-        The run budget is sized as writes + targeting reads + chunks (`publish_api.create_call_budget`), and
+        Only when the caller set a run budget (publish runs have none since ACL-2668: `max_calls is None`).
+        Such a budget is sized as writes + targeting reads + chunks, and
         `estimate_create_calls` is a deliberately generous upper bound of the writes. So the remaining calls are
         compared with that bound only when preparation spent MORE than the budget reserved for it (targeting
         reads, the page and form reads); ordinary preparation reads never refuse a campaign that publishes fine.
@@ -5345,10 +5621,11 @@ class CampaignCreator:
                 self._refuse_existing_without_cover(plan, tpl, existing)
                 _fc.clear_pending(plan.act, plan.page_id, fname)
             elif _fc.is_pending(plan.act, plan.page_id, fname):
-                # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
-                raise PlanError(_fc.MSG_PENDING + ".")
+                # ACL-2668: прошлая запись могла дойти, но формы в списке нет - не ждём, создаём
+                # сразу; дубль допустим и называется «<шаблон> copy N · ACL <хэш>».
+                fname = _fc.next_copy_name(read, tpl)
             self._form_steps[tid] = _fc.FormStep(template_id=tid, template_name=tpl["name"],
-                                                 form_name=_ft.form_name(tpl), existing_id=existing)
+                                                 form_name=fname, existing_id=existing)
         if any(step.action == "create" for step in self._form_steps.values()):
             # Условия Lead Ads: робот их не принимает никогда; без них - остановка до записи.
             if _forms.page_terms_accepted(self.client, plan.page_id) is False:
@@ -5439,16 +5716,19 @@ class CampaignCreator:
             self._cover_ids[tid] = got["photo_id"]
             self._step(out, f"form {step.form_name!r}: background picture uploaded to the Page")
 
-    def _find_form_id(self, plan: CampaignPlan, tpl: dict) -> str | None:
-        """Сверка чтением списка форм Страницы: id своей формы по точному имени."""
+    def _find_form_id(self, plan: CampaignPlan, tpl: dict, name: str = "") -> str | None:
+        """Сверка чтением списка форм Страницы: id своей формы по точному имени (`name` - имя дубля)."""
         read = _forms.read_page_forms(self.client, plan.page_id)
         if not read.ok:
             raise GraphError(read.message)
+        if name and name != _ft.form_name(tpl):
+            hit = sorted((f for f in read.forms if f.name == name and f.usable), key=lambda f: f.id)
+            return hit[0].id if hit else None
         existing, _why = _fc.match_existing(read, tpl)
         return existing or None
 
     def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str, reused: bool = False,
-                     cover_id: str = "") -> None:
+                     cover_id: str = "", name: str = "") -> None:
         """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп.
 
         Картинка (ACL-2188): у новой формы расхождение - стоп, у переиспользованной - заметка и дальше
@@ -5457,7 +5737,11 @@ class CampaignCreator:
         # ACL-2571: the Page photo id of a local picture is known only at publish; the name stays the template's.
         cov = dict(tpl, cover_photo_id=cover_id) if cover_id else tpl
         row = self.client.get(f"/{form_id}", {"fields": _fc.readback_fields(cov)})
-        bad = _fc.compare_form(tpl, plan.page_id, row)
+        if reused and isinstance(row, dict):
+            # ACL-2668: переиспользуется и дубль «<шаблон> copy N · ACL <хэш>» - тоже своя.
+            got = str(row.get("name") or "")
+            name = got if _fc.copy_number(got, tpl) >= 0 else name
+        bad = _fc.compare_form(tpl, plan.page_id, row, name=name)
         cover = _fc.compare_cover(cov, row)
         if cover and reused and not bad:
             self._step(out, f"form {_ft.form_name(tpl)!r}: {_fc.MSG_COVER_UNCONFIRMED}")
@@ -5488,30 +5772,32 @@ class CampaignCreator:
                 out.reused.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: found on the Page, reused")
             else:
+                base = _ft.form_name(tpl)
                 try:
-                    # Метка ДО записи: без неё повторный запуск может создать вторую форму.
-                    _fc.record_pending(plan.act, plan.page_id, step.form_name)
-                except OSError as exc:
-                    raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
-                                          kind="form_state") from exc
+                    # Метка ДО записи: если ответ потеряется, следующий запуск назовёт дубль «copy N».
+                    _fc.record_pending(plan.act, plan.page_id, base)
+                except OSError:
+                    pass    # ACL-2668: метка - только имя дубля, публикацию она не останавливает
                 cover_id = self._cover_ids.get(tpl["id"], "")
+                params = _ft.form_params(tpl, cover_id)
+                params["name"] = step.form_name     # имя дубля после потерянного ответа
                 try:
                     step.form_id = self._write(
                         out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
-                        _ft.form_params(tpl, cover_id), lambda: self._find_form_id(plan, tpl),
+                        params, lambda: self._find_form_id(plan, tpl, step.form_name),
                         form_page=plan.page_id)
                 except GraphError as exc:
-                    _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
+                    _fc.clear_pending(plan.act, plan.page_id, base)   # Meta отказала: формы нет
                     if cover_id and tpl.get("cover_local_sha256"):
                         # The cached photo may be gone from the Page: the next publish uploads again.
                         _cover_store.forget_photo(plan.page_id, tpl["cover_local_sha256"])
                     raise CreationStopped(_fc.refused_message(exc, dict(tpl, cover_photo_id=cover_id) if cover_id else tpl),
                                           created=out.created, kind="form_refused") from exc
-                _fc.clear_pending(plan.act, plan.page_id, step.form_name)
+                _fc.clear_pending(plan.act, plan.page_id, base)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")
             self._verify_form(out, plan, tpl, step.form_id, reused=bool(step.existing_id),
-                              cover_id=self._cover_ids.get(tpl["id"], ""))
+                              cover_id=self._cover_ids.get(tpl["id"], ""), name=step.form_name)
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 
@@ -5769,6 +6055,9 @@ class CampaignCreator:
         if ad_set.time_zone:
             # ACL-1448: время введено по поясу команды; расписание выше уже в часах кабинета.
             row["time_zone"] = ad_set.time_zone
+            note = self.schedule_zone_note(ad_set)
+            if note:
+                row["schedule_zone_note"] = note
 
     @staticmethod
     def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:
@@ -6200,8 +6489,7 @@ class CampaignCreator:
 
         if labelled:
             # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
-            if instant:
-                check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
             for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
                 if not nonblank(list(base)):
                     continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
@@ -6211,8 +6499,7 @@ class CampaignCreator:
                       sorted(str(x.get("text")) for x in got if main in names_of(x)))
                 check(aobj, kind + "_vertical_label", [base[0]],
                       [str(x.get("text")) for x in got if vertical in names_of(x)])
-            main_pos, vert_pos = (self.instant_rule_positions(ad.placements) if instant
-                                  else self.rule_positions(ad.placements))
+            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
             media_key = "videos" if ad.kind == "video" else "images"
             # The empty title is sent with its label in both rules, so the rules always name it.
             present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),

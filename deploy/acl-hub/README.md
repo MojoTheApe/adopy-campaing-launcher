@@ -46,6 +46,15 @@ ACL_HUB_OWNER_KEY=<тот же OWNER_KEY>
 | `GET /api/runs?from=&to=&manager=&outcome=&account=` | владелец | `{runs: [...]}` |
 | `GET /api/jobs?from=&to=&manager=` | владелец | `{jobs: [...]}` |
 | `GET /api/machines` | владелец | `{machines: [...]}` |
+| `POST /v1/session` `{google_access_token}` | сотрудник домена из `ALLOWED_EMAIL_DOMAINS` | `200 {key, email, role, expires_at}` (ключ на 30 дней), `400`, `401` (Google не признал токен), `403` (email не подтверждён / чужой домен / чужой OAuth-клиент / юзер отключён), `503` (Google недоступен) |
+| `GET /v1/my-accounts` (`If-None-Match`) | юзер, `Bearer <ключ юзера>` | `200 {accounts: [...]}` с `ETag` (активные и снятые, у снятых `removed_at`), `304`, `401` |
+| `POST /v1/my-accounts/seed {rows}` (ACL-2901) | юзер, `Bearer <ключ юзера>` | первый вход переносит карту машины: `200 {ok, seeded}` (строки с `assigned_by = 'seed'`); `409`, если у юзера уже есть хоть одна строка назначений (в т.ч. снятая); `400` на чужие поля (proxy_*, tracking_link) и больше 2000 строк |
+| `GET /api/users` | админ | `{users: [...]}` с `active_accounts` |
+| `POST /api/assignments` `{user_email, rows:[{account_name, ad_account_id, page_id, page_name, country, multilogin_instance, folder_id, profile_id}]}` | админ | `200 {ok, assigned}`, одной транзакцией; повтор снимает `removed_at`; лишние поля (в т.ч. `proxy_*`, `tracking_link`) — `400`; неизвестный юзер создаётся как `buyer` |
+| `POST /api/assignments/remove` `{user_email, account_names}` | админ | `200 {ok, removed}`; ставит `removed_at`, строки не удаляются |
+| `POST /api/users/role` `{email, role}` | только `OWNER_KEY` | `200`, `400`, `404`; так задаётся первый админ (`admin` / `buyer`) |
+
+Админ = владелец (`OWNER_KEY` или cookie) либо юзер с ролью `admin`; юзер без прав получает `403`, без ключа — `401`. Ключ юзера: `<email>.<exp>.<hmac>`, HMAC-SHA256 секретом `USER_KEY_SECRET`; отключённый юзер не проходит. Токен Google хаб не хранит. Миграция `0008` (номера 0006/0007 заняты другими ветками). Секрет `USER_KEY_SECRET` ставится `wrangler secret put`; `ALLOWED_EMAIL_DOMAINS` и `GOOGLE_CLIENT_ID` — в `wrangler.local.toml`.
 
 `heartbeat` в `events` не пишется, только обновляет `machines`. Событие с похожим на токен содержимым отклоняется. Исход прогона: `ok` / `failed` / `not_started`; отпечаток сбоя — 12 hex от нормализованного текста ошибки.
 

@@ -526,8 +526,13 @@ def _build_account_map_view(
     date_from: str = "",
     date_to: str = "",
     span: str = "",
+    compare_only: bool = False,
 ) -> dict:
     """The account map on Home: every country, its accounts, and what they did.
+
+    ``compare_only`` (ACL-2808): карта прошлого периода для PeriodCompare. Сравнение
+    читает только страны, их строки и итоги; источник статистики по каждому
+    аккаунту из списка Available на странице не рисуется, и его не считаем.
 
     Countries come from the links store, not from the workbook, because the two
     answer different questions. The workbook says where money was spent; the
@@ -609,6 +614,8 @@ def _build_account_map_view(
     # Per-buyer map: only the selected buyer's accounts are listed. The entries
     # stay whole (profiles, ids) for lookups; only the lists below are narrowed.
     from src.web import account_buyer as _ab
+
+    from src.web.buyer import get_selected_cm as _selected_cm
 
     _tags = _ab.tags()
     _mine = lambda label: _ab.is_visible(label, tag_map=_tags)  # noqa: E731
@@ -699,8 +706,12 @@ def _build_account_map_view(
         rows = []
         _placed = account_links.accounts_for("country", stored)
         _own = [a for a in _placed if _mine(a)]
-        if _placed and not _own:
-            # The country holds only other buyers' accounts: not this buyer's map.
+        if _placed and not _own and not account_links.country_marked_for(stored, _selected_cm()):
+            # The country holds only other buyers' accounts: not this buyer's map,
+            # unless this buyer added the country themselves (ACL-2853).
+            continue
+        if not _placed and not account_links.empty_country_visible_to(stored, _selected_cm()):
+            # ACL-2853: пустую страну с меткой другого байера этот байер не видит.
             continue
         for label in _own:
             excel = _numbers(country_name, label) or stats.get(label) or {}
@@ -941,7 +952,7 @@ def _build_account_map_view(
     from src.analysis_agent import bi_compare
 
     activity_sources = {}
-    if activity is not None and df is not None:
+    if activity is not None and df is not None and not compare_only:
         window = bi_compare.period_rows(df, activity.window_from, activity.window_to)
         if "Account Alias" in window:
             activity_sources = {
@@ -1699,7 +1710,10 @@ def _secure_headers(response: Response, *, keep_cache_control: bool = False) -> 
         "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; "
         "script-src 'self' 'unsafe-inline' https://unpkg.com; "
         "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
-        "media-src 'self' blob:; connect-src 'self'"
+        "media-src 'self' blob:; connect-src 'self'; "
+        # ACL-2878: окно предпросмотра лендинга в билдере грузит чужую https-страницу;
+        # без frame-src её режет default-src 'self'. Сам iframe в песочнице без allow-same-origin.
+        "frame-src https:"
     )
     return response
 
@@ -1997,9 +2011,14 @@ async def acl_update_check(request: Request) -> JSONResponse:
             # Установленный ACL.exe: выпуски GitHub, не git (ACL-1240).
             from src.web import release_updates
             force = (request.query_params.get("force") or "").strip().lower() in {"1", "true", "yes"}
-            return JSONResponse(await run_in_threadpool(release_updates.check, force=force))
-        # `git fetch` ждёт сеть до двух минут — не в цикле событий (ACL-1399).
-        return JSONResponse(await run_in_threadpool(acl_update.check, fetch=not skip_fetch))
+            state = await run_in_threadpool(release_updates.check, force=force)
+        else:
+            # `git fetch` ждёт сеть до двух минут — не в цикле событий (ACL-1399).
+            state = await run_in_threadpool(acl_update.check, fetch=not skip_fetch)
+        # ACL-2668 №11: обновление, ждущее конца публикации, видно и после
+        # перезагрузки страницы — состояние на сервере, не в странице.
+        from src.web import update_queue
+        return JSONResponse({**state, "queued": update_queue.status()})
     except Exception as exc:  # pragma: no cover - defensive
         return JSONResponse(
             {"ok": False, "available": False, "note": f"Update check failed: {exc}"}
@@ -2011,8 +2030,9 @@ async def acl_update_apply() -> JSONResponse:
     """Hand the update to the launcher and stop, so it can restart us into it.
 
     Every refusal below is a case where clicking would have produced a dashboard
-    that does not come back: no supervising launcher, a run in flight, or a
-    candidate the launcher would reject anyway.
+    that does not come back: no supervising launcher, or a candidate the
+    launcher would reject anyway. A campaign job in flight is not a refusal
+    (ACL-2668 №11): the update is queued and starts by itself when it ends.
     """
     from src.web import acl_update
     from src.web.publish_jobs import active_job_count
@@ -2031,16 +2051,10 @@ async def acl_update_apply() -> JSONResponse:
             status_code=409,
         )
 
-    busy = active_job_count()
-    if busy:
-        return JSONResponse(
-            {
-                "ok": False,
-                "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACM, which would abandon them half-built.",
-            },
-            status_code=409,
-        )
+    from src.web import publish_jobs, update_queue
+
+    if update_queue.is_waiting():
+        return _queued_update_response()
 
     acl_update.forget_cache()
     state = acl_update.check(fetch=True, use_cache=False)
@@ -2052,42 +2066,78 @@ async def acl_update_apply() -> JSONResponse:
 
     candidate = state.get("candidate") or {}
     target = candidate.get("tag") or candidate.get("short") or ""
-    acl_update.request_restart(target=target)
-    acl_update.schedule_exit()
-    return JSONResponse({"ok": True, "target": target})
+
+    def start() -> None:
+        acl_update.request_restart(target=target)
+        acl_update.schedule_exit()
+
+    if publish_jobs.reserve_update():
+        try:
+            start()
+        except BaseException:
+            publish_jobs.release_update()
+            raise
+        return JSONResponse({"ok": True, "target": target})
+    # ACL-2668 №11: идёт публикация — не отказ, а очередь до её конца.
+    update_queue.queue(target, reserve=publish_jobs.reserve_update, start=start,
+                       cancel=publish_jobs.release_update)
+    return _queued_update_response()
+
+
+def _queued_update_response() -> JSONResponse:
+    """Ответ кнопке: обновление ждёт конца публикации и начнётся само."""
+    from src.web import update_queue
+
+    queued = update_queue.status()
+    return JSONResponse({"ok": True, "queued": True, "target": queued.get("target", ""),
+                         "message": update_queue.WAITING_TEXT})
 
 
 async def _apply_release_update(active_jobs) -> JSONResponse:
-    """Serialize the download and reserve an idle runtime before restarting."""
-    from starlette.concurrency import run_in_threadpool
-    from src.web import acl_update, release_updates, publish_jobs
-    from src.fb_ads_rpa.operations import browser_operation
+    """Serialize the download and reserve an idle runtime before restarting.
 
+    ACL-2668 №11: идёт публикация — обновление встаёт в очередь и начинается
+    само после неё (`update_queue`); чтение аккаунта обновление не держит —
+    рестарт его обрывает, очередь чтений после рестарта ставит его заново.
+    `active_jobs` оставлен ради прежней сигнатуры: занятость решает
+    `reserve_update()` под замком заданий, иначе задание, начатое между
+    проверкой и рестартом, оборвалось бы.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from src.web import acl_update, release_updates, publish_jobs, update_queue
+
+    if update_queue.is_waiting():
+        return _queued_update_response()
     if not release_updates.apply_lock.acquire(blocking=False):
         return JSONResponse({"ok": False, "error": "An update is already in progress."}, status_code=409)
-    restarting = reserved = browser_held = False
+    handed_off = reserved = False
     try:
-        if active_jobs():
-            return JSONResponse({"ok": False, "error": "Wait for campaign jobs to finish before updating."}, status_code=409)
         setup, manifest = await run_in_threadpool(release_updates.download)
-        if active_jobs() or not publish_jobs.reserve_update():
-            return JSONResponse({"ok": False, "error": "Campaign jobs started during the download; try again when they finish."}, status_code=409)
-        reserved = True
-        browser_held = browser_operation.acquire(blocking=False)
-        if not browser_held:
-            return JSONResponse({"ok": False, "error": "Wait for browser reading to finish before updating."}, status_code=409)
-        release_updates.start_helper(setup, manifest)
-        acl_update.schedule_exit()
-        restarting = True
-        return JSONResponse({"ok": True, "target": manifest["version"]})
+
+        def start() -> None:
+            release_updates.start_helper(setup, manifest)
+            acl_update.schedule_exit()
+
+        def cancel() -> None:
+            publish_jobs.release_update()
+            release_updates.apply_lock.release()
+
+        if publish_jobs.reserve_update():
+            reserved = True
+            start()
+            handed_off = True
+            return JSONResponse({"ok": True, "target": manifest["version"]})
+        # Замок обновления переходит ожидающему потоку: второй установки не будет.
+        update_queue.queue(manifest["version"], reserve=publish_jobs.reserve_update,
+                           start=start, cancel=cancel)
+        handed_off = True
+        return _queued_update_response()
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
         message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
-        if not restarting:
-            if browser_held:
-                browser_operation.release()
+        if not handed_off:
             if reserved:
                 publish_jobs.release_update()
             release_updates.apply_lock.release()
@@ -2152,7 +2202,7 @@ def _build_compare(
         prev = deepcopy(report_for_period(base_report, df, info["date_from"], info["date_to"]))
         _enrich_country_overview(prev)
         # span="all": чтения с аккаунтов сравнению не нужны, только книжные числа.
-        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all")
+        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all", compare_only=True)
         return period_compare.PeriodCompare(info, prev, prev_amap), ""
     except Exception:
         return None, "Could not calculate the earlier period; showing the selected period only."
@@ -2404,7 +2454,7 @@ def _fb_backend() -> str:
 
         return publish_api.backend()
     except Exception:  # pragma: no cover - кнопка не важнее страницы
-        return "rpa"
+        return "api"
 
 
 
@@ -2490,6 +2540,12 @@ def _compact_account_key(name) -> str:
     return re.sub(r"[^0-9a-z]", "", key)
 
 
+def _is_facebook_label(name) -> bool:
+    """Имя Facebook-аккаунта: `Facebook…` в книге или `KLD_…` из Multilogin."""
+    n = str(name or "").strip().casefold()
+    return n.startswith("facebook") or n.startswith("kld_")
+
+
 def _alias_by_tail(label: str, known: dict) -> str:
     """Имя из книги для подключённого аккаунта — или пусто.
 
@@ -2505,15 +2561,28 @@ def _alias_by_tail(label: str, known: dict) -> str:
         return exact
     if has_own_name(label, known):
         return ""  # своё имя в книге есть — альтернатива не нужна
-    tail = _account_tail(label)
-    if not tail:
+    # ACL-2863: хвост — только от собственного имени (первое слово, без
+    # пометки « - Имя Фамилия»), и в нём обязана быть цифра: хвост из одних
+    # букв — это чьё-то имя или бренд, а не номер аккаунта.
+    from src.analysis_agent.analyze_fb_stats import normalize_account_alias
+
+    # Имя уже в стиле книги (`FacebookDoc446 - …`) — догадка по хвосту не нужна
+    # и ошибается: цепляет чужую серию (Doc405 → FacebookMKTO1405). Хвостом
+    # пользуются только имена Multilogin (`KLD_…`); суффикс id — как прежде.
+    if str(label or "").strip().casefold().startswith("facebook"):
+        return _alias_without_id_suffix(label, known)
+    tail = _account_tail(normalize_account_alias(label))
+    if not tail or not any(ch.isdigit() for ch in tail):
         return ""
+    label_is_fb = _is_facebook_label(label)
     # Само имя из кандидатов исключается: свой хвост у него, разумеется,
     # единственный, и аккаунт «совпадал» сам с собой — на экране появлялась
     # подпись «= KLD_BFL_X01», объясняющая ровно ничего.
     hits = [
         a for a in known
         if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
+        # ACL-2863: Facebook-аккаунт не берёт числа чужой платформы (Taboola_…).
+        and (not label_is_fb or _is_facebook_label(a))
     ]
     if hits:
         return hits[0] if len(hits) == 1 else ""
@@ -2841,6 +2910,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 # Страница - на кампании: ключ есть только когда поле пришло в форме.
                 if f"camp_{idx}_page_id" in form:
                     slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
+                # Пиксель кампании (поле Pixel рядом со Страницей): пусто = Automatic, ключа нет.
+                campaign_pixel = str(form.get(f"camp_{idx}_pixel_id") or "").strip()
+                if campaign_pixel:
+                    slot["campaign_pixel_id"] = campaign_pixel
                 if sf["adset_name"]:
                     slot["adset_name"] = sf["adset_name"]
                 if sf["pixel"]:
@@ -3075,9 +3148,9 @@ async def index(
         # and only when there is something to show.
         stored = await _in_report_pool(_stored_page, inputs) if report_store.exists(inputs) else None
         if failure is None and rebuild_deferred() and (stored is not None or report_has_entry()):
-            # ACL-2260: a publish or a kept profile window is active - no rebuild
-            # of its own. Show the saved page (or the older report in memory)
-            # and let the page ask again; it rebuilds once things are idle.
+            # ACL-2668: memory is short (the 92 % gate) - no rebuild of its own.
+            # Show the saved page (or the older report in memory) and let the
+            # page ask again; it rebuilds once memory is back.
             if stored is not None:
                 return HTMLResponse(report_store.decorate(stored, deferred=True))
         elif failure is None:
@@ -3371,20 +3444,15 @@ async def api_save_run_limits(request: Request) -> JSONResponse:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
-    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset", "confirm"}:
+    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset"}:
         return JSONResponse({"ok": False, "error": "Unknown setting in the request"}, status_code=400)
     if "reset" in data and not isinstance(data["reset"], bool):
         return JSONResponse({"ok": False, "error": "Expected true or false for reset"}, status_code=400)
-    if "confirm" in data and not isinstance(data["confirm"], bool):
-        return JSONResponse({"ok": False, "error": "Expected true or false for confirm"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
         result = await run_in_threadpool(
-            lambda: run_limits.save(data.get("ceiling"), data.get("warm_heavy"),
-                                    data.get("memory_max_used_pct"), reset=bool(data.get("reset")),
-                                    confirm=data.get("confirm") is True))
-    except run_limits.NeedsConfirm as exc:
-        return JSONResponse({"ok": False, "needs_confirm": True, "error": str(exc)}, status_code=409)
+            lambda: run_limits.save(data.get("ceiling"), data.get("memory_max_used_pct"),
+                                    reset=bool(data.get("reset"))))
     except run_limits.RunLimitError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, **result})
@@ -4026,6 +4094,124 @@ def api_accounts_overview() -> JSONResponse:
     })
 
 
+# ── ACL-2900: назначение аккаунтов пользователю через хаб ───────────────────
+# Ключ владельца (ACL_HUB_OWNER_KEY) остаётся на сервере: браузер ходит сюда,
+# а отсюда — в хаб. Без ключа маршруты отказывают, а блок на странице не рисуется.
+
+def _user_assign_guard() -> "JSONResponse | None":
+    from src.web import user_assign as _ua
+
+    if not _ua.enabled():
+        return JSONResponse({"ok": False, "error": _ua.DISABLED_MESSAGE}, status_code=403)
+    return None
+
+
+def _user_assign_resolve(text: str) -> list[dict]:
+    """Строки столбца → состояния. Источники: карта владельца и общий список."""
+    from src.web import user_assign as _ua
+
+    map_path = get_ad_account_map_path()
+    account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    labels: list[str] = []
+    try:
+        from src.analysis_agent.gsheet_accounts import fetch_account_rows
+
+        for row in fetch_account_rows():
+            label = (row.get("account_label") or row.get("alias") or "").strip()
+            if label:
+                labels.append(label)
+    except Exception:  # noqa: BLE001 — общий список необязателен, карта владельца важнее
+        labels = []
+    return _ua.resolve_lines(_ua.parse_lines(text), account_map, labels, normalise=normalise_ad_account_id)
+
+
+def _user_assign_enabled() -> bool:
+    from src.web import user_assign as _ua
+
+    return _ua.enabled()
+
+
+templates.env.globals["user_assign_enabled"] = _user_assign_enabled
+
+
+@app.get("/api/user-assign/users")
+async def api_user_assign_users() -> JSONResponse:
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        users = await _in_report_pool(_ua.HubClient().users)
+    except _ua.HubError as exc:
+        return JSONResponse({"ok": False, "error": str(exc), "users": []})
+    return JSONResponse({"ok": True, "users": [
+        {"email": u.get("email", ""), "name": u.get("name", ""), "role": u.get("role", ""),
+         "disabled": bool(u.get("disabled")), "active_accounts": u.get("active_accounts", 0)}
+        for u in users]})
+
+
+@app.post("/api/user-assign/preview")
+async def api_user_assign_preview(request: Request) -> JSONResponse:
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    results = await _in_report_pool(_user_assign_resolve, str(data.get("text") or ""))
+    return JSONResponse({"ok": True, "results": results})
+
+
+@app.post("/api/user-assign/send")
+async def api_user_assign_send(request: Request) -> JSONResponse:
+    """Заново разбирает строки на сервере и шлёт в хаб только `found` — браузеру строки не доверяем."""
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    email = _ua.clean_email(data.get("user_email") or "")
+    if not email:
+        return JSONResponse({"ok": False, "error": "Pick a user or type a valid email."}, status_code=400)
+    results = await _in_report_pool(_user_assign_resolve, str(data.get("text") or ""))
+    rows = _ua.found_rows(results)
+    if not rows:
+        return JSONResponse({"ok": False, "error": "Nothing to assign: no line matched an account.",
+                             "results": results})
+    try:
+        await _in_report_pool(_ua.HubClient().assign, email, rows)
+    except _ua.HubError as exc:
+        return JSONResponse({"ok": False, "error": str(exc), "results": results})
+    for r in results:
+        r["sent"] = r.get("state") == "found"
+    return JSONResponse({"ok": True, "assigned": [r["account_name"] for r in rows], "results": results})
+
+
+@app.post("/api/user-assign/remove")
+async def api_user_assign_remove(request: Request) -> JSONResponse:
+    from src.web import user_assign as _ua
+
+    if (denied := _user_assign_guard()) is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    email = _ua.clean_email(data.get("user_email") or "")
+    names = [str(n).strip() for n in (data.get("account_names") or []) if str(n).strip()]
+    if not email or not names:
+        return JSONResponse({"ok": False, "error": "A user and at least one account name are required."},
+                            status_code=400)
+    try:
+        await _in_report_pool(_ua.HubClient().remove, email, names)
+    except _ua.HubError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)})
+    return JSONResponse({"ok": True, "removed": names})
+
+
 @app.get("/api/team-library")
 def api_team_library_state() -> JSONResponse:
     """Подключена ли общая библиотека на этой машине (ACL-2038). Токен не отдаётся."""
@@ -4091,7 +4277,23 @@ async def api_connections_sign_in() -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Could not sign in. Try again."}, status_code=500)
     checks = await asyncio.to_thread(cs.check_all)
     await asyncio.to_thread(_after_connections_change)
+    # ACL-2899: новый вход = новый ключ юзера и свежие аккаунты; тихо, ошибки наружу не идут
+    try:
+        from src.web import user_accounts
+
+        await asyncio.to_thread(user_accounts.sync)
+    except Exception:  # noqa: BLE001
+        pass
     return JSONResponse({"ok": True, "updated": applied["updated"], "checks": checks})
+
+
+@app.post("/api/user-accounts/sync")
+async def api_user_accounts_sync() -> JSONResponse:
+    """ACL-2899: аккаунты юзера с хаба в локальную карту. Зовёт страница при открытии и когда
+    вкладка снова видна; без таймеров. Всегда 200 с тихим статусом, ключ и токен наружу не идут."""
+    from src.web import user_accounts
+
+    return JSONResponse(await asyncio.to_thread(user_accounts.sync))
 
 
 @app.post("/api/connections/check")
@@ -5388,9 +5590,20 @@ def _lock_holds(accounts) -> dict:
     try:
         from src.fb_api import account_blocks
 
-        return {a: {k: v.get(k) for k in ("kind", "code", "reason", "next", "at", "seen", "person_lock")}
+        return {a: {k: v.get(k) for k in ("kind", "code", "reason", "next", "at", "seen", "person_lock", "page", "title")}
                 for a, v in account_blocks.view(list(accounts)).items() if v.get("person_lock")}
     except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the page
+        return {}
+
+
+def _account_holds(accounts) -> dict:
+    """ACL-2652: `{account: {kind, reason, next, at}}` of the profiles that wait for a person (local file only)."""
+    try:
+        from src.fb_api import account_blocks
+
+        return {a: {k: v[k] for k in ("kind", "code", "reason", "next", "at")}
+                for a, v in account_blocks.view(list(accounts)).items()}
+    except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the state
         return {}
 
 
@@ -5405,7 +5618,8 @@ def account_refresh_state() -> JSONResponse:
     except (OSError, RuntimeError, ValueError):
         return JSONResponse({"ok": False, "error": "Saved account refresh state is unavailable. Check the settings backup."}, status_code=503)
     state["rows"] = {a: value for a, value in state["rows"].items() if a in accounts}
-    return JSONResponse({"ok": True, **state, "locks": _lock_holds(accounts), "accounts": ci.summaries(accounts),
+    return JSONResponse({"ok": True, **state, "holds": _account_holds(accounts), "locks": _lock_holds(accounts),
+                         "accounts": ci.summaries(accounts),
                          "needs_api": not ci.backend_ready()})
 
 
@@ -5913,6 +6127,7 @@ async def account_links_edit(request: Request) -> JSONResponse:
     also how somebody notices that a country still has money running through it.
     """
     from src.web import account_links
+    from src.web.buyer import get_selected_cm
 
     try:
         data = await request.json()
@@ -5935,18 +6150,27 @@ async def account_links_edit(request: Request) -> JSONResponse:
             # Страна без аккаунтов: сначала заводим место, потом подключаем в
             # него аккаунт из Multilogin. Обратный порядок требовал выбрать
             # аккаунт из уже известных — то есть до подключения нового.
-            return JSONResponse({"ok": True, "changed": account_links.add_value(kind, value)})
+            changed = account_links.add_value(kind, value, buyer=get_selected_cm())
+            if changed:
+                return JSONResponse({"ok": True, "changed": True})
+            # ACL-2853: «ничего не изменилось» не должно кончаться молчаливой
+            # перезагрузкой того же экрана — страница покажет причину у кнопки.
+            return JSONResponse({
+                "ok": True, "changed": False,
+                "reason": f"{value} is already on your account map. Nothing was added.",
+            })
 
         if action == "link":
             if not account:
                 return JSONResponse({"ok": False, "error": "Pick an account first"}, status_code=400)
-            added = account_links.link(account, kind, value)
+            added = account_links.link(account, kind, value, buyer=get_selected_cm())
             return JSONResponse({"ok": True, "changed": added})
 
         if action in ("unlink", "close"):
             spending = await _in_report_pool(
                 _accounts_spending_today,
-                [account] if action == "unlink" else account_links.accounts_for(kind, value),
+                [account] if action == "unlink"
+                else account_links.accounts_visible_for(kind, value, get_selected_cm()),
             )
             if spending and not confirm:
                 names = ", ".join(spending[:4]) + ("…" if len(spending) > 4 else "")
@@ -5966,9 +6190,11 @@ async def account_links_edit(request: Request) -> JSONResponse:
             # «Изменилось» — про страну, а не про освобождённые аккаунты:
             # у пустой страны их нет, и ответ «ничего не поменялось» после
             # её удаления был бы неправдой.
-            existed = any(v.lower() == value.lower() for v in account_links.all_values(kind))
-            freed = account_links.unlink_all_for(kind, value)
-            return JSONResponse({"ok": True, "changed": existed, "freed": freed})
+            freed, removed = account_links.close_country(kind, value, buyer=get_selected_cm())
+            out = {"ok": True, "changed": bool(removed), "freed": freed}
+            if not removed:
+                out["reason"] = f"{value} is not on your account map, so there was nothing to close."
+            return JSONResponse(out)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # pragma: no cover - defensive
@@ -6620,6 +6846,27 @@ def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
     return None
 
 
+# ── Ответы только из кэша — не за чтениями профиля (ACL-2896) ─────────────
+#
+# Билдер при отрисовке спрашивает Pages / Pixel / вердикты Check plan только из
+# кэша на машине (cached=1, /publish-plan/cached). Через `asyncio.to_thread` они
+# стояли в общем пуле цикла (min(32, cpu+4) потоков) за check_plan,
+# prepare_connection, чтением Страниц и open-profile, которые висят там в
+# ожидании профиля; при Check all на нескольких аккаунтах пул полон, и чтение
+# файла в 1 мс ждало минутами — поле стояло на «Loading…».
+# Свой маленький пул, а не ответ прямо в цикле: кэш Pages/Pixel — чтение JSON
+# с диска под threading-замком (его держит и запись кэша), а cached_plan строит
+# черновики (enrich читает файлы); всё это не должно держать цикл событий.
+# В этот пул не попадает ничего, что открывает профиль.
+_CACHED_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="acl-cached")
+
+
+async def _in_cached_pool(fn, /, *args, **kwargs):
+    loop = asyncio.get_running_loop()
+    ctx = contextvars.copy_context()
+    return await loop.run_in_executor(_CACHED_POOL, functools.partial(ctx.run, fn, *args, **kwargs))
+
+
 @app.post("/api/account-pages")
 async def api_account_pages(request: Request) -> JSONResponse:
     """Read available Pages under the existing profile read lock; no Meta writes."""
@@ -6631,10 +6878,93 @@ async def api_account_pages(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
     if str(form.get("cached") or "") == "1":
         # Отрисовка билдера: только кэш на машине, профиль не открывается.
-        return JSONResponse(await asyncio.to_thread(cached_only, account))
+        return JSONResponse(await _in_cached_pool(cached_only, account))
     # Без force — ответ из кэша на машине (12 ч): лишний запуск профиля ради списка Страниц не нужен.
     force = str(form.get("force") or "") == "1"
     return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
+
+
+@app.post("/api/account-pixels")
+async def api_account_pixels(request: Request) -> Response:
+    """Пиксели кабинета для поля Pixel кампании; та же сессия профиля на чтение, без записей в Meta."""
+    from src.web.account_pixels import cached_only, read_pixels
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
+    if str(form.get("cached") or "") == "1":
+        return JSONResponse(await _in_cached_pool(cached_only, account))
+    force = str(form.get("force") or "") == "1"
+    if str(form.get("stream") or "") == "1":
+        # ACL-2850: строки ожидания («Waiting for a free profile slot», «Opening ...») едут строками JSON
+        # по ходу чтения, а не опросом: поле Pixel не молчит, пока профиль не открыт.
+        from src.web.account_pixels import stream_pixels
+
+        def lines():
+            import json as _json
+            for item in stream_pixels(account, force=force):
+                yield _json.dumps(item, ensure_ascii=False) + "\n"
+        return StreamingResponse(lines(), media_type="application/x-ndjson")
+    return JSONResponse(await asyncio.to_thread(read_pixels, account, force=force))
+
+
+@app.post("/api/jcloud/landings/search")
+async def api_jcloud_landings_search(request: Request) -> JSONResponse:
+    """ACL-2852: поиск лендингов в JCloudFront для билдера. Только чтение, только по нажатию.
+
+    Токен JCloud остаётся на сервере: в ответ идут лишь поля карточки.
+    """
+    from src.jcloud import client as jcloud
+
+    form = await request.form()
+    try:
+        page = int(str(form.get("page") or "1"))
+    except ValueError:
+        page = 1
+    try:
+        stock_id = int(str(form.get("stock_id") or "")) or None
+    except ValueError:
+        stock_id = None
+    result = await asyncio.to_thread(
+        jcloud.search, str(form.get("query") or ""), page=page,
+        snapshot_id=str(form.get("snapshot_id") or "") or None,
+        mode=str(form.get("mode") or "") or None, stock_id=stock_id)
+    return JSONResponse(result)
+
+
+@app.post("/api/jcloud/stocks/search")
+async def api_jcloud_stocks_search(request: Request) -> JSONResponse:
+    """ACL-2852: подсказки ассета (сток JCloudFront) для фильтра поиска лендингов."""
+    from src.jcloud import client as jcloud
+
+    form = await request.form()
+    return JSONResponse(await asyncio.to_thread(jcloud.find_stocks, str(form.get("query") or "")))
+
+
+@app.post("/api/account-landings")
+async def api_account_landings(request: Request) -> JSONResponse:
+    """ACL-2852: лендинги аккаунта (до трёх, с процентами). op: get | add | remove | percent."""
+    from src.web import account_landings as store
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "message": "account is required"}, status_code=400)
+    op = str(form.get("op") or "get")
+    if op == "add":
+        try:
+            landing = json.loads(str(form.get("landing") or ""))
+        except ValueError:
+            landing = None
+        result = await asyncio.to_thread(store.add_landing, account, landing)
+    elif op == "remove":
+        result = await asyncio.to_thread(store.remove_landing, account, form.get("id"))
+    elif op == "percent":
+        result = await asyncio.to_thread(store.set_percent, account, form.get("id"), form.get("percent"))
+    else:
+        result = {"ok": True, "landings": await asyncio.to_thread(store.get_landings, account)}
+    return JSONResponse(result)
 
 
 @app.post("/api/page-forms")
@@ -7103,8 +7433,8 @@ async def publish_plan_cached(request: Request) -> JSONResponse:
     country, account_label, slots = _parse_build_upload_form(form)
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
-    return JSONResponse(await asyncio.to_thread(publish_api.cached_plan, slots, account_label=account_label,
-                                                country=country))
+    return JSONResponse(await _in_cached_pool(publish_api.cached_plan, slots, account_label=account_label,
+                                              country=country))
 
 
 # ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
@@ -7831,7 +8161,7 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
 def _slot_work_busy() -> int:
     """Work that needs the Multilogin connections: campaign jobs, held profile
     slots, and profile warm-ups (manual or automatic). Returns a rough count."""
-    from src.web.publish_jobs import active_job_count, publishing_busy
+    from src.web.publish_jobs import active_job_count, profile_slots_held
 
     n = active_job_count()
     try:
@@ -7840,7 +8170,8 @@ def _slot_work_busy() -> int:
         n += warm_api.running_job_count()
     except Exception:
         pass
-    if not n and publishing_busy():
+    # ACL-2668: оставленное открытым окно — открытый профиль на этом подключении, считаем его.
+    if not n and profile_slots_held():
         n = 1
     return n
 

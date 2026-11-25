@@ -155,15 +155,12 @@ def test_retained_tag_never_overrides_receipt_content_verification(tmp_path, fie
 
 def test_missing_tag_many_ads_finish_inside_real_create_budget(tmp_path):
     from tests.test_acl1768_ad_sets import _draft as sets_draft, _publisher_for
-    from src.web import publish_api
     draft = sets_draft(tmp_path, sets=10, ads=3)
-    budget, refusal = publish_api.create_call_budget(cr.plan_from_draft(draft))
-    assert not refusal
     meta = UntaggedMeta()
     pub = _publisher_for(meta)
     result = pub.publish_draft(draft)
     assert result["success"], result["error"]
-    assert pub._client.calls <= budget
+    assert pub._client.max_calls is None and pub._client.stopped is None   # ACL-2668: без потолка
     assert len(creatives(meta)) == 30
 
 
