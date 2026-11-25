@@ -134,13 +134,27 @@ export async function handleLibraryAccess(request, env) {
     { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
 
-// GET /api/users
-export async function listUsers(env) {
+// GET /api/users[?name=] (ACL-2919: name — точное совпадение без учёта регистра)
+export async function listUsers(env, name = "") {
+  const wanted = String(name || "").trim();
   const { results } = await env.DB.prepare(
     "SELECT u.email, u.name, u.role, u.created_at, u.disabled, "
     + "(SELECT count(*) FROM account_assignments a WHERE a.user_email = u.email AND a.removed_at IS NULL) AS active_accounts "
-    + "FROM users u ORDER BY u.email").all();
+    + "FROM users u " + (wanted ? "WHERE u.name = ? COLLATE NOCASE " : "") + "ORDER BY u.email")
+    .bind(...(wanted ? [wanted] : [])).all();
   return json({ users: results });
+}
+
+// GET /api/assignments?user_email= (ACL-2919): строки одного юзера, активные и снятые (у снятых removed_at),
+// те же поля, что у /v1/my-accounts. Полей proxy_* и tracking_link в таблице нет.
+async function listAssignments(env, url) {
+  const email = String(url.searchParams.get("user_email") || "").trim().toLowerCase();
+  if (!email.includes("@")) return json({ error: "user_email required" }, 400);
+  const user = await env.DB.prepare("SELECT email, name FROM users WHERE email = ?").bind(email).first();
+  if (!user) return json({ error: "unknown user" }, 404);
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM account_assignments WHERE user_email = ? ORDER BY account_name").bind(email).all();
+  return json({ user_email: user.email, name: user.name, accounts: results });
 }
 
 const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -160,13 +174,23 @@ function validRows(rows) {
 
 // POST /api/assignments {user_email, rows}. Неизвестного юзера создаём покупателем (buyer): админ может
 // назначить аккаунты раньше, чем человек первый раз войдёт.
+// ACL-2919: необязательное user_name попадает в users.name только пока имя пусто (имя из Google не перезаписывается);
+// нового юзера создаём, только если домен его почты разрешён (как при входе).
 async function assign(env, admin, body) {
   const email = String(body?.user_email || "").trim().toLowerCase();
   if (!email.includes("@")) return json({ error: "user_email required" }, 400);
+  const rawName = body?.user_name;
+  const name = rawName === undefined || rawName === null ? null : str(rawName);
+  if (rawName !== undefined && rawName !== null && (!name || name.length > 120)) return json({ error: "bad user_name" }, 400);
   const v = validRows(body.rows);
   if (v.error) return json({ error: v.error }, 400);
+  const existing = await env.DB.prepare("SELECT email FROM users WHERE email = ?").bind(email).first();
+  if (!existing && !allowedDomains(env).includes(domainOf(email))) return json({ error: "domain not allowed" }, 400);
   const nowIso = new Date().toISOString();
-  const stmts = [env.DB.prepare("INSERT OR IGNORE INTO users (email, created_at) VALUES (?, ?)").bind(email, nowIso)];
+  const stmts = [env.DB.prepare("INSERT OR IGNORE INTO users (email, name, created_at) VALUES (?, ?, ?)").bind(email, name, nowIso)];
+  if (name) {
+    stmts.push(env.DB.prepare("UPDATE users SET name = ? WHERE email = ? AND (name IS NULL OR name = '')").bind(name, email));
+  }
   for (const r of v.rows) {
     stmts.push(env.DB.prepare(
       "INSERT INTO account_assignments (user_email, account_name, ad_account_id, page_id, page_name, country, "
@@ -181,7 +205,7 @@ async function assign(env, admin, body) {
       r.folder_id, r.profile_id, admin.by, nowIso));
   }
   await env.DB.batch(stmts);
-  return json({ ok: true, assigned: v.rows.length });
+  return json({ ok: true, assigned: v.rows.length, created: !existing });
 }
 
 // POST /api/assignments/remove {user_email, account_names}: мягкое снятие, строки не удаляются.
@@ -210,7 +234,7 @@ async function setRole(env, body) {
 // Маршруты /api/users*, /api/assignments*. null — путь не наш.
 export async function handleUserApi(request, env, url) {
   const method = request.method;
-  const need = { "GET /api/users": "admin", "POST /api/assignments": "admin",
+  const need = { "GET /api/users": "admin", "GET /api/assignments": "admin", "POST /api/assignments": "admin",
     "POST /api/assignments/remove": "admin", "POST /api/users/role": "owner" }[`${method} ${url.pathname}`];
   if (!need) return null;
   let admin = null;
@@ -223,7 +247,10 @@ export async function handleUserApi(request, env, url) {
     if (!admin) return denied(Boolean(await userFromRequest(request, env)));
   }
   try {
-    if (method === "GET") return await listUsers(env);
+    if (method === "GET") {
+      return url.pathname === "/api/assignments" ? await listAssignments(env, url)
+        : await listUsers(env, url.searchParams.get("name"));
+    }
     let body = null;
     try { body = await request.json(); } catch (_) { return json({ error: "bad json" }, 400); }
     if (url.pathname === "/api/assignments") return await assign(env, admin, body);
