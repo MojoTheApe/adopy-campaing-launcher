@@ -286,7 +286,10 @@ def find_user_email(client: "HubClient", buyer: str, email_hint: str = "") -> st
     remembered = _load_buyer_map().get(_buyer_key(buyer), "")
     if clean_email(remembered):
         return clean_email(remembered)
-    found = [u for u in client.users(buyer) if clean_email(u.get("email", ""))]
+    # Старый хаб игнорирует ?name= и отдаёт всех: имя сверяем сами, точно и без учёта регистра.
+    want = _buyer_key(buyer)
+    found = [u for u in client.users(buyer)
+             if clean_email(u.get("email", "")) and _buyer_key(str(u.get("name") or "")) == want]
     if len(found) > 1:
         raise NeedEmail(buyer, ambiguous=True)
     if not found:

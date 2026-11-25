@@ -108,3 +108,23 @@ def test_template_shows_the_email_in_place_without_a_new_button():
     html = (ROOT / "src" / "web" / "templates" / "_user_assign.html").read_text(encoding="utf-8")
     assert 'id="ua-email"' in html and " hidden" not in html.split('id="ua-email"')[1].split(">")[0]
     assert html.count("<button") == 2                                  # только Check и Assign, новых кнопок нет
+
+
+# ── старый хаб без фильтра ?name= ────────────────────────────────────────
+
+def test_an_older_hub_ignoring_the_name_filter_never_maps_to_another_user(hub):
+    from src.web import user_assign as ua
+
+    everyone = [{"email": "gil@adopy.test", "name": "Gil Zangi"}, {"email": "other@adopy.test", "name": "Someone Else"}]
+
+    class OldHub:                                                      # отдаёт всех, ?name= не понимает
+        def users(self, name=""):
+            return everyone
+
+    with pytest.raises(ua.NeedEmail):                                  # Dan в списке нет: не берём чужого
+        ua.find_user_email(OldHub(), "Dan Dicker")
+    assert ua.find_user_email(OldHub(), "gil  zangi") == "gil@adopy.test"
+    everyone.append({"email": "gil2@adopy.test", "name": "GIL ZANGI"})
+    with pytest.raises(ua.NeedEmail) as e:                             # двое с точным именем — по-прежнему спрашиваем
+        ua.find_user_email(OldHub(), "Gil Zangi")
+    assert e.value.ambiguous
