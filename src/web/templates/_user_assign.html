@@ -1,12 +1,14 @@
-{# ACL-2900: назначение аккаунтов пользователю. Рисуется только там, где есть ключ владельца
-   хаба (user_assign_enabled); логика — /static/user_assign.js, стили — классы amap-*. #}
+{# ACL-2900 / ACL-2920: назначение аккаунтов байеру, выбранному в «Logged as». Рисуется только там, где есть ключ
+   владельца хаба (user_assign_enabled); логика — /static/user_assign.js, стили — классы amap-*. #}
 <details class="amap-assign" id="ua-root">
-  <summary><h3 style="display:inline">Assign accounts to a user</h3></summary>
+  <summary><h3 style="display:inline">Assign accounts to <span id="ua-who">the selected buyer</span></h3></summary>
   <div class="amap-add" style="flex-wrap:wrap">
-    <select id="ua-user" aria-label="User"><option value="">Pick a user…</option></select>
-    <input type="email" id="ua-email" placeholder="or type a new email" size="26" autocomplete="off" spellcheck="false">
+    <span class="amap-note" id="ua-hubuser"></span>
+    <input type="email" id="ua-email" placeholder="Buyer's email (asked once)" size="30" autocomplete="off"
+           spellcheck="false" hidden>
     <span class="amap-msg" id="ua-msg" role="status"></span>
   </div>
+  <div id="ua-list" class="ua-assigned"></div>
   <div class="amap-add" style="flex-wrap:wrap;align-items:flex-start">
     <textarea id="ua-text" rows="6" cols="60" spellcheck="false"
       placeholder="One per line: account name, ad account number, act_123… or an Ads Manager link"></textarea>

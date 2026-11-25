@@ -176,6 +176,11 @@ def _call(handler, body=None):
     return asyncio.run(run())
 
 
+async def _accounts(app_mod, buyer):
+    resp = await app_mod.api_user_assign_accounts(buyer)
+    return resp.status_code, json.loads(resp.body)
+
+
 @pytest.fixture
 def owner(monkeypatch, tmp_path):
     """Ключ владельца задан; карта — временный CSV; общий список подменён."""
@@ -198,11 +203,13 @@ def test_controls_hidden_and_routes_refuse_without_key(monkeypatch):
     monkeypatch.delenv("ACL_HUB_OWNER_KEY", raising=False)
     assert app_mod._user_assign_enabled() is False
     for handler, body in [(app_mod.api_user_assign_preview, {"text": "x"}),
-                          (app_mod.api_user_assign_send, {"user_email": "a@b.co", "text": "x"}),
-                          (app_mod.api_user_assign_remove, {"user_email": "a@b.co", "account_names": ["x"]})]:
+                          (app_mod.api_user_assign_send, {"buyer": "B", "user_email": "a@b.co", "text": "x"}),
+                          (app_mod.api_user_assign_remove, {"buyer": "B", "user_email": "a@b.co", "account_names": ["x"]})]:
         status, data = _call(handler, body)
         assert status == 403 and data["ok"] is False and "not available" in data["error"]
     status, data = _call(app_mod.api_user_assign_users)
+    assert status == 403
+    status, data = asyncio.run(_accounts(app_mod, "B"))
     assert status == 403
 
 
@@ -236,10 +243,11 @@ def test_send_includes_only_found_rows(owner, monkeypatch):
 
     monkeypatch.setattr(ua, "HubClient", make)
     status, data = _call(app_mod.api_user_assign_send,
-                         {"user_email": "New@Buyer.co", "text": "Alpha 1\nnope\nalpha 1\nSheet Only"})
+                         {"buyer": "New Buyer", "user_email": "New@Buyer.co", "text": "Alpha 1\nnope\nalpha 1\nSheet Only"})
     assert status == 200 and data["ok"] is True
     (url, body), = calls
     assert url.endswith("/api/assignments") and body["user_email"] == "new@buyer.co"
+    assert body["user_name"] == "New Buyer"                       # ACL-2920: имя запоминается вместе с почтой
     assert [r["account_name"] for r in body["rows"]] == ["Alpha 1", "Sheet Only"]
     for row in body["rows"]:
         assert set(row) == set(ua.ROW_FIELDS)
@@ -253,11 +261,13 @@ def test_send_surfaces_hub_error_and_validates(owner, monkeypatch):
 
     real = ua.HubClient
     monkeypatch.setattr(ua, "HubClient", lambda *a, **k: real("https://hub.example", "KEY", lambda *x: (403, {})))
-    status, data = _call(app_mod.api_user_assign_send, {"user_email": "a@b.co", "text": "Alpha 1"})
+    status, data = _call(app_mod.api_user_assign_send, {"buyer": "B", "user_email": "a@b.co", "text": "Alpha 1"})
     assert data["ok"] is False and "HTTP 403" in data["error"] and data["results"][0]["state"] == "found"
-    status, data = _call(app_mod.api_user_assign_send, {"user_email": "nope", "text": "Alpha 1"})
-    assert status == 400
-    status, data = _call(app_mod.api_user_assign_send, {"user_email": "a@b.co", "text": "zzz"})
+    status, data = _call(app_mod.api_user_assign_send, {"buyer": "B", "user_email": "nope", "text": "Alpha 1"})
+    assert status == 400 and data["need_email"] is True
+    status, data = _call(app_mod.api_user_assign_send, {"user_email": "a@b.co", "text": "Alpha 1"})
+    assert status == 400                                          # без байера из «Logged as» не отправляем
+    status, data = _call(app_mod.api_user_assign_send, {"buyer": "B", "user_email": "a@b.co", "text": "zzz"})
     assert data["ok"] is False and "Nothing to assign" in data["error"]
 
 
@@ -268,9 +278,9 @@ def test_remove_route(owner, monkeypatch):
     real = ua.HubClient
     monkeypatch.setattr(ua, "HubClient", lambda *a, **k: real(
         "https://hub.example", "KEY", lambda m, u, b, h: (calls.append((u, json.loads(b))) or (200, {"ok": True}))))
-    status, data = _call(app_mod.api_user_assign_remove, {"user_email": "a@b.co", "account_names": ["Alpha 1"]})
+    status, data = _call(app_mod.api_user_assign_remove, {"buyer": "B", "user_email": "a@b.co", "account_names": ["Alpha 1"]})
     assert data == {"ok": True, "removed": ["Alpha 1"]}
     assert calls == [("https://hub.example/api/assignments/remove",
                       {"user_email": "a@b.co", "account_names": ["Alpha 1"]})]
-    status, data = _call(app_mod.api_user_assign_remove, {"user_email": "a@b.co", "account_names": []})
+    status, data = _call(app_mod.api_user_assign_remove, {"buyer": "B", "user_email": "a@b.co", "account_names": []})
     assert status == 400
