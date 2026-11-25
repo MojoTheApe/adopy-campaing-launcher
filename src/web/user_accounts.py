@@ -344,6 +344,8 @@ def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
                 return {"ok": True, "status": "no_session", "changed": False}
             continue
         break
+    if status in (200, 304):
+        _ensure_library(http, key)  # ACL-2915: вход в Google подключает и общую библиотеку
     if status == 304:
         return {"ok": True, "status": "not_modified", "changed": False}
     if status != 200 or not isinstance(data, dict) or not isinstance(data.get("accounts"), list):
@@ -377,6 +379,43 @@ def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
     if seeded:
         out["seeded"] = seeded
     return out
+
+
+def _ensure_library(http: Http, key: str) -> None:
+    """ACL-2915: если на машине нет токена общей библиотеки, взять его у хаба и подключить.
+
+    Тот же путь, что у кнопки Connect (проверка одним чтением, сохранение в настройки машины,
+    добавление недостающего с этой машины: ничего не перезаписывается и не удаляется), плюс
+    шаблоны форм. Уже стоящий токен не заменяется. Тихо: любой сбой повторится при следующей
+    синхронизации. Токен не пишется ни в лог, ни в ответ страницы: наружу только факт подключения."""
+    if (os.environ.get("ACL_LIBRARY_TOKEN") or "").strip():
+        # Токен уже есть. Если прошлое подключение донесло не всё, добираем недостающее (ревью ACL-2915).
+        try:
+            from src.analysis_agent import team_library_connect as tlc
+
+            if tlc.retry_pending():
+                log.info("Team library: items left over from the first connect were added.")
+        except Exception:  # noqa: BLE001
+            log.info("Team library: retrying the left-over items did not finish; it will be tried again.")
+        return
+    try:
+        status, _h, data = http("GET", hub_url() + "/v1/library-access",
+                                {"Authorization": f"Bearer {key}", "User-Agent": "acl-dashboard"}, None)
+    except Exception:  # noqa: BLE001 - нет сети
+        return
+    if status != 200 or not isinstance(data, dict):
+        log.info("Team library auto-connect: hub answered %s.", status)
+        return
+    token, repo = data.get("token"), data.get("repo")
+    if not isinstance(token, str) or not isinstance(repo, str) or not token.strip() or not repo.strip():
+        return
+    try:
+        from src.analysis_agent import team_library_connect as tlc
+
+        tlc.connect(token, repo=repo, kinds=tlc.AUTO_CONNECT_KINDS)
+        log.info("Team library connected from the hub.")
+    except Exception:  # noqa: BLE001 - ConnectError и прочее: без текста ошибки, он мог бы нести значение
+        log.info("Team library auto-connect did not finish; it will be retried.")
 
 
 def _get_my_accounts(http: Http, key: str, etag: str) -> tuple:
