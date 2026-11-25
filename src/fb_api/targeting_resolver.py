@@ -765,22 +765,45 @@ class TermResolver:
         if line not in self.notes:
             self.notes.append(line)
 
-    def _accept(self, term: str, cand: dict) -> list[dict] | None:
-        """Близкое совпадение: запомнить так же, как кнопка Confirm, и взять. Поведение чужого вида - никогда."""
-        if cand["type"] == "behaviors":
-            return None
+    @staticmethod
+    def _unambiguous(res: dict) -> tuple[dict | None, str]:
+        """Кандидат, которого можно взять без человека, либо (None, причина-неоднозначности).
+
+        Берём только единственного лидера: сходство по самим буквам >= STRONG_SCORE (оценка «по словам»
+        0.8 для подмножества/надмножества слов сюда не годится: «Hot Yoga» для «yoga», «The Wall» для
+        «The Wall Street Journal»), без ничьей по оценке и без второго кандидата с тем же именем
+        без «(категории)» («Apple (company)» / «Apple (fruit)»). Поведения - чужой вид, не берём.
+        """
+        best = res.get("suggested")
+        if not best or best["type"] == "behaviors":
+            return None, ""
+        if res.get("split"):
+            return best, ""
+        term = res["term"]
+        others = [c for c in res.get("candidates") or [] if (c["type"], c["id"]) != (best["type"], best["id"])]
+        tie = [c for c in others if c.get("score") == best.get("score")
+               or base_name(c["name"]) == base_name(best["name"])]
+        if tie:
+            names = ", ".join(c["name"] for c in [best] + tie)
+            return None, f"several possible matches ({names})"
+        letters = difflib.SequenceMatcher(None, norm(term), norm(best["name"])).ratio()
+        if letters < STRONG_SCORE and norm(term) != base_name(best["name"]):
+            return None, ""
+        return best, ""
+
+    def _remember(self, term: str, cand: dict) -> None:
+        """Запомнить как кнопка Confirm; сбой записи задание не роняет (пик всё равно берём)."""
         try:
             self.store.put(term, id=cand["id"], type=cand["type"], name=cand["name"], picks=cand.get("picks"))
         except (OSError, ValueError):
-            pass    # не удалось запомнить - пик всё равно берём, задание не падает
-        self._note(f"Used '{cand['name']}' for '{term}'")
-        return picks_of(cand)
+            pass
 
     def settle(self, res: dict) -> list[dict]:
         """Итог по термину без участия человека: пики для запроса или [] (термин снят только из запроса).
 
-        exact/confirmed - как есть; pending - берём кандидата и запоминаем в ConfirmedStore;
-        иначе (нет кандидатов, чужой вид, отказ Meta) термин убирается из запроса, библиотека и черновик целы.
+        exact/confirmed - как есть; pending с однозначным кандидатом - берём и запоминаем в ConfirmedStore;
+        иначе (нет кандидатов, неоднозначно, чужой вид, отказ Meta) термин убирается из запроса, ничего не
+        запоминается; библиотека и черновик целы. Части «A or B» запоминаются только если принято всё целиком.
         """
         if res["state"] in _OK_STATES:
             return res["picks"]
@@ -788,23 +811,35 @@ class TermResolver:
             return res["settled"]
         term = res["term"]
         picks: list[dict] | None = None
+        why = ""
+        chosen: list[tuple[str, dict]] = []     # (термин, кандидат) к запоминанию
         bad = res.get("bad_parts")
         if bad:
             if all(b["state"] == "pending" for b in bad):
                 got: list[dict] | None = []
                 for sub in res["parts"]:
-                    part = sub["picks"] if sub["state"] in _OK_STATES else (
-                        self._accept(sub["term"], sub["suggested"]) if sub["state"] == "pending" else None)
-                    if part is None:
+                    if sub["state"] in _OK_STATES:
+                        got += sub["picks"]
+                        continue
+                    cand, why = self._unambiguous(sub) if sub["state"] == "pending" else (None, "")
+                    if cand is None:
                         got = None
                         break
-                    got += part
+                    chosen.append((sub["term"], cand))
+                    got += picks_of(cand)
                 picks = got
         elif res["state"] == "pending":
-            picks = self._accept(term, res["suggested"])
+            cand, why = self._unambiguous(res)
+            if cand is not None:
+                chosen.append((term, cand))
+                picks = picks_of(cand)
         if picks is None:
-            self._note(f"Removed '{term}': Meta has no match on this account")
+            self._note(f"Removed '{term}': " + (why or "Meta has no match on this account"))
             picks = []
+        else:
+            for t, cand in chosen:
+                self._remember(t, cand)
+                self._note(f"Used '{cand['name']}' for '{t}'")
         res["settled"] = picks
         return picks
 

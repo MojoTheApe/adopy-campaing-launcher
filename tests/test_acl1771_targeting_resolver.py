@@ -671,11 +671,65 @@ def test_ambiguous_term_lists_every_near_candidate_and_picks_none(tmp_path):
     res = _one(_resolver(FakeSearch(interests=near), tmp_path), "yoga")
     assert res["state"] in ("pending", "unresolved") and res["picks"] == []
     assert {c["name"] for c in res["candidates"]} == {"Yoga Classes", "Yoga Mats", "Hot Yoga"}
-    # ACL-2925: the system decides itself - a strong near match is used, otherwise the term is removed
-    r = cr.TargetingResolver(FakeSearch(interests=near), _store(tmp_path))
-    spec = r.interests([["yoga"]])
-    assert r.targeting_notes()[0].startswith("Used " if res["state"] == "pending" else "Removed ")
-    assert bool(spec) == (res["state"] == "pending")
+    # ACL-2925: nothing is picked among ambiguous candidates: the term is removed and nothing is remembered
+    store = _store(tmp_path)
+    r = cr.TargetingResolver(FakeSearch(interests=near), store)
+    assert r.interests([["yoga"]]) == []
+    assert r.targeting_notes()[0].startswith("Removed 'yoga': several possible matches")
+    assert store.entries() == []
+
+
+def _settle(tmp_path, term, interests=None, **kw):
+    store = _store(tmp_path)
+    r = cr.TargetingResolver(FakeSearch(interests=interests or {}, **kw), store)
+    return r, r.interests([[term]]), store
+
+
+def test_a_tie_on_score_is_ambiguous_and_nothing_is_remembered(tmp_path):
+    r, spec, store = _settle(tmp_path, "Forex trading", {"Forex trading": [
+        {"id": "1", "name": "Forex tradingx"}, {"id": "2", "name": "Forex tradingy"}]})
+    assert spec == [] and "several possible matches" in r.targeting_notes()[0] and store.entries() == []
+
+
+def test_a_shorter_subset_candidate_is_not_used(tmp_path):
+    r, spec, store = _settle(tmp_path, "The Wall Street Journal", {"The Wall Street Journal": [
+        {"id": "1", "name": "The Wall"}]})
+    assert spec == [] and r.targeting_notes()[0].startswith("Removed 'The Wall Street Journal'")
+    assert store.entries() == []
+    r, spec, store = _settle(tmp_path, "Portfolio management", {"Portfolio management": [
+        {"id": "2", "name": "Management"}]})
+    assert spec == [] and store.entries() == []
+
+
+def test_a_superset_candidate_is_not_used(tmp_path):
+    r, spec, store = _settle(tmp_path, "yoga", {"yoga": [{"id": "3", "name": "Hot Yoga"}]})
+    assert spec == [] and r.targeting_notes()[0].startswith("Removed 'yoga'") and store.entries() == []
+
+
+def test_two_candidates_differing_only_by_a_category_tail_are_ambiguous(tmp_path):
+    r, spec, store = _settle(tmp_path, "Apple", {"Apple": [{"id": "1", "name": "Apple (company)"},
+                                                           {"id": "2", "name": "Apple (fruit)"}]})
+    assert spec == [] and store.entries() == []
+    assert r.targeting_notes()[0] == "Removed 'Apple': several possible matches (Apple (company), Apple (fruit))"
+
+
+@pytest.mark.parametrize("term,name", [("Investing", "Investing.com"), ("Bloomberg", "Bloomberg L.P."),
+                                       ("E*TRADE", "E-Trade")])
+def test_clear_single_near_matches_are_still_used(tmp_path, term, name):
+    r, spec, store = _settle(tmp_path, term, {term: [{"id": "7", "name": name}]})
+    assert spec == [{"interests": [{"id": "7", "name": name}]}]
+    assert r.targeting_notes() == [f"Used '{name}' for '{term}'"] and store.get(term)["id"] == "7"
+
+
+def test_split_parts_are_remembered_only_when_the_whole_split_is_accepted(tmp_path):
+    ok = {"Alpari Group": [{"id": "5", "name": "Alpari Group Ltd"}]}
+    # later part fails (ambiguous): nothing remembered, no "Used" note
+    c = FakeSearch(interests={**ok, "Plus 500": [{"id": "8", "name": "Plus 500a"}, {"id": "9", "name": "Plus 500b"}]})
+    store = _store(tmp_path)
+    r = cr.TargetingResolver(c, store)
+    assert r.interests([["Alpari Group or Plus 500"]]) == []
+    assert store.entries() == [] and not any(n.startswith("Used") for n in r.targeting_notes())
+    assert r.targeting_notes()[0].startswith("Removed 'Alpari Group or Plus 500'")
 
 
 def test_audience_languages_and_detailed_targeting_share_one_resolver(tmp_path):
