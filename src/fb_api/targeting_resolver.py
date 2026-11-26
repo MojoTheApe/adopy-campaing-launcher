@@ -70,6 +70,8 @@ MAX_CANDIDATES = 8
 #: (creator, preflight_rules) на случай состояния «unknown».
 UNKNOWN_MESSAGE = "Couldn't check all interests — press Check plan again"
 #: ACL-2267: тёплая находка, которую Meta больше не отдаёт, а поиск точного имени не нашёл.
+#: ACL-2938: версия правила, по которому записана тёплая находка (2 = решение после всех стадий, ACL-2932).
+WARM_RULE_VERSION = 2
 WARM_GONE_REASON = "The saved match is no longer offered by Meta; pick a candidate"
 #: Строк в ответе adinterestvalid (без limit Meta отдаёт страницу по умолчанию, и хвост пакета теряется).
 VALID_LIMIT = 200
@@ -622,8 +624,20 @@ class TermResolver:
         picks = value.get("picks") if isinstance(value, dict) else None
         if not isinstance(picks, list) or not picks or not all(plausible_pick(p, BUCKETS) for p in picks):
             return None
+        if self._warm_legacy(term, value, picks):
+            # ACL-2938: запись выбрана по старому правилу первой стадии («apple» -> «Apple (fruit)»):
+            # убираем и ищем заново по текущему правилу (ACL-2932); подтверждённые термины не затрагиваются.
+            self._facts.drop_terms([self._warm_key(term)])
+            return None
         self.touched_keys.add(self._warm_key(term))
         return [{"id": str(p["id"]), "type": p["type"], "name": str(p.get("name") or "")} for p in picks]
+
+    @staticmethod
+    def _warm_legacy(term: str, value: dict, picks: list[dict]) -> bool:
+        """Запись без метки правила, чьё имя не равно термину (хвост «(категория)» и т.п.), перепроверяется."""
+        if value.get("rule", 0) >= WARM_RULE_VERSION:
+            return False
+        return any(norm(str(p.get("name") or "")) != norm(term) for p in picks)
 
     @staticmethod
     def _interest_ids(picks: list[dict] | None) -> list[str]:
@@ -640,7 +654,7 @@ class TermResolver:
     def _warm_put(self, term: str, picks: list[dict]) -> None:
         if not picks or not all(plausible_pick(p, BUCKETS) for p in picks):
             return
-        self._facts.put_term(self._warm_key(term), {"picks": [
+        self._facts.put_term(self._warm_key(term), {"rule": WARM_RULE_VERSION, "picks": [
             {"id": str(p["id"]), "type": p["type"], "name": str(p.get("name") or "")} for p in picks]})
         self.touched_keys.add(self._warm_key(term))
         self.facts_stats["warm_saved"] += 1
