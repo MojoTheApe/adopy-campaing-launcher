@@ -713,7 +713,7 @@ def test_two_candidates_differing_only_by_a_category_tail_are_ambiguous(tmp_path
     r, spec, store = _settle(tmp_path, "Apple", {"Apple": [{"id": "1", "name": "Apple (company)"},
                                                            {"id": "2", "name": "Apple (fruit)"}]})
     assert spec == [] and store.entries() == []
-    assert r.targeting_notes()[0].startswith("Removed 'Apple': Meta has no match on this account (Meta offered: Apple (company)")
+    assert r.targeting_notes()[0].startswith("Removed 'Apple': several possible matches (Apple (company)")
 
 
 @pytest.mark.parametrize("term,name", [("Investing", "Investing.com"), ("Bloomberg", "Bloomberg L.P."),
