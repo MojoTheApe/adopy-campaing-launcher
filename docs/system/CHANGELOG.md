@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2932 — Detailed targeting: no silent pick between different meanings — 2026-11-26
+
+A term with several possible meanings (for example 'Apple (fruit)' and 'Apple Inc.') is now removed as ambiguous with a "several possible matches" note, each campaign shows only its own targeting notes, and "no match" is used only when no candidate passed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1932).
+
 ## ACL-2933 — Builder: same hours every day past midnight — 2026-11-26
 
 The Lifetime hour grid lost the nights after Friday and Saturday when 00–02 was ticked on weekdays only.

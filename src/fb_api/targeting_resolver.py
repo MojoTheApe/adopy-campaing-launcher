@@ -723,8 +723,12 @@ class TermResolver:
             self._warm_put(term, [hit])
             return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
 
+        # ACL-2932: «Имя (категория)» и «Имя Inc.» собираются по ВСЕМ группам и решаются один раз после
+        # цикла: ранний выход по хвосту в одной группе молча брал бы «(fruit)», не дойдя до «Apple Inc.».
+        tail_hits: dict[tuple, dict] = {}     # имя совпало, но с «(категорией)»: (type, id) -> строка
+        same_hits: dict[tuple, dict] = {}     # равны термину после match_key (корп./доменный хвост)
+        tk = match_key(term)
         for bucket, rows in self._stages(term):
-            tail_hits: dict[str, dict] = {}   # имя совпало, но с «(категорией)»: id -> строка
             for r in rows:
                 c = self._row(r, bucket)
                 if not c:
@@ -732,23 +736,35 @@ class TermResolver:
                 if norm(c["name"]) == key:
                     self._warm_put(term, [c])
                     return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
-                if base_name(c["name"]) == key:
-                    tail_hits.setdefault(c["id"], c)
+                ident = (c["type"], c["id"])
                 sc = score(term, c["name"])
-                if sc >= WEAK_SCORE:
-                    cands.setdefault((c["type"], c["id"]), {**c, "score": sc})
-            if len(tail_hits) == 1:
-                # Единственный интерес с таким именем и категорией в скобках - это он и есть.
-                # Два и больше («Apple (fruit)» / «Apple (company)») - решает человек, не мы.
-                (c,) = tail_hits.values()
-                self._warm_put(term, [c])
-                return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
-        ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
+                if base_name(c["name"]) == key:
+                    tail_hits.setdefault(ident, c)
+                    cands.setdefault(ident, {**c, "score": sc})
+                elif c["type"] != "behaviors" and tk and tk == match_key(c["name"], candidate=True):
+                    same_hits.setdefault(ident, c)
+                    cands.setdefault(ident, {**c, "score": sc})
+                elif sc >= WEAK_SCORE:
+                    cands.setdefault(ident, {**c, "score": sc})
+        if len(tail_hits) == 1 and not same_hits:
+            # Единственный интерес с таким именем и категорией в скобках - это он и есть.
+            # Два и больше или ещё «Apple Inc.» - смыслов несколько, решает человек, не мы (settle).
+            (c,) = tail_hits.values()
+            self._warm_put(term, [c])
+            return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
+        # ACL-2932: «прошедшие» (хвост «(категория)» и равные после match_key) определяются ЗДЕСЬ по полному
+        # набору всех групп и несутся в результате; обрезка до MAX_CANDIDATES их не меняет.
+        passing = list({**tail_hits, **same_hits}.values())
+        order = lambda c: (-c["score"], c["type"], c["name"])  # noqa: E731
+        keep = sorted((cands[(c["type"], c["id"])] for c in passing), key=order)
+        rest = sorted((c for k, c in cands.items() if k not in {(p["type"], p["id"]) for p in passing}), key=order)
+        ranked = sorted((keep + rest)[:max(MAX_CANDIDATES, len(keep))], key=order)
         # ACL-2473: пометку об отказанных поисках даём только термину без кандидатов; при кандидатах
         # причина простая (нет точного совпадения, выберите один), аккаунт тут ни при чём.
         blind = "" if ranked else self._blind_spots()
         reason = "; ".join(x for x in (stale, blind) if x)
-        return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": reason}
+        return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": reason,
+                "passing": [{**cands[(c["type"], c["id"])]} for c in passing]}
 
     def _stale(self, entry: dict) -> bool:
         """Интерес из кэша, которого Meta больше не отдаёт (проверено пакетом). Иные типы - доверяем."""
@@ -794,6 +810,10 @@ class TermResolver:
         if line not in self.notes:
             self.notes.append(line)
 
+    def reset_notes(self) -> None:
+        """ACL-2932: новая кампания - заметки начинаются заново (резолвер общий на аккаунт)."""
+        self.notes = []
+
     @staticmethod
     def _unambiguous(res: dict) -> tuple[dict | None, str]:
         """Кандидат, которого можно взять без человека, либо (None, текст для заметки).
@@ -803,12 +823,18 @@ class TermResolver:
         """
         if res.get("split") and res.get("suggested"):
             return res["suggested"], ""
-        term_key = match_key(res["term"])
         cands = [c for c in res.get("candidates") or []]
-        passing: dict[tuple, dict] = {}
-        for c in cands:
-            if c["type"] != "behaviors" and term_key and term_key == match_key(c["name"], candidate=True):
-                passing.setdefault((c["type"], c["id"]), c)
+        if "passing" in res:
+            # ACL-2932: решение принято в `_find` по полному набору; из обрезанного списка не выводим заново.
+            passing = {(c["type"], c["id"]): c for c in res["passing"]}
+        else:
+            term_key, key = match_key(res["term"]), norm(res["term"])
+            passing = {}
+            for c in cands:
+                if c["type"] == "behaviors" or not term_key:
+                    continue
+                if term_key == match_key(c["name"], candidate=True) or base_name(c["name"]) == key:
+                    passing.setdefault((c["type"], c["id"]), c)
         if len(passing) == 1:
             return next(iter(passing.values())), ""
         if len(passing) > 1:
@@ -835,6 +861,9 @@ class TermResolver:
         if res["state"] in _OK_STATES:
             return res["picks"]
         if "settled" in res:
+            # ACL-2932: заметки у каждой кампании свои; решение из кэша повторяет свою заметку заново.
+            for line in res.get("notes") or []:
+                self._note(line)
             return res["settled"]
         term = res["term"]
         picks: list[dict] | None = None
@@ -859,13 +888,17 @@ class TermResolver:
             if cand is not None:
                 chosen.append((term, cand))
                 picks = picks_of(cand)
+        lines: list[str] = []
         if picks is None:
-            self._note(f"Removed '{term}': " + (why or "Meta has no match on this account"))
+            lines.append(f"Removed '{term}': " + (why or "Meta has no match on this account"))
             picks = []
         else:
             for t, cand in chosen:
                 self._remember(t, cand)
-                self._note(f"Used '{cand['name']}' for '{t}'")
+                lines.append(f"Used '{cand['name']}' for '{t}'")
+        for line in lines:
+            self._note(line)
+        res["notes"] = lines
         res["settled"] = picks
         return picks
 
