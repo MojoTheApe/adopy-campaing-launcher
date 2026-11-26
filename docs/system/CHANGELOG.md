@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2939 — Targeting refusal notes per campaign — 2026-11-26
+
+A Meta refusal of an optional targeting search is now shown only on the campaign that hit it (or reused that lookup from the cache), not on every later campaign of the run.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1939).
+
 ## ACL-2938 — Targeting: re-check old warm cache entries — 2026-11-26
 
 A saved term match from an older release whose name differs from the term (e.g. 'apple' → 'Apple (fruit)') is now looked up again under the current ambiguity rule; entries that still pass keep working and confirmed terms are untouched.
