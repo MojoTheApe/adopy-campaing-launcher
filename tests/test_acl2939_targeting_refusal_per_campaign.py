@@ -125,3 +125,62 @@ def test_run_refused_behaviors_list_shows_on_a_later_campaign_using_the_cached_l
     assert _mentions(a, "(adTargetingCategory)")
     assert not _mentions(b, "(adTargetingCategory)")
     assert _mentions(c, "(adTargetingCategory)")
+
+
+# --- ACL-2939 fix round 2: a campaign that stops before targeting must not show the previous campaign's notes ---
+
+def _early_stop_pair(tmp_path, monkeypatch, method):
+    meta = RefusingMeta(refuse=(REFUSED,), interests={**INTERESTS})
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=900)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client, _store(tmp_path)),
+                                 sleep=lambda s: None)
+    plans = []
+    for i, label in enumerate(("Qwerty", "Forex")):
+        sub = tmp_path / f"e{i}"
+        sub.mkdir()
+        d = _draft(sub, ads=1)
+        d.name = d.ad_sets[0].name = f"MX Leads {i + 1}"
+        d.ad_sets[0].targeting_label = label
+        plans.append(cr.plan_from_draft(d))
+    first = getattr(creator, method)(plans[0])
+
+    def boom(plan):
+        raise cr.PlanError("stopped before targeting", key="page_unavailable")
+
+    monkeypatch.setattr(creator, "check_profile_page", boom)
+    return first, getattr(creator, method)(plans[1])
+
+
+def _all_text(out):
+    return " ".join(list(out.warnings) + [str(v) for v in (getattr(out, "audit", None) or [])])
+
+
+@pytest.mark.parametrize("method", ["plan_only", "run"])
+def test_a_campaign_stopped_by_a_plan_error_shows_no_refusal_from_the_previous_one(tmp_path, monkeypatch, method):
+    first, second = _early_stop_pair(tmp_path, monkeypatch, method)
+    assert "(adworkposition)" in _all_text(first)
+    assert second.stop_kind == "plan" or second.error
+    assert "(adworkposition)" not in _all_text(second)
+
+
+def test_a_campaign_stopped_early_shows_no_2932_note_from_the_previous_one(tmp_path, monkeypatch):
+    meta = RefusingMeta(interests={"Apple": [{"id": "1", "name": "Apple (fruit)"}, {"id": "2", "name": "Apple Inc."}],
+                                   **INTERESTS})
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=900)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client, _store(tmp_path)),
+                                 sleep=lambda s: None)
+    outs = []
+    for i, label in enumerate(("Apple", "Forex")):
+        sub = tmp_path / f"n{i}"
+        sub.mkdir()
+        d = _draft(sub, ads=1)
+        d.name = d.ad_sets[0].name = f"MX Leads {i + 1}"
+        d.ad_sets[0].targeting_label = label
+        if i:
+            monkeypatch.setattr(creator, "check_profile_page",
+                                lambda plan: (_ for _ in ()).throw(cr.PlanError("stop", key="page_unavailable")))
+        outs.append(creator.plan_only(cr.plan_from_draft(d)))
+    assert "Apple" in _all_text(outs[0])
+    assert "Apple" not in _all_text(outs[1])
