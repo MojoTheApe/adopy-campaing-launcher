@@ -145,3 +145,48 @@ def test_run_shows_each_campaign_only_its_own_notes(tmp_path):
     assert any("Apple" in w and "several possible matches" in w for w in a) and any("Investing.com" in w for w in a)
     assert any("Zzzz" in w for w in b) and not any("Apple" in w or "Investing" in w for w in b)
     assert any("Apple" in w for w in c) and not any("Investing" in w or "Zzzz" in w for w in c)
+
+
+# --- the decision does not depend on the MAX_CANDIDATES cut ---
+
+def _many(names, start=10):
+    return [{"id": str(start + i), "name": n} for i, n in enumerate(names)]
+
+
+FILLER = ["Apples", "Apple Arcade", "Apple Books", "Apple Fitness", "Apple Music", "Apple TV", "Apple Watch",
+          "Apple Pay", "Apple Maps"]
+
+
+class WideSearch(FakeSearch):
+    def get_all(self, path, params=None, *, max_pages=5):
+        # no 3-row page cap: a real adinterest search returns up to 50 rows
+        rows = self.interests.get(params["q"], []) if params["type"] == "adinterest" else None
+        if rows is None:
+            return super().get_all(path, params, max_pages=max_pages)
+        self.calls += 1
+        self.log.append((params["type"], 1, dict(params)))
+        return rows
+
+
+def test_fruit_with_many_higher_ranked_interests_and_a_later_employer_is_ambiguous(tmp_path):
+    store = _store(tmp_path)
+    interests = [{"id": "1", "name": "Apple (fruit)"}] + _many(FILLER)
+    c = WideSearch(interests={"Apple": interests}, typed={("adworkemployer", "Apple"): [{"id": "2", "name": "Apple Inc."}]})
+    r = cr.TargetingResolver(c, store)
+    assert r.interests([["Apple"]]) == []
+    note = r.targeting_notes()[0]
+    assert note.startswith("Removed 'Apple': several possible matches (")
+    assert "Apple (fruit)" in note and "Apple Inc." in note
+    assert store.entries() == []
+
+
+def test_mirror_corporate_name_among_many_interests_and_fruit_later_is_ambiguous(tmp_path):
+    store = _store(tmp_path)
+    interests = [{"id": "2", "name": "Apple Inc."}] + _many(FILLER)
+    c = WideSearch(interests={"Apple": interests},
+                   typed={("adworkemployer", "Apple"): [{"id": "1", "name": "Apple (fruit)"}]})
+    r = cr.TargetingResolver(c, store)
+    assert r.interests([["Apple"]]) == []
+    note = r.targeting_notes()[0]
+    assert "several possible matches" in note and "Apple (fruit)" in note and "Apple Inc." in note
+    assert store.entries() == []

@@ -752,12 +752,19 @@ class TermResolver:
             (c,) = tail_hits.values()
             self._warm_put(term, [c])
             return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
-        ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
+        # ACL-2932: «прошедшие» (хвост «(категория)» и равные после match_key) определяются ЗДЕСЬ по полному
+        # набору всех групп и несутся в результате; обрезка до MAX_CANDIDATES их не меняет.
+        passing = list({**tail_hits, **same_hits}.values())
+        order = lambda c: (-c["score"], c["type"], c["name"])  # noqa: E731
+        keep = sorted((cands[(c["type"], c["id"])] for c in passing), key=order)
+        rest = sorted((c for k, c in cands.items() if k not in {(p["type"], p["id"]) for p in passing}), key=order)
+        ranked = sorted((keep + rest)[:max(MAX_CANDIDATES, len(keep))], key=order)
         # ACL-2473: пометку об отказанных поисках даём только термину без кандидатов; при кандидатах
         # причина простая (нет точного совпадения, выберите один), аккаунт тут ни при чём.
         blind = "" if ranked else self._blind_spots()
         reason = "; ".join(x for x in (stale, blind) if x)
-        return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": reason}
+        return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": reason,
+                "passing": [{**cands[(c["type"], c["id"])]} for c in passing]}
 
     def _stale(self, entry: dict) -> bool:
         """Интерес из кэша, которого Meta больше не отдаёт (проверено пакетом). Иные типы - доверяем."""
@@ -816,16 +823,18 @@ class TermResolver:
         """
         if res.get("split") and res.get("suggested"):
             return res["suggested"], ""
-        term_key = match_key(res["term"])
         cands = [c for c in res.get("candidates") or []]
-        passing: dict[tuple, dict] = {}
-        key = norm(res["term"])
-        for c in cands:
-            if c["type"] == "behaviors" or not term_key:
-                continue
-            # ACL-2932: «Имя (категория)» - тоже совпавший смысл; вместе с «Имя Inc.» это неоднозначно.
-            if term_key == match_key(c["name"], candidate=True) or base_name(c["name"]) == key:
-                passing.setdefault((c["type"], c["id"]), c)
+        if "passing" in res:
+            # ACL-2932: решение принято в `_find` по полному набору; из обрезанного списка не выводим заново.
+            passing = {(c["type"], c["id"]): c for c in res["passing"]}
+        else:
+            term_key, key = match_key(res["term"]), norm(res["term"])
+            passing = {}
+            for c in cands:
+                if c["type"] == "behaviors" or not term_key:
+                    continue
+                if term_key == match_key(c["name"], candidate=True) or base_name(c["name"]) == key:
+                    passing.setdefault((c["type"], c["id"]), c)
         if len(passing) == 1:
             return next(iter(passing.values())), ""
         if len(passing) > 1:
