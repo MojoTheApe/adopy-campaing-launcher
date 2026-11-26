@@ -601,3 +601,46 @@ def test_ads_manager_line_waits_for_the_zone_and_fills_in_place_after_check_plan
     lt.evaluate("""() => cbLifetime.ingestPlan(document.querySelector('.cb-acc-row'), {results: [
         {campaign_name: 'x', plan: {summary: {timezone_name: 'America/New_York', currency: 'USD'}}}]})""")
     assert lt.inner_text("[data-lt-acc-preview]") == "In Ads Manager (America/New_York): Mon 18–20"
+
+
+def _grid_windows(lt):
+    return json.loads(lt.input_value("[name$='_schedule']"))
+
+
+def test_every_day_range_past_midnight_sets_all_seven_nights(lt):
+    """15:00 – 02:00 по Израилю: 15–24 и 00–02 на всех 7 днях, ночи после пятницы и субботы не теряются."""
+    lt.select_option(".cb-sg-from", "15")
+    lt.select_option(".cb-sg-to", "2")
+    lt.click(".cb-sg-apply")
+    assert lt.evaluate("document.querySelector('.cb-sched-on').checked") is True
+    assert _grid_windows(lt) == [
+        {"days": [0, 1, 2, 3, 4, 5, 6], "start_minute": 0, "end_minute": 120},
+        {"days": [0, 1, 2, 3, 4, 5, 6], "start_minute": 900, "end_minute": 1440},
+    ]
+    assert lt.evaluate("document.querySelector('[data-lt-uneven]').hidden") is True
+
+
+def test_every_day_range_inside_one_day_and_full_day(lt):
+    lt.select_option(".cb-sg-from", "8")
+    lt.select_option(".cb-sg-to", "19")
+    lt.click(".cb-sg-apply")
+    assert _grid_windows(lt) == [{"days": [0, 1, 2, 3, 4, 5, 6], "start_minute": 480, "end_minute": 1140}]
+    lt.select_option(".cb-sg-to", "8")          # тот же час - круглые сутки, расписания нет
+    lt.click(".cb-sg-apply")
+    assert lt.evaluate("document.querySelector('.cb-sched-on').checked") is False
+
+
+def test_night_hours_on_weekdays_only_are_flagged(lt):
+    """Ошибка 25.11: 00–02 только Пн–Пт - в ночи после пятницы и субботы показ обрывается в полночь."""
+    lt.evaluate("""() => {
+        const wins = [{days: [1, 2, 3, 4, 5], start_minute: 0, end_minute: 120},
+                      {days: [0, 1, 2, 3, 4, 5, 6], start_minute: 900, end_minute: 1440}];
+        const slot = document.getElementById('slot');
+        slot.querySelector('.cb-sched-on').checked = true;
+        slot.querySelector('[name$="_schedule"]').value = JSON.stringify(wins);
+        cbLifetime.sync(slot);
+    }""")
+    note = lt.inner_text("[data-lt-uneven]")
+    assert lt.evaluate("document.querySelector('[data-lt-uneven]').hidden") is False
+    assert "Sat–Sun without 00–02" in note
+    assert "the night after Friday is Sat 00–02" in note
