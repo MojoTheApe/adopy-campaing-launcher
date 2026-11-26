@@ -741,6 +741,15 @@ class TermResolver:
                 # Единственный интерес с таким именем и категорией в скобках - это он и есть.
                 # Два и больше («Apple (fruit)» / «Apple (company)») - решает человек, не мы.
                 (c,) = tail_hits.values()
+                # ACL-2932: если в той же выдаче есть другой кандидат с иным id, равный термину после
+                # нормализации («Apple Inc.»), смыслов два - молча брать «(fruit)» нельзя; решает settle.
+                tk = match_key(term)
+                other = [r2 for r2 in (self._row(r, bucket) for r in rows)
+                         if r2 and r2["type"] != "behaviors" and r2["id"] != c["id"] and tk
+                         and tk == match_key(r2["name"], candidate=True)]
+                if other:
+                    cands.setdefault((c["type"], c["id"]), {**c, "score": score(term, c["name"])})
+                    continue
                 self._warm_put(term, [c])
                 return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
@@ -794,6 +803,10 @@ class TermResolver:
         if line not in self.notes:
             self.notes.append(line)
 
+    def reset_notes(self) -> None:
+        """ACL-2932: новая кампания - заметки начинаются заново (резолвер общий на аккаунт)."""
+        self.notes = []
+
     @staticmethod
     def _unambiguous(res: dict) -> tuple[dict | None, str]:
         """Кандидат, которого можно взять без человека, либо (None, текст для заметки).
@@ -806,8 +819,12 @@ class TermResolver:
         term_key = match_key(res["term"])
         cands = [c for c in res.get("candidates") or []]
         passing: dict[tuple, dict] = {}
+        key = norm(res["term"])
         for c in cands:
-            if c["type"] != "behaviors" and term_key and term_key == match_key(c["name"], candidate=True):
+            if c["type"] == "behaviors" or not term_key:
+                continue
+            # ACL-2932: «Имя (категория)» - тоже совпавший смысл; вместе с «Имя Inc.» это неоднозначно.
+            if term_key == match_key(c["name"], candidate=True) or base_name(c["name"]) == key:
                 passing.setdefault((c["type"], c["id"]), c)
         if len(passing) == 1:
             return next(iter(passing.values())), ""
@@ -835,6 +852,9 @@ class TermResolver:
         if res["state"] in _OK_STATES:
             return res["picks"]
         if "settled" in res:
+            # ACL-2932: заметки у каждой кампании свои; решение из кэша повторяет свою заметку заново.
+            for line in res.get("notes") or []:
+                self._note(line)
             return res["settled"]
         term = res["term"]
         picks: list[dict] | None = None
@@ -859,13 +879,17 @@ class TermResolver:
             if cand is not None:
                 chosen.append((term, cand))
                 picks = picks_of(cand)
+        lines: list[str] = []
         if picks is None:
-            self._note(f"Removed '{term}': " + (why or "Meta has no match on this account"))
+            lines.append(f"Removed '{term}': " + (why or "Meta has no match on this account"))
             picks = []
         else:
             for t, cand in chosen:
                 self._remember(t, cand)
-                self._note(f"Used '{cand['name']}' for '{t}'")
+                lines.append(f"Used '{cand['name']}' for '{t}'")
+        for line in lines:
+            self._note(line)
+        res["notes"] = lines
         res["settled"] = picks
         return picks
 

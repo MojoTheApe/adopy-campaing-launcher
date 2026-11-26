@@ -1684,6 +1684,10 @@ class TargetingResolver:
         """ACL-2925: info lines about what the system decided by itself (used / removed terms)."""
         return list(self.terms.notes)
 
+    def reset_targeting_notes(self) -> None:
+        """ACL-2932: заметки таргетинга принадлежат одной кампании, а не всему прогону на аккаунте."""
+        self.terms.reset_notes()
+
     def targeting_warnings(self) -> list[str]:
         """ACL-1920: необязательные поиски, в которых Meta отказала (имя поиска в тексте)."""
         return self.terms.warnings()
@@ -5376,6 +5380,9 @@ class CampaignCreator:
             if note and note not in out.warnings:
                 out.warnings.append(note)
         self.check_profile_page(plan)
+        reset = getattr(self.resolver, "reset_targeting_notes", None)
+        if reset:
+            reset()     # ACL-2932: в результате кампании только её собственные заметки
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
             # ждущие подтверждения, за один раз, а не по набору за круг.
