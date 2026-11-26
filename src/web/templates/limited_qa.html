@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
+  <title>Adopy Campaign Manager — Limited_QA landing pages</title>
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('acl.theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') {
+        t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
+  <style>
+    body { font-family: var(--adopy-font-sans); background: var(--adopy-bg); color: var(--adopy-text);
+           margin: 0; padding: 1.5rem 16px 3rem; line-height: var(--adopy-leading-body); }
+    main { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: var(--adopy-text-title); margin: 0 0 .25rem; }
+    p.hint { color: var(--adopy-text-muted); margin: 0 0 1rem; }
+    form, .card { background: var(--adopy-surface); border: 1px solid var(--adopy-border);
+                  border-radius: var(--adopy-radius-md); padding: 1rem; margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; margin: .75rem 0 .25rem; }
+    input, textarea { width: 100%; box-sizing: border-box; font: inherit; padding: .45rem .6rem; color: var(--adopy-text);
+                      background: var(--adopy-surface); border: 1px solid var(--adopy-control-border);
+                      border-radius: var(--adopy-radius-md); }
+    button { font: inherit; padding: .45rem 1rem; margin-top: 1rem; border-radius: var(--adopy-radius-md); cursor: pointer;
+             border: 1px solid var(--adopy-primary); background: var(--adopy-primary); color: var(--adopy-on-primary); }
+    button:disabled { opacity: .6; cursor: default; }
+    .msg { min-height: 1.4em; margin-top: .5rem; }
+    .err { color: var(--adopy-danger); }
+    .badge { display: inline-block; padding: .05rem .5rem; border-radius: 999px; background: var(--adopy-neutral-bg); font-size: .85em; }
+    .badge.ok { background: var(--adopy-success-bg); color: var(--adopy-success); }
+    .badge.bad { background: var(--adopy-danger-bg); color: var(--adopy-danger); }
+    .badge.warn { background: var(--adopy-warning-bg); color: var(--adopy-warning); }
+    .meta { color: var(--adopy-text-muted); font-size: .9em; word-break: break-all; }
+    ul { margin: .4rem 0 0; padding-left: 1.2rem; }
+    a { color: var(--adopy-link); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Limited_QA landing pages</h1>
+  <p class="hint">Duplicate 1–3 landing pages onto a root domain. Results appear below when they are ready.</p>
+  {% if not configured %}
+  <p class="err" role="alert">Limited_QA is not set up on this computer. Ask support to add the access settings.</p>
+  {% endif %}
+  <form id="f" autocomplete="off">
+    <label for="urls">Source landing page URLs (one per line, up to 3)</label>
+    <textarea id="urls" rows="3" required></textarea>
+    <label for="domain">Target root domain</label>
+    <input id="domain" placeholder="domain.com" required>
+    <label for="country">Country</label>
+    <input id="country" placeholder="Mexico" required>
+    <label for="fb">Facebook account (optional)</label>
+    <input id="fb">
+    <button id="go" type="submit" {% if not configured %}disabled{% endif %}>Create landing pages</button>
+    <div id="msg" class="msg" role="status"></div>
+  </form>
+  <div id="list"></div>
+</main>
+<script>
+  var TERMINAL = ['succeeded', 'mixed', 'failed', 'rejected'];
+  var LABEL = {accepted: 'Starting', submitting: 'Sending', running: 'In progress', paused: 'Needs operator action',
+               succeeded: 'Done', mixed: 'Partly done', failed: 'Failed', rejected: 'Rejected', unknown: 'Checking'};
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function render(items) {
+    var box = document.getElementById('list'); box.textContent = '';
+    items.forEach(function (r) {
+      var c = el('div', 'card');
+      var cls = r.status === 'succeeded' ? 'ok' : (r.status === 'failed' || r.status === 'rejected') ? 'bad' : (r.status === 'paused' || r.status === 'mixed') ? 'warn' : '';
+      c.appendChild(el('span', 'badge ' + cls, LABEL[r.status] || r.status));
+      c.appendChild(el('span', null, ' ' + r.target_domain + ' · ' + r.country));
+      c.appendChild(el('div', 'meta', 'Request ' + r.request_id));
+      var src = el('ul'); (r.source_urls || []).forEach(function (u) { src.appendChild(el('li', 'meta', u)); }); c.appendChild(src);
+      var ready = (r.result_urls || []);
+      if (ready.length) {
+        c.appendChild(el('div', null, 'Landing pages'));
+        var ul = el('ul'); ready.forEach(function (u) { var li = el('li'); var a = el('a', null, u); a.href = u; a.target = '_blank'; a.rel = 'noopener'; li.appendChild(a); ul.appendChild(li); }); c.appendChild(ul);
+      }
+      var bad = (r.result_items || []).filter(function (i) { return i.state === 'failed'; });
+      if (bad.length) c.appendChild(el('div', 'err', 'Not created for source ' + bad.map(function (i) { return '#' + (i.index + 1); }).join(', ')));
+      if (r.status === 'failed') c.appendChild(el('div', 'err', r.error || 'The landing pages could not be created. Contact support with the request number above.'));
+      else if (r.error && TERMINAL.indexOf(r.status) < 0) c.appendChild(el('div', 'meta', r.error));
+      box.appendChild(c);
+    });
+  }
+  function load() {
+    return fetch('/api/limited-qa/requests').then(function (r) { return r.json(); }).then(function (d) { render(d.requests || []); }).catch(function () {});
+  }
+  document.getElementById('f').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var go = document.getElementById('go'), msg = document.getElementById('msg'); go.disabled = true; msg.className = 'msg'; msg.textContent = 'Sending…';
+    var urls = document.getElementById('urls').value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    fetch('/api/limited-qa/requests', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+      source_urls: urls, target_domain: document.getElementById('domain').value, country: document.getElementById('country').value,
+      facebook_account: document.getElementById('fb').value || null})})
+      .then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); })
+      .then(function (x) { if (x[0]) { msg.textContent = 'Request sent.'; document.getElementById('f').reset(); load(); } else { msg.className = 'msg err'; msg.textContent = x[1].error || 'Could not send the request.'; } })
+      .catch(function () { msg.className = 'msg err'; msg.textContent = 'Could not send the request.'; })
+      .then(function () { go.disabled = false; });
+  });
+  load(); setInterval(load, 20000);
+</script>
+</body>
+</html>

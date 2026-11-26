@@ -1626,6 +1626,10 @@ _NCOLS_BY_SECTION = {
 }
 
 app = FastAPI(title="Adopy Campaign Manager")
+
+from src.web.limited_qa_routes import router as _limited_qa_router  # noqa: E402
+
+app.include_router(_limited_qa_router)
 # Предел тела проверяется до чтения (ACL-1356, аудит S04). Прослойка
 # добавлена раньше local_dashboard_boundary, значит, стоит внутри неё:
 # отказ 413 тоже получает защитные заголовки.
