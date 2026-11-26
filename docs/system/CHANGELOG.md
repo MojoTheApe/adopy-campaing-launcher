@@ -1,5 +1,12 @@
 # System history
 
+## ACL-2933 — Builder: same hours every day past midnight — 2026-11-26
+
+The Lifetime hour grid lost the nights after Friday and Saturday when 00–02 was ticked on weekdays only.
+A new "Every day from … to … — Set hours" line sets the same hours on all 7 days (an end before the start runs into the next day),
+and a note under the grid names the days whose hours differ.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1933).
+
 ## ACL-2925 — Check plan resolves detailed targeting by itself — 2026-11-25
 
 Near matches are used and remembered without a Confirm press; terms Meta does not know are dropped from the request for that account (library and draft keep them), each with an info line.

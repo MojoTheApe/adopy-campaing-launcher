@@ -1282,6 +1282,11 @@
     .cb-sg-day:hover { color: var(--accent); }
     .cb-sg-cell { height: 1.05rem; background: var(--field-bg); border: 1px solid var(--field-border); border-radius: 2px; cursor: pointer; }
     .cb-sg-cell.is-on { background: var(--adopy-primary); border-color: var(--adopy-primary); }
+    .cb-sg-range { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.4rem; font-size: var(--adopy-text-sm); }
+    .cb-sg-range select.cb-input { width: auto; min-width: 0; }
+    .cb-sg-apply { font: inherit; font-size: var(--adopy-text-sm); padding: 0.15rem 0.6rem; border: 1px solid var(--field-border); border-radius: 4px; background: var(--field-bg); color: inherit; cursor: pointer; }
+    .cb-sg-apply:hover { border-color: var(--accent); color: var(--accent); }
+    .cb-sg-uneven { color: var(--warn); }
     /* Язык аудитории. Пустое поле — законный выбор («не трогать язык»), но
        для стран вне GCC и LatAm оно пустое не потому, что так решили, а
        потому, что правила для них нет. Подсветка спрашивает, а не запрещает:
@@ -8734,6 +8739,59 @@ window.cbLifetime = (function () {
     return out;
   }
 
+  /* ACL: одни и те же часы на все дни, с переходом через полночь ("15:00 – 02:00" = 15–24 и 00–02 каждого дня).
+     Ночь после вечера пятницы в сетке - строка субботы; ручная протяжка по будням её теряла. */
+  function rangeGrid(from, to) {
+    var len = ((to - from) % 24 + 24) % 24 || 24;
+    var grid = emptyGrid();
+    for (var d = 0; d < 7; d += 1) {
+      for (var i = 0; i < len; i += 1) grid[d][(from + i) % 24] = true;
+    }
+    return grid;
+  }
+  function hoursText(hours) {
+    var runs = [], i = 0;
+    while (i < hours.length) {
+      var j = i;
+      while (j + 1 < hours.length && hours[j + 1] === hours[j] + 1) j += 1;
+      runs.push(pad2(hours[i]) + '–' + pad2(hours[j] + 1));
+      i = j + 1;
+    }
+    return runs.join(', ');
+  }
+  /* Часы различаются по дням: какие дни без каких часов (часы, что есть хотя бы в одном дне). Нет различий - пусто. */
+  function unevenText(grid) {
+    var union = [];
+    for (var h = 0; h < 24; h += 1) {
+      if (grid.some(function (row) { return row[h]; })) union.push(h);
+    }
+    var groups = {}, order = [];
+    UI_DAYS.forEach(function (d) {
+      var miss = union.filter(function (hr) { return !grid[d][hr]; });
+      if (!miss.length || miss.length === union.length) return;
+      var key = miss.join(',');
+      if (!groups[key]) { groups[key] = { days: [], miss: miss }; order.push(key); }
+      groups[key].days.push(d);
+    });
+    if (!order.length) return '';
+    return 'Not the same hours every day: ' + order.map(function (k) {
+      return daysText(groups[k].days) + ' without ' + hoursText(groups[k].miss);
+    }).join('; ') + '. Hours after midnight belong to the next day (the night after Friday is Sat 00–02). '
+      + 'For the same hours every day use "Every day from … to …" above.';
+  }
+  function hourOptions(sel) {
+    var h = '';
+    for (var k = 0; k < 24; k += 1) h += '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + pad2(k) + ':00</option>';
+    return h;
+  }
+  function rangeHtml() {
+    return '<div class="cb-sg-range">Every day from '
+      + '<select class="cb-input cb-sg-from" aria-label="Every day from, Israel time">' + hourOptions(15) + '</select> to '
+      + '<select class="cb-input cb-sg-to" aria-label="Every day to, Israel time">' + hourOptions(2) + '</select> '
+      + '<button type="button" class="cb-sg-apply" onclick="cbLtRange(this)" '
+      + 'title="Set the same hours on all 7 days; an end before the start runs past midnight into the next day">Set hours</button></div>';
+  }
+
   /* ── разметка ──────────────────────────────────────────────────────── */
   function gridHtml() {
     var h = '<div class="cb-sg" hidden onpointerdown="cbLtDown(event, this)" role="group" aria-label="Hours when ads run, Israel time">';
@@ -8775,7 +8833,9 @@ window.cbLifetime = (function () {
       + '<div class="cb-lt-only" hidden>'
       + '<input type="checkbox" class="cb-sched-on" hidden tabindex="-1" aria-hidden="true">'
       + '<div class="cb-lt-note">Ads run only in the highlighted hours, on every day from the first to the last day. Click or drag to switch hours off.</div>'
+      + rangeHtml()
       + gridHtml()
+      + '<div class="cb-lt-note cb-sg-uneven" data-lt-uneven role="status" hidden></div>'
       + '<input type="hidden" name="camp_' + idx + '_schedule" value="" disabled>'
       + '</div>'
       + '<span class="cb-label cb-lt-only" hidden></span>'
@@ -8875,6 +8935,9 @@ window.cbLifetime = (function () {
     setText(q(slot, '[data-lt-errors]'), problems(slot).map(function (p) { return p.text; }).join('. '));
     setText(q(slot, '[data-lt-preview]'), life ? previewText(slot) : '');
     setText(q(slot, '[data-lt-acc-preview]'), on ? accountPreview(slot) : '');
+    var unevenEl = q(slot, '[data-lt-uneven]'), uneven = on ? unevenText(windowsToGrid(parseWindows(slot))) : '';
+    setText(unevenEl, uneven);
+    setHidden(unevenEl, !uneven);
   }
 
   function fire(el) { el.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -8987,6 +9050,20 @@ window.cbLifetime = (function () {
     cells.forEach(function (c) { c.classList.toggle('is-on', !allOn); c.setAttribute('aria-checked', String(!allOn)); });
     writeSchedule(slot);
   };
+  /* "Every day from … to …": те же часы на все 7 дней; конец раньше начала - до этого часа следующего дня. */
+  window.cbLtRange = function (btn) {
+    var slot = btn.closest('.cb-slot');
+    if (!slot) return;
+    var from = +(q(slot, '.cb-sg-from') || {}).value, to = +(q(slot, '.cb-sg-to') || {}).value;
+    if (!(from >= 0 && from < 24 && to >= 0 && to < 24)) return;
+    var grid = rangeGrid(from, to);
+    slot.querySelectorAll('.cb-sg-cell').forEach(function (c) {
+      var on = grid[+c.dataset.d][+c.dataset.h];
+      c.classList.toggle('is-on', on);
+      c.setAttribute('aria-checked', String(on));
+    });
+    writeSchedule(slot);
+  };
 
   /* Ответ Check plan: запоминаем пояс/валюту кабинета и обновляем подписи. */
   function ingestPlan(form, data) {
@@ -9022,7 +9099,7 @@ window.cbLifetime = (function () {
            preview: previewText, ingestPlan: ingestPlan, annotate: annotate, gridToWindows: gridToWindows,
            windowsToGrid: windowsToGrid, scheduleText: scheduleText, nowInAccount: nowInAccount,
            nowInTeam: nowInTeam, teamZone: teamZone, convertWindows: convertWindows, accountPreview: accountPreview,
-           isoToMs: isoToMs };
+           isoToMs: isoToMs, rangeGrid: rangeGrid, unevenText: unevenText };
 })();
 window.builderAccountFacts = window.cbLifetime.facts;
 </script>
