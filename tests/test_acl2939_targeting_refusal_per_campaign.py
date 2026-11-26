@@ -72,3 +72,56 @@ def test_run_shows_the_refusal_only_on_the_campaigns_that_hit_it(tmp_path):
     assert first, "the campaign that hit the refusal shows it"
     assert second == [], "the campaign that did not hit it shows nothing"
     assert third, "a later campaign reusing the refused lookup shows it again"
+
+
+# --- ACL-2939 fix round 1: adinterestvalid, "not re-checked" line, behaviors list (run()-level) ---
+
+def _run_campaigns(tmp_path, meta, labels, store=None):
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=900)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client, store or _store(tmp_path)),
+                                 sleep=lambda s: None)
+    outs = []
+    for i, label in enumerate(labels):
+        sub = tmp_path / f"r{i}"
+        sub.mkdir()
+        d = _draft(sub, ads=1)
+        d.name = d.ad_sets[0].name = f"MX Leads {i + 1}"
+        d.ad_sets[0].targeting_label = label
+        outs.append(creator.run(cr.plan_from_draft(d)))
+    return outs
+
+
+def _mentions(out, needle):
+    return [w for w in out.warnings if needle in w]
+
+
+def test_run_adinterestvalid_refusal_replays_on_a_reused_term(tmp_path):
+    meta = RefusingMeta(refuse=("adinterestvalid",), interests=INTERESTS)
+    a, b, c = _run_campaigns(tmp_path, meta, ("Qwerty", "Forex", "Qwerty"))
+    assert _mentions(a, "(adinterestvalid)")
+    assert not _mentions(b, "(adinterestvalid)")
+    assert _mentions(c, "(adinterestvalid)")
+
+
+def test_run_adinterestvalid_refusal_shows_on_a_new_term_after_the_refusal(tmp_path):
+    meta = RefusingMeta(refuse=("adinterestvalid",), interests=INTERESTS)
+    a, b = _run_campaigns(tmp_path, meta, ("Qwerty", "Asdfgh"))
+    assert _mentions(a, "(adinterestvalid)") and _mentions(b, "(adinterestvalid)")
+
+
+def test_run_not_rechecked_line_replays_on_a_reused_confirmed_term(tmp_path):
+    store = _store(tmp_path)
+    store.put("Mytopic", id="77", type="interests", name="Mytopic")
+    meta = RefusingMeta(refuse=("adinterestvalid",), interests=INTERESTS)
+    a, b, c = _run_campaigns(tmp_path, meta, ("Mytopic", "Forex", "Mytopic"), store=store)
+    line = "were not re-checked"
+    assert _mentions(a, line) and not _mentions(b, line) and _mentions(c, line)
+
+
+def test_run_refused_behaviors_list_shows_on_a_later_campaign_using_the_cached_list(tmp_path):
+    meta = RefusingMeta(refuse=("adTargetingCategory",), interests=INTERESTS)
+    a, b, c = _run_campaigns(tmp_path, meta, ("Qwerty", "Forex", "Asdfgh"))
+    assert _mentions(a, "(adTargetingCategory)")
+    assert not _mentions(b, "(adTargetingCategory)")
+    assert _mentions(c, "(adTargetingCategory)")

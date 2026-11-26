@@ -816,9 +816,23 @@ class TermResolver:
                 bad = [self._classify(s) for s in subs if s["state"] not in _OK_STATES]
                 res = {**self._classify(res), "parts": [self._classify(s) for s in subs], "bad_parts": bad}
         res = self._classify(res)
+        self._attach_prefetch_refusals(term, res)
         res["refusals"] = sorted(self._collect)
         self._results[key] = res
         return res
+
+    def _attach_prefetch_refusals(self, term: str, res: dict) -> None:
+        """ACL-2939: пакет adinterestvalid идёт в `prefetch` до `resolve`, поэтому его отказ привязываем к термину здесь.
+
+        Точное имя находит и поиск adinterest, так что отказ важен термину без точного итога; строка
+        «подтверждённые интересы не перепроверены» - термину с подтверждённым интересом.
+        """
+        if "adinterestvalid" in self.refused and res["state"] not in _OK_STATES:
+            self._touch("adinterestvalid")
+        if self._ids_unverified:
+            ids = self._cached_interest_ids([term] + split_term(term))
+            if any(i in self._confirmed_ids for i in ids):
+                self._touch(IDS_UNVERIFIED)
 
     @staticmethod
     def _classify(res: dict) -> dict:
