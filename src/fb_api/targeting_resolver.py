@@ -95,6 +95,10 @@ OPTIONAL_LOOKUPS = {
 REQUIRED_LOOKUPS = ("adinterest", "adgeolocation", "adlocale")
 
 
+#: ACL-2939: ключ в `_touched` для строки «подтверждённые интересы не перепроверены».
+IDS_UNVERIFIED = "_ids_unverified"
+
+
 def is_permission_refusal(exc: BaseException) -> bool:
     """Meta отказала по правам: код 10 или семейство 200-299 (в т.ч. 294)."""
     code = getattr(exc, "code", None)
@@ -446,10 +450,19 @@ class TermResolver:
         self._bad_ids: set[str] = set()
         #: ACL-2925: info lines of the automatic decisions ("Used 'X' for 'Y'", "Removed 'Y': ..."), no repeats.
         self.notes: list[str] = []
+        #: ACL-2939: отказы (ключи `refused` и IDS_UNVERIFIED), которых коснулась ТЕКУЩАЯ кампания; `reset_notes` обнуляет.
+        self._touched: set[str] = set()
+        #: ACL-2939: что коснулось за один `resolve` - уходит в результат термина и повторяется при его переиспользовании.
+        self._collect: set[str] = set()
+
+    def _touch(self, key: str) -> None:
+        self._touched.add(key)
+        self._collect.add(key)
 
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
     def _lookup(self, search_type: str, params: dict, pages: int, *, path: str = "/search") -> list[dict]:
         if search_type in self.refused:
+            self._touch(search_type)
             return []                      # уже отказано в этом задании: повторов нет
         optional = search_type in OPTIONAL_LOOKUPS
         before = getattr(self.client, "calls", None)
@@ -470,12 +483,14 @@ class TermResolver:
             # Текст ошибки не берём: в нём могут быть id и токены.
             self.refused[search_type] = f"The {label} ({search_type}) failed on this account; {effect}."
             self._failed.add(search_type)
+        self._touch(search_type)
         return []
 
     def warnings(self) -> list[str]:
         """Предупреждения Check plan: какой именно поиск Meta отказала (английский текст)."""
-        out = list(self.refused.values())
-        if self._ids_unverified:
+        # ACL-2939: только отказы, которых коснулась текущая кампания (свои и повторённые из кэша терминов).
+        out = [v for k, v in self.refused.items() if k in self._touched]
+        if self._ids_unverified and IDS_UNVERIFIED in self._touched:
             out.append("Confirmed interest picks were not re-checked against Meta "
                        "(the exact-name interest check was refused).")
         return out
@@ -531,6 +546,8 @@ class TermResolver:
         if "adinterestvalid" in self.refused:
             # Предупреждение - только о выборе человека; тёплые термины проверит поиск adinterest.
             self._ids_unverified = self._ids_unverified or any(i in self._confirmed_ids for i in ids)
+            if any(i in self._confirmed_ids for i in ids):
+                self._touch(IDS_UNVERIFIED)
             return
         if not todo and not ids:
             return
@@ -561,6 +578,8 @@ class TermResolver:
             return
         if "adinterestvalid" in self.refused:
             self._ids_unverified = any(i in self._confirmed_ids for i in ids)  # поиск adinterest найдёт имена сам
+            if self._ids_unverified:
+                self._touch(IDS_UNVERIFIED)
             return
         # Обрезанный ответ (есть следующая страница или полная страница строк): отсутствие id в нём ничего
         # не значит, такие id не считаются спрошенными и не объявляются устаревшими.
@@ -689,6 +708,8 @@ class TermResolver:
                 rows = [r for r in found if r.get("type") == bucket]
                 if rows:
                     yield bucket, rows
+        if self._behaviors is not None and "adTargetingCategory" in self.refused:
+            self._touch("adTargetingCategory")      # ACL-2939: список поведений из кэша задания, отказ тот же
         if self._behaviors is None:
             # Общий список поведений: на задание один раз.
             self._behaviors = self._lookup(
@@ -778,7 +799,10 @@ class TermResolver:
         """Результат по термину: state exact|confirmed|pending|unresolved."""
         key = norm(term)
         if key in self._results:
-            return self._results[key]
+            cached = self._results[key]
+            self._touched.update(cached.get("refusals") or ())      # ACL-2939: отказ повторяется и тут
+            return cached
+        self._collect = set()
         res = self._find(term)
         parts = split_term(term)
         if res["state"] == "unresolved" and parts:
@@ -792,6 +816,7 @@ class TermResolver:
                 bad = [self._classify(s) for s in subs if s["state"] not in _OK_STATES]
                 res = {**self._classify(res), "parts": [self._classify(s) for s in subs], "bad_parts": bad}
         res = self._classify(res)
+        res["refusals"] = sorted(self._collect)
         self._results[key] = res
         return res
 
@@ -813,6 +838,7 @@ class TermResolver:
     def reset_notes(self) -> None:
         """ACL-2932: новая кампания - заметки начинаются заново (резолвер общий на аккаунт)."""
         self.notes = []
+        self._touched = set()       # ACL-2939: отказы Meta, как и заметки, принадлежат одной кампании
 
     @staticmethod
     def _unambiguous(res: dict) -> tuple[dict | None, str]:
