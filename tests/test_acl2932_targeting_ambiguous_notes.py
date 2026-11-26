@@ -190,3 +190,53 @@ def test_mirror_corporate_name_among_many_interests_and_fruit_later_is_ambiguous
     note = r.targeting_notes()[0]
     assert "several possible matches" in note and "Apple (fruit)" in note and "Apple Inc." in note
     assert store.entries() == []
+
+
+# --- ACL-2938: warm entries made under the old first-stage rule are re-checked ---
+
+def _warm_old(facts, term, name, **extra):
+    """Запись прежнего выпуска: без метки правила."""
+    facts.put_term(facts.term_key("term", tr.norm(term)),
+                   {"picks": [{"id": "6003000000001", "type": "interests", "name": name}], **extra})
+
+
+def _facts(tmp_path):
+    from src.fb_api import facts_cache as fc
+
+    return fc.FactsCache(path=tmp_path / "facts.json")
+
+
+def test_old_warm_tail_pick_is_rechecked_and_removed_as_ambiguous(tmp_path):
+    facts, store = _facts(tmp_path), _store(tmp_path)
+    _warm_old(facts, "Apple", "Apple (fruit)")
+    meta = FakeSearch(valid={"Apple (fruit)": ("Apple (fruit)", "6003000000001")}, interests=APPLE)
+    r = tr.TermResolver(meta, store, facts=facts)
+    r.prefetch(["Apple"])
+    res = r.resolve("Apple")
+    assert r.settle(res) == []
+    assert "several possible matches" in " ".join(r.notes)
+    assert store.entries() == []
+    assert facts.get_term(facts.term_key("term", "apple")) is None
+    assert "adinterest" in meta.types()      # поиск был, запись не использована
+
+
+def test_old_warm_entry_that_still_passes_is_used_without_lookup(tmp_path):
+    facts, store = _facts(tmp_path), _store(tmp_path)
+    _warm_old(facts, "Yoga", "Yoga")
+    meta = FakeSearch(valid={"Yoga": ("Yoga", "6003000000001")})
+    r = tr.TermResolver(meta, store, facts=facts)
+    r.prefetch(["Yoga"])
+    res = r.resolve("Yoga")
+    assert res["state"] == "exact" and res["picks"][0]["id"] == "6003000000001"
+    assert r.facts_stats["warm_hits"] == 1
+    assert "adinterest" not in meta.types()
+
+
+def test_current_rule_warm_entry_with_tail_is_kept(tmp_path):
+    facts, store = _facts(tmp_path), _store(tmp_path)
+    _warm_old(facts, "Apple", "Apple (fruit)", rule=tr.WARM_RULE_VERSION)
+    meta = FakeSearch(valid={"Apple (fruit)": ("Apple (fruit)", "6003000000001")})
+    r = tr.TermResolver(meta, store, facts=facts)
+    r.prefetch(["Apple"])
+    assert r.resolve("Apple")["state"] == "exact"
+    assert r.facts_stats["warm_hits"] == 1

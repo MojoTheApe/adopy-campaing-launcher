@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2938 — Targeting: re-check old warm cache entries — 2026-11-26
+
+A saved term match from an older release whose name differs from the term (e.g. 'apple' → 'Apple (fruit)') is now looked up again under the current ambiguity rule; entries that still pass keep working and confirmed terms are untouched.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1938).
+
 ## ACL-2932 — Detailed targeting: no silent pick between different meanings — 2026-11-26
 
 A term with several possible meanings (for example 'Apple (fruit)' and 'Apple Inc.') is now removed as ambiguous with a "several possible matches" note, each campaign shows only its own targeting notes, and "no match" is used only when no candidate passed.
