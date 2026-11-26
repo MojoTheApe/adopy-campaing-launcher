@@ -723,8 +723,12 @@ class TermResolver:
             self._warm_put(term, [hit])
             return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
 
+        # ACL-2932: «Имя (категория)» и «Имя Inc.» собираются по ВСЕМ группам и решаются один раз после
+        # цикла: ранний выход по хвосту в одной группе молча брал бы «(fruit)», не дойдя до «Apple Inc.».
+        tail_hits: dict[tuple, dict] = {}     # имя совпало, но с «(категорией)»: (type, id) -> строка
+        same_hits: dict[tuple, dict] = {}     # равны термину после match_key (корп./доменный хвост)
+        tk = match_key(term)
         for bucket, rows in self._stages(term):
-            tail_hits: dict[str, dict] = {}   # имя совпало, но с «(категорией)»: id -> строка
             for r in rows:
                 c = self._row(r, bucket)
                 if not c:
@@ -732,26 +736,22 @@ class TermResolver:
                 if norm(c["name"]) == key:
                     self._warm_put(term, [c])
                     return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
-                if base_name(c["name"]) == key:
-                    tail_hits.setdefault(c["id"], c)
+                ident = (c["type"], c["id"])
                 sc = score(term, c["name"])
-                if sc >= WEAK_SCORE:
-                    cands.setdefault((c["type"], c["id"]), {**c, "score": sc})
-            if len(tail_hits) == 1:
-                # Единственный интерес с таким именем и категорией в скобках - это он и есть.
-                # Два и больше («Apple (fruit)» / «Apple (company)») - решает человек, не мы.
-                (c,) = tail_hits.values()
-                # ACL-2932: если в той же выдаче есть другой кандидат с иным id, равный термину после
-                # нормализации («Apple Inc.»), смыслов два - молча брать «(fruit)» нельзя; решает settle.
-                tk = match_key(term)
-                other = [r2 for r2 in (self._row(r, bucket) for r in rows)
-                         if r2 and r2["type"] != "behaviors" and r2["id"] != c["id"] and tk
-                         and tk == match_key(r2["name"], candidate=True)]
-                if other:
-                    cands.setdefault((c["type"], c["id"]), {**c, "score": score(term, c["name"])})
-                    continue
-                self._warm_put(term, [c])
-                return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
+                if base_name(c["name"]) == key:
+                    tail_hits.setdefault(ident, c)
+                    cands.setdefault(ident, {**c, "score": sc})
+                elif c["type"] != "behaviors" and tk and tk == match_key(c["name"], candidate=True):
+                    same_hits.setdefault(ident, c)
+                    cands.setdefault(ident, {**c, "score": sc})
+                elif sc >= WEAK_SCORE:
+                    cands.setdefault(ident, {**c, "score": sc})
+        if len(tail_hits) == 1 and not same_hits:
+            # Единственный интерес с таким именем и категорией в скобках - это он и есть.
+            # Два и больше или ещё «Apple Inc.» - смыслов несколько, решает человек, не мы (settle).
+            (c,) = tail_hits.values()
+            self._warm_put(term, [c])
+            return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
         # ACL-2473: пометку об отказанных поисках даём только термину без кандидатов; при кандидатах
         # причина простая (нет точного совпадения, выберите один), аккаунт тут ни при чём.
