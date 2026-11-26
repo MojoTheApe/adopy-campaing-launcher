@@ -5370,6 +5370,11 @@ class CampaignCreator:
 
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
+        # ACL-2932/2939: заметки и отказы Meta принадлежат одной кампании; сброс - ДО всего, что может
+        # бросить PlanError (иначе остановленная рано кампания в аудите видит чужие отказы).
+        reset = getattr(self.resolver, "reset_targeting_notes", None)
+        if reset:
+            reset()     # ACL-2932: в результате кампании только её собственные заметки
         calls_at_start = getattr(self.client, "calls", 0)
         self._writes_base = getattr(self.client, "writes", 0)
         self._require_compressor_for_big_videos(plan, out)      # ACL-2644: before any read or probe
@@ -5380,9 +5385,6 @@ class CampaignCreator:
             if note and note not in out.warnings:
                 out.warnings.append(note)
         self.check_profile_page(plan)
-        reset = getattr(self.resolver, "reset_targeting_notes", None)
-        if reset:
-            reset()     # ACL-2932: в результате кампании только её собственные заметки
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
             # ждущие подтверждения, за один раз, а не по набору за круг.
