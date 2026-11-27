@@ -54,7 +54,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
 </style></head><body>
 <header><h1>ACL Control Center</h1>
 <nav role="tablist"><button role="tab" data-tab="live" aria-selected="true">Live</button><button role="tab" data-tab="buyers" aria-selected="false">Buyers</button><button role="tab" data-tab="failures" aria-selected="false">Failures</button><button role="tab" data-tab="machines" aria-selected="false">Machines</button></nav>
-<span class="spacer"></span><input type="date" id="day" aria-label="Day">
+<span class="spacer"></span><span id="refresh-note" style="color:var(--muted);font-size:13px" aria-live="polite"></span><button class="btn" id="refresh" type="button" title="Fetch new batches from machines that still send to the old log">Refresh</button><input type="date" id="day" aria-label="Day">
 <form method="post" action="/logout"><button class="btn" type="submit">Log out</button></form></header>
 <main>
 <section id="tab-live"><div class="bar"><label>Buyer <select id="live-buyer"><option value="">All</option></select></label>
@@ -122,6 +122,20 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
     if (tab === "live") loadLive(); else if (tab === "buyers") loadBuyers(); else if (tab === "failures") loadFailures(); else loadMachines();
   }
   $("day").addEventListener("change", function () { if (tab === "buyers") loadBuyers(); });
+  // Refresh: хаб забирает новые пачки из старого журнала (машины без обновления), затем вкладка перечитывается.
+  $("refresh").addEventListener("click", function () {
+    var btn = $("refresh"), note = $("refresh-note");
+    btn.disabled = true; note.textContent = "Fetching…";
+    fetch("/api/refresh", { method: "POST", credentials: "same-origin", cache: "no-store" }).then(function (r) {
+      if (r.status === 401) { location.href = "/login"; throw new Error("signed out"); }
+      return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d; });
+    }).then(function (d) {
+      note.textContent = d.accepted + " new events" + (d.remaining ? " · " + d.remaining + " batches left, press again" : "")
+        + (d.failed_segments ? " · " + d.failed_segments + " batches unreadable" : "");
+      load();
+    }).catch(function (e) { note.textContent = "Refresh failed: " + e.message; })
+      .then(function () { btn.disabled = false; });
+  });
   $("live-buyer").addEventListener("change", loadLive);
   $("live-problems").addEventListener("change", renderLive);
 

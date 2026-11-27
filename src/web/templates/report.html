@@ -24278,10 +24278,66 @@ function cbProblemsHtml(r) {
   }
   // ACL-1805: у API-кампании рядом со списком остаются статус PAUSED, что создано и сверка.
   if (r.backend === 'api') h += cbApiReadbackHtml(r);
+  h += cbOperationProgressHtml(r);
   h += '<details class="cb-problems-tech"><summary>Technical details '
     + '<span>(step codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
   h += cbFailureDetailsHtml(r.failure && r.failure.details);
+  return h + '</div>';
+}
+
+// ACL-2572: прогресс частично созданной кампании (operation от журнала ACL-1856): что уже создано
+// (id как копируемый текст), на каком этапе остановились и один понятный следующий шаг.
+// Полностью созданная кампания (state=complete) и запись без operation ничего не добавляют.
+// Этап unknown/sent никогда не считается созданным. Только рисует, ничего не читает и не пишет.
+function cbOperationProgressHtml(r) {
+  var op = r && r.operation;
+  if (!op || typeof op !== 'object' || Array.isArray(op)) return '';
+  if (op.state === 'complete') return '';
+  var stateText = {unknown: 'result unknown', sent: 'sent, not confirmed', rejected: 'rejected by Meta',
+                   cancelled: 'cancelled', not_sent: 'not sent'};
+  var groups = {campaign: [], adset: [], ad: []};
+  var seen = {};
+  var bad = [];
+  var idText = function(v) { return (typeof v === 'string' || typeof v === 'number') && String(v).trim() ? String(v).trim() : ''; };
+  var kindOf = function(label) {
+    if (label === 'campaign') return 'campaign';
+    if (/^ad set\b/.test(label)) return 'adset';
+    if (/^ad \d+$/.test(label)) return 'ad';
+    return '';
+  };
+  var addCreated = function(label, id) {
+    var k = kindOf(label);
+    if (!id || seen[label]) return;
+    seen[label] = true;
+    (groups[k || 'ad'] || groups.ad).push({label: label, id: id, other: !k});
+  };
+  (Array.isArray(op.stages) ? op.stages : []).forEach(function(st) {
+    if (!st || typeof st !== 'object') return;
+    var label = idText(st.label) || '?';
+    if (st.state === 'confirmed') { addCreated(label, idText(st.id)); return; }
+    bad.push(label + ' (' + (stateText[st.state] || 'not confirmed') + ')');
+  });
+  var pids = op.partial_ids;
+  if (pids && typeof pids === 'object' && !Array.isArray(pids)) {
+    Object.keys(pids).forEach(function(label) { addCreated(label, idText(pids[label])); });
+  }
+  var idChip = function(g) {
+    return '<code style="user-select:all">' + aclEscHtml(g.id) + '</code>';
+  };
+  var parts = [];
+  if (groups.campaign.length) parts.push('campaign ' + groups.campaign.map(idChip).join(', '));
+  if (groups.adset.length) parts.push(groups.adset.length + ' ad set' + (groups.adset.length === 1 ? '' : 's')
+    + ' ' + groups.adset.map(idChip).join(', '));
+  if (groups.ad.length) parts.push(groups.ad.length + ' ad object' + (groups.ad.length === 1 ? '' : 's')
+    + ' ' + groups.ad.map(idChip).join(', '));
+  var next = typeof op.next_action === 'string' ? op.next_action.trim() : '';
+  if (!parts.length && !bad.length && !next) return '';
+  var h = '<div class="cb-status-steps cb-op-progress" style="font-size:var(--adopy-text-sm);margin-top:0.2rem">';
+  h += parts.length ? '<div>Created so far: ' + parts.join(' · ') + '.</div>'
+                    : '<div>Nothing was confirmed as created.</div>';
+  if (bad.length) h += '<div style="color:var(--warn)">Stopped or unknown: ' + bad.map(aclEscHtml).join(', ') + '.</div>';
+  if (next) h += '<div>Next: ' + aclEscHtml(next) + '</div>';
   return h + '</div>';
 }
 
@@ -24472,6 +24528,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       else if (r.page_id && r.page_origin) html += '<div class="cb-status-steps">Facebook Page: '
         + aclEscHtml(r.page_name || r.page_id) + ' (' + aclEscHtml(r.page_id) + ') · from '
         + aclEscHtml(r.page_origin) + '</div>';
+      html += cbOperationProgressHtml(r);
       if (manual) html += '<div class="cb-status-err" style="color:var(--warn);border-color:var(--warn)">Manual completion required: '
         + r.manual_required.map(aclEscHtml).join(' ') + '</div>';
       if (r.error) {
