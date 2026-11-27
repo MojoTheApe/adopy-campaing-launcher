@@ -1,0 +1,126 @@
+"""ACL-2945: в блоке «Assign accounts to…» строка «название, код страны» добавляет аккаунт в карту машины."""
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+
+import pytest
+
+from tests.test_acl2920_assign_follows_logged_as import (  # noqa: F401  (фикстура hub и помощники)
+    D1, D2, _accounts, _post, _send, hub,
+)
+
+D3 = "3" * 16   # номер собираем в тесте: сканер секретов не любит длинные цифры в коде
+
+
+def _preview(text):
+    from src.web import app as app_mod
+
+    return _post(app_mod.api_user_assign_preview, {"text": text})[1]["results"]
+
+
+def _map_rows():
+    from src.web import app as app_mod
+
+    path = Path(app_mod.get_ad_account_map_path())
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def _by_name(name):
+    return next((r for r in _map_rows() if r["account_name"] == name), None)
+
+
+# ── Check ────────────────────────────────────────────────────────────────
+
+def test_check_shows_will_be_added_with_the_country_name(hub):
+    (res,) = _preview("Gamma 9, PE")
+    assert res["state"] == "add" and res["country"] == "Peru" and res["account_name"] == "Gamma 9"
+    assert _by_name("Gamma 9") is None                                 # Check ничего не пишет
+
+
+def test_country_code_is_case_insensitive_and_uses_the_spelling_the_map_already_has(hub):
+    path = _map_path()
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("profile_id\n", "profile_id,country\n", 1)
+                    .replace("p-1\n", "p-1,Saudi Arabia\n", 1), encoding="utf-8")
+    (res,) = _preview("Gamma 9, sa")
+    assert res["state"] == "add" and res["country"] == "Saudi Arabia"
+
+
+def _map_path():
+    from src.web import app as app_mod
+
+    return Path(app_mod.get_ad_account_map_path())
+
+
+# ── Assign ───────────────────────────────────────────────────────────────
+
+def test_assign_adds_the_account_to_the_map_under_its_country_and_assigns_it(hub):
+    status, data = _send("Dan Dicker", "Gamma 9, PE\nDelta 4, SA")
+    assert data["ok"] and data["added"] == ["Gamma 9", "Delta 4"] and data["assigned"] == ["Gamma 9", "Delta 4"]
+    assert _by_name("Gamma 9")["country"] == "Peru" and _by_name("Delta 4")["country"] == "Saudi Arabia"
+    (post,) = [c for c in hub.calls if c[0] == "POST"]
+    assert [r["account_name"] for r in post[3]["rows"]] == ["Gamma 9", "Delta 4"]
+    assert [r["country"] for r in post[3]["rows"]] == ["Peru", "Saudi Arabia"]
+    assert [x["account_name"] for x in hub.assigned["dan@adopy.test"] if not x["removed_at"]] == [
+        "Alpha 1", "Gamma 9", "Delta 4"]
+    assert all(r["sent"] for r in data["results"])
+
+
+def test_the_number_is_optional_but_stored_when_given(hub):
+    status, data = _send("Dan Dicker", f"Gamma 9, PE\nDelta 4, PE, act_{D3}")
+    assert data["ok"]
+    assert _by_name("Gamma 9")["ad_account_id"] == ""                  # без номера всё равно добавлен
+    assert _by_name("Delta 4")["ad_account_id"] == "act_" + D3        # с номером — сохранён
+
+
+def test_the_second_assign_of_the_same_line_does_not_add_twice(hub):
+    assert _send("Dan Dicker", "Gamma 9, PE")[1]["added"] == ["Gamma 9"]
+    status, data = _send("Dan Dicker", "Gamma 9, PE")                  # теперь аккаунт в карте: обычная найденная строка
+    assert data["ok"] and data["added"] == []
+    assert len([r for r in _map_rows() if r["account_name"] == "Gamma 9"]) == 1
+
+
+# ── что остаётся «Not found» ─────────────────────────────────────────────
+
+def test_unknown_country_code_stays_not_found_and_names_the_code(hub):
+    (res,) = _preview("Gamma 9, ZZ")
+    assert res["state"] == "not_found" and "ZZ" in res["error"]
+    status, data = _send("Dan Dicker", "Gamma 9, ZZ")
+    assert data["ok"] is False and _by_name("Gamma 9") is None
+
+
+def test_no_country_for_an_unknown_account_stays_not_found(hub):
+    (res,) = _preview("Gamma 9")
+    assert res["state"] == "not_found" and not res.get("error")
+    status, data = _send("Dan Dicker", "Gamma 9")
+    assert data["ok"] is False and _by_name("Gamma 9") is None
+    assert not [c for c in hub.calls if c[0] == "POST"]
+
+
+def test_a_second_country_code_or_number_clash_is_refused(hub):
+    (res,) = _preview(f"Gamma 9, PE, act_{D1}")                        # номер уже у Alpha 1
+    assert res["state"] == "clash" and "Alpha 1" in res["error"]
+    (res,) = _preview("Gamma 9, PE, SA")                               # два кода — не угадываем
+    assert res["state"] == "not_found"
+
+
+# ── строки, которые уже в карте, работают как раньше ─────────────────────
+
+def test_lines_for_accounts_already_in_the_map_behave_as_before(hub):
+    before = _map_rows()
+    results = _preview("Alpha 1\nBeta 2, PE\nact_" + D1)
+    assert [r["state"] for r in results] == ["found", "found", "duplicate"]
+    assert results[1]["account_name"] == "Beta 2"                      # страна у существующего не меняется
+    status, data = _send("Dan Dicker", "Alpha 1\nBeta 2, PE")
+    assert data["ok"] and data["added"] == [] and data["assigned"] == ["Alpha 1", "Beta 2"]
+    assert _map_rows() == before                                       # карта не тронута
+
+
+def test_owner_key_still_never_reaches_the_page(hub):
+    from tests.test_acl2920_assign_follows_logged_as import OWNER_KEY
+
+    answer = _send("Dan Dicker", "Gamma 9, PE")[1]
+    assert OWNER_KEY not in json.dumps(answer)
