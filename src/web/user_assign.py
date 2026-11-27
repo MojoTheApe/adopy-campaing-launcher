@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -204,11 +205,15 @@ def parse_add_line(line: str) -> "dict | None":
 
 ADD_FORMAT_HINT = "Write the account as: name, PE (a 2-letter country code; an act_ number is optional)."
 MAX_NAME_LEN = 200
+_ACT_SEEN = chr(0) + "act:"   # ключ номера в `seen`: NUL в названии не бывает, с именами не пересечётся
 
 
 def norm_name(name: str) -> str:
-    """Название с одиночными пробелами: «Alpha  1» и «Alpha 1» — один аккаунт."""
-    return " ".join(str(name or "").split())
+    """Название с одиночными пробелами и без невидимых символов (BOM, нулевой пробел: категория Unicode Cf).
+
+    «Alpha  1», «Alpha 1» и «Alpha​ 1» — один аккаунт."""
+    visible = "".join(ch for ch in str(name or "") if unicodedata.category(ch) != "Cf")
+    return " ".join(visible.split())
 
 
 def name_key(name: str) -> str:
@@ -222,8 +227,10 @@ def bad_new_name(name: str) -> str:
         return "The account name is empty. " + ADD_FORMAT_HINT
     if len(name) > MAX_NAME_LEN:
         return f"The account name is longer than {MAX_NAME_LEN} characters."
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+    if any(unicodedata.category(ch) == "Cc" for ch in name):
         return "The account name contains control characters."
+    if looks_like_id(name) and not (name.isdigit() and len(name) < 10):
+        return "This looks like an ad account number, not a name. Write: name, PE, act_…"
     if name[0] in "=+-@":
         return 'The account name cannot start with "=", "+", "-" or "@".'
     return ""
@@ -347,7 +354,7 @@ def _resolve_new_account(res: dict, add: dict, account_map, by_act, seen, normal
             res.update(state="clash", candidates=other,
                        error=f'Ad account {act} is also linked to "{other[0]}".')
             return
-        used = seen.get("act:" + act)
+        used = seen.get(_ACT_SEEN + act)
         if used:
             res.update(state="clash", candidates=[used],
                        error=f'Ad account {act} is already given for "{used}" in this list.')
@@ -357,7 +364,7 @@ def _resolve_new_account(res: dict, add: dict, account_map, by_act, seen, normal
     res.update(state="add", country=country, row=row)
     seen[name_key(name)] = line
     if act:
-        seen["act:" + act] = name
+        seen[_ACT_SEEN + act] = name
 
 
 def found_rows(results: Iterable[dict]) -> list[dict]:

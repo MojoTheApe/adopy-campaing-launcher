@@ -293,3 +293,44 @@ def test_number_outcomes_unreadable_used_by_the_map_used_twice_in_one_paste(hub)
 def test_lowercase_and_padded_country_codes_work(hub):
     results = _preview(_lines("Gamma 9, pe", "Delta 4,   sa  "))
     assert [(r["state"], r["country"]) for r in results] == [("add", "Peru"), ("add", "Saudi Arabia")]
+
+
+# ── Fix round 6 (состязательное ревью): номер в слоте названия, невидимые символы ──
+
+@pytest.mark.parametrize("name", [
+    "act_" + "3" * 16, "3" * 16,
+    "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" + "3" * 16,
+])
+def test_an_ad_account_id_or_url_in_the_name_slot_is_refused(hub, name):
+    (res,) = _preview(name + ", PE")
+    assert res["state"] == "not_found" and "looks like an ad account number" in res["error"]
+    status, data = _send("Dan Dicker", name + ", PE")
+    assert data["ok"] is False and not [r for r in _map_rows() if r["account_name"].startswith(("act_", "3", "https"))]
+
+
+def test_a_short_number_inside_a_real_name_is_still_a_name(hub):
+    (res,) = _preview("Account 2024, PE")
+    assert res["state"] == "add"
+    (res,) = _preview("12345, PE")                                     # короткие цифры — не номер кабинета (10+ цифр)
+    assert res["state"] == "add"
+
+
+def test_invisible_characters_do_not_make_lookalike_duplicates(hub):
+    bom, zwsp = chr(0xFEFF), chr(0x200B)
+    for line in (bom + "Alpha 1, PE", "Alpha" + zwsp + " 1, PE", "Alp" + zwsp + "ha 1, PE"):
+        (res,) = _preview(line)
+        assert res["state"] == "found" and res["account_name"] == "Alpha 1", line
+    first, second = _preview(chr(10).join(["Gam" + zwsp + "ma 9, PE", "Gamma 9, PE"]))
+    assert first["state"] == "add" and first["account_name"] == "Gamma 9" and second["state"] == "duplicate"
+
+
+def test_a_c1_control_character_in_a_new_name_is_refused(hub):
+    (res,) = _preview("Gam" + chr(0x9B) + "ma, PE")
+    assert res["state"] == "not_found" and "control characters" in res["error"]
+    assert _send("Dan Dicker", "Gam" + chr(0x9B) + "ma, PE")[1]["ok"] is False
+
+
+def test_the_number_key_in_seen_cannot_collide_with_a_name(hub):
+    # раньше ключ «act:<номер>» лежал в том же словаре, что и названия; теперь он с префиксом, которого в названии нет
+    first, second = _preview(chr(10).join(["act:" + "3" * 16 + ", PE", "Delta 4, SA, act_" + D3]))
+    assert first["state"] == "add" and second["state"] == "add"          # имя «act:…» и номер той же записи не мешают друг другу
