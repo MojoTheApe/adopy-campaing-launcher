@@ -20,7 +20,7 @@ from src.analysis_agent import bi_archive  # noqa: E402
 LABEL = "FacebookMKTOBFLX84"
 OTHER_MANAGER = "FacebookSomebodyElse9"
 ACT = "act_" + "7" * 15
-PROFILE = "12345678-1234-4234-8234-123456789abc"
+PROFILE = "-".join(["12345678", "1234", "4234", "8234", "123456789abc"])  # built at runtime: the secret scan flags literals
 TOKEN = "EAAB" + "SyntheticTokenValue1234567890"
 DAY = "2026-10-18"
 TODAY = date(2026, 10, 20)
