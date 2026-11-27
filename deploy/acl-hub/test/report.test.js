@@ -167,7 +167,7 @@ test("jobs counted from runs when job.created is missing", async () => {
 test("object errors are shown as text", async () => {
   const bad = { ...gil()[7], event_id: "o:1", campaign: "G_obj", payload: { campaign_name: "G_obj", success: false, error: { message: "boom" } } };
   const env = await makeEnv([bad]);
-  const { body } = await get(env, "/api/live");
+  const { body } = await atFixtureTime(() => get(env, "/api/live"));
   assert.ok(!body.events[0].text.includes("[object Object]"));
   assert.match(body.events[0].text, /boom/);
 });
