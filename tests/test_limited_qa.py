@@ -262,3 +262,18 @@ def test_builder_template_wires_generate_to_the_panel_script():
     assert "data-lqa-open" in html and "data-landings-domain" in html and "/static/account_limited_qa.js" in html
     js = (root / "static" / "account_limited_qa.js").read_text(encoding="utf-8")
     assert "/api/limited-qa/requests" in js and "data-landings-country" in js
+
+
+def test_saved_domain_beats_workbook_and_is_validated(tmp_path, monkeypatch):
+    from src.web import account_landings as store
+    from src.web import app as web
+
+    monkeypatch.setattr(store, "_domain_path", lambda: tmp_path / "account_domains.json")
+    monkeypatch.setattr(web, "_get_upload_ref_cached", lambda: {"accounts": {"Demo": {"domain": "old.example"}}})
+    monkeypatch.setattr(web, "get_ad_account_map_path", lambda: "no-such-map.csv")
+    assert web._build_account_preflight(["Demo"])["Demo"]["domain"] == "old.example"
+    assert store.set_domain("Demo", " New.Example ") == {"ok": True, "domain": "new.example"}
+    assert web._build_account_preflight(["Demo"])["Demo"]["domain"] == "new.example"
+    assert store.set_domain("Demo", "https://bad.example/x")["ok"] is False
+    assert store.set_domain("Demo", "")["domain"] == ""
+    assert web._build_account_preflight(["Demo"])["Demo"]["domain"] == "old.example"

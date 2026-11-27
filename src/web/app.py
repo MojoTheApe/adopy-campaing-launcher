@@ -1245,6 +1245,13 @@ def _history_act_note(entry) -> str:
             "with wrong_ad_account - check the ad account id on the Accounts page.")
 
 
+def _account_domain(label: str, info: dict) -> str:
+    """Домен, который человек сохранил на аккаунте, главнее карты и таблицы."""
+    from src.web import account_landings
+
+    return account_landings.get_domain(label) or (info.get("domain") or "").strip()
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -1293,7 +1300,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             "page_name": page_name,
             "ad_account_note": _history_act_note(entry),
             # Корневой домен аккаунта (карта машины, затем таблица Accounts): подставляется в Generate.
-            "domain": (info.get("domain") or "").strip(),
+            "domain": _account_domain(label, info),
         }
     return result
 
@@ -7050,6 +7057,18 @@ async def api_account_landings(request: Request) -> JSONResponse:
     else:
         result = {"ok": True, "landings": await asyncio.to_thread(store.get_landings, account)}
     return JSONResponse(result)
+
+
+@app.post("/api/account-domain")
+async def api_account_domain(request: Request) -> JSONResponse:
+    """Сохранить корневой домен аккаунта (Generate подставляет его в следующий раз)."""
+    from src.web import account_landings as store
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "message": "account is required"}, status_code=400)
+    return JSONResponse(await asyncio.to_thread(store.set_domain, account, form.get("domain")))
 
 
 @app.post("/api/page-forms")

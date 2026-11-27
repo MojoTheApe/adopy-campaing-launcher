@@ -82,7 +82,13 @@
         source_urls: list, target_domain: domain.value, country: country, facebook_account: account})})
         .then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); })
         .then(function (x) {
-          if (x[0]) { say('Request sent.'); paint(x[1]); clearTimeout(timer); timer = setTimeout(refresh, POLL_MS); }
+          if (x[0]) {
+            if (domain.value.trim().toLowerCase() !== (root.getAttribute('data-landings-domain') || '').toLowerCase()) {
+              var save = new FormData(); save.append('account_label', account); save.append('domain', domain.value);
+              fetch('/api/account-domain', {method: 'POST', body: save}).catch(function () {});
+              root.setAttribute('data-landings-domain', domain.value.trim().toLowerCase());
+            }
+            say('Request sent.'); paint(x[1]); clearTimeout(timer); timer = setTimeout(refresh, POLL_MS); }
           else say(x[1].error || 'Could not send the request.', true);
         })
         .catch(function () { say('Could not send the request.', true); })

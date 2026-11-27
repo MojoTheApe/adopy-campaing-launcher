@@ -115,3 +115,44 @@ def set_percent(account: str, landing_id: Any, percent: Any) -> dict:
         return {"ok": False, "message": "This landing is not on the account.", "landings": rows}
     hit["percent"] = value
     return {"ok": True, "landings": _commit(account, rows)}
+
+
+# ── Корневой домен аккаунта (для Generate) ────────────────────────────────────
+
+def _domain_path() -> Path:
+    from config.paths import get_local_config_dir
+
+    return Path(get_local_config_dir()) / "account_domains.json"
+
+
+def _load_domains() -> dict:
+    try:
+        data = json.loads(_domain_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def get_domain(account: str) -> str:
+    with _LOCK:
+        return str(_load_domains().get(account) or "").strip()
+
+
+def set_domain(account: str, domain: Any) -> dict:
+    """Запомнить домен, введённый человеком; пустое значение стирает запись."""
+    from config.paths import _atomic_write
+    from src.limited_qa.client import ValidationError, normalize_target_domain
+
+    text = str(domain or "").strip()
+    try:
+        value = normalize_target_domain(text) if text else ""
+    except ValidationError as exc:
+        return {"ok": False, "message": str(exc)}
+    with _LOCK:
+        data = _load_domains()
+        if value:
+            data[account] = value
+        else:
+            data.pop(account, None)
+        _atomic_write(_domain_path(), json.dumps(data, ensure_ascii=False, indent=1).encode("utf-8"))
+    return {"ok": True, "domain": value}
