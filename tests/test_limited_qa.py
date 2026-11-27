@@ -241,3 +241,24 @@ def test_requests_are_pinned_to_ipv4_unless_auto(monkeypatch):
     monkeypatch.setenv(client.IP_ENV, "auto")
     client._IPv4Adapter().init_poolmanager(1, 1)
     assert "source_address" not in seen
+
+
+# ── Generate in the builder ───────────────────────────────────────────────────
+
+def test_preflight_carries_the_account_domain_from_the_workbook(monkeypatch):
+    from src.web import app as web
+
+    monkeypatch.setattr(web, "_get_upload_ref_cached", lambda: {"accounts": {"Demo": {"domain": " Root.example "}}})
+    monkeypatch.setattr(web, "get_ad_account_map_path", lambda: "no-such-map.csv")
+    assert web._build_account_preflight(["Demo"])["Demo"]["domain"] == "Root.example"
+    assert web._build_account_preflight(["Other"])["Other"]["domain"] == ""
+
+
+def test_builder_template_wires_generate_to_the_panel_script():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent / "src" / "web"
+    html = (root / "templates" / "report.html").read_text(encoding="utf-8")
+    assert "data-lqa-open" in html and "data-landings-domain" in html and "/static/account_limited_qa.js" in html
+    js = (root / "static" / "account_limited_qa.js").read_text(encoding="utf-8")
+    assert "/api/limited-qa/requests" in js and "data-landings-country" in js

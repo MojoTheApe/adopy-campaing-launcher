@@ -970,6 +970,11 @@
     .cb-landings-actions, .cb-landing-search-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .cb-landing-secondary { background: transparent; color: var(--text); border: 1px solid var(--border-strong); }
     .cb-landing-secondary:hover { background: var(--bg-elev); }
+    .cb-lqa { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+    .cb-lqa-field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .cb-lqa-field label { font-size: var(--adopy-text-sm); color: var(--muted); }
+    .cb-lqa-result { font-size: var(--adopy-text-sm); display: flex; flex-direction: column; gap: 0.25rem; word-break: break-all; }
+    .cb-lqa-result .cb-lqa-bad { color: var(--adopy-danger); }
     .cb-landing-asset-row { margin-top: .4rem; }
     .cb-landing-asset-chip[hidden] { display: none; }
     .cb-landing-asset-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); font-size: .85rem; }
@@ -5679,15 +5684,34 @@ function dashRefreshUpdateCheck() {
       </div>
 
       {# Landings row (ACL-2852): pick up to 3 landings from JCloudFront for this account #}
-      <div class="cb-preflight-row cb-landings" data-landings-account="{{ acc_label | e }}">
+      <div class="cb-preflight-row cb-landings" data-landings-account="{{ acc_label | e }}"
+           data-landings-country="{{ c.country | e }}" data-landings-domain="{{ (pf.domain or '') | e }}">
         <span class="cb-preflight-label">Landings</span>
         <div class="cb-preflight-val cb-landings-val">
           <div data-landings-list></div>
           <div class="cb-landings-actions">
             <button type="button" class="cb-field-save-btn" data-landings-open>Pick landing</button>
-            <button type="button" class="cb-field-save-btn cb-landing-secondary" disabled
-                    title="Generating a landing comes with the Keitaro connection">Generate</button>
+            <button type="button" class="cb-field-save-btn cb-landing-secondary" data-lqa-open
+                    title="Create landing pages on this account's domain from the source landings">Generate</button>
             <span class="cb-field-status" data-landings-status></span>
+          </div>
+          {# Generate (Limited_QA): copies of the source landings on the account's root domain #}
+          <div class="cb-lqa" data-lqa hidden>
+            <div class="cb-lqa-field">
+              <label>Source landing URLs (one per line, up to 3)</label>
+              <textarea class="cb-input" rows="3" data-lqa-urls placeholder="https://…"></textarea>
+            </div>
+            <div class="cb-lqa-field">
+              <label>Target root domain</label>
+              <input type="text" class="cb-input cb-input-url" data-lqa-domain placeholder="domain.com">
+              <span class="cb-field-status" data-lqa-domain-note></span>
+            </div>
+            <div class="cb-landings-actions">
+              <button type="button" class="cb-field-save-btn" data-lqa-go>Create landing pages</button>
+              <button type="button" class="cb-field-save-btn cb-landing-secondary" data-lqa-close>Close</button>
+              <span class="cb-field-status" data-lqa-msg></span>
+            </div>
+            <div class="cb-lqa-result" data-lqa-result></div>
           </div>
           <div data-landings-search hidden>
             <div class="cb-landing-search-row">
@@ -27326,6 +27350,7 @@ window.cwWorkbench = (function () {
 <script src="/static/account_pages.js"></script>
 <script src="/static/account_pixels.js"></script>
 <script src="/static/account_landings.js"></script>
+<script src="/static/account_limited_qa.js"></script>
 <script src="/static/warm_sessions.js"></script>
 <script src="/static/warm_auto.js"></script>
 <script src="/static/recent_runs.js"></script>

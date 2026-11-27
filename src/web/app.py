@@ -1292,6 +1292,8 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             "prefill": prefill,
             "page_name": page_name,
             "ad_account_note": _history_act_note(entry),
+            # Корневой домен аккаунта (карта машины, затем таблица Accounts): подставляется в Generate.
+            "domain": (info.get("domain") or "").strip(),
         }
     return result
 

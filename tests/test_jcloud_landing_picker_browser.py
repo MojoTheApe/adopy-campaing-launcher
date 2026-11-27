@@ -16,10 +16,12 @@ sys.path.insert(0, str(ROOT))
 from src.web import account_landings as store  # noqa: E402
 
 JS = (ROOT / "src/web/static/account_landings.js").read_text(encoding="utf-8")
+LQA_JS = (ROOT / "src/web/static/account_limited_qa.js").read_text(encoding="utf-8")
 TEMPLATE = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
 # Строка из настоящего шаблона: тест видит ту же разметку, что и билдер.
 ROW = TEMPLATE[TEMPLATE.index("<div class=\"cb-preflight-row cb-landings\""):TEMPLATE.index("{# Account config row #}")]
-ROW = ROW.replace("{{ acc_label | e }}", "Demo")
+ROW = (ROW.replace("{{ acc_label | e }}", "Demo").replace("{{ c.country | e }}", "Chile")
+       .replace("{{ (pf.domain or '') | e }}", "root.example"))
 # Правило окна предпросмотра из настоящего шаблона: позиция считается относительно окна браузера.
 PREVIEW_CSS = re.search(r"\.cb-landing-preview \{[^}]*\}", TEMPLATE).group(0)
 
@@ -41,6 +43,7 @@ def browser():
 def page(browser, monkeypatch, tmp_path):
     monkeypatch.setattr(store, "_path", lambda: tmp_path / "account_landings.json")
     searches = []
+    sent = []
     pages = {"1": [_card(1, "aaa"), _card(2, "bbb"), _card(3, "ccc"), _card(4, "ddd")]}
 
     def route(r):
@@ -54,6 +57,12 @@ def page(browser, monkeypatch, tmp_path):
             searches.append(f)
             body = {"ok": True, "state": "ready", "searched_as": "path", "page": 1, "items": pages["1"],
                     "total": 4, "matching_landings": 9, "has_more": False, "snapshot_id": "s", "complete": True, "unclassified_count": 0}
+        elif url.endswith("/api/limited-qa/requests") and r.request.method == "POST":
+            sent.append(json.loads(r.request.post_data))
+            body = {"request_id": "r1", "status": "running", "target_domain": "root.example", "country": "Chile",
+                    "facebook_account": "Demo", "created_local": "2026-11-27T10:00:00", "result_urls": []}
+        elif url.endswith("/api/limited-qa/requests"):
+            body = {"configured": True, "requests": []}
         elif url.endswith("/api/account-landings"):
             op = f.get("op", "get")
             if op == "add":
@@ -77,8 +86,10 @@ def page(browser, monkeypatch, tmp_path):
     pg.goto("http://acl.test/")
     pg.set_content("<div>" + ROW + "</div>")
     pg.add_script_tag(content=JS)
+    pg.add_script_tag(content=LQA_JS)
     pg.wait_for_selector("[data-landings-open]")
     pg.searches = searches
+    pg.sent = sent
     yield pg
     assert not errors, errors
     ctx.close()
@@ -93,9 +104,9 @@ def _pick(page, query, title):
     page.wait_for_function("document.querySelector('[data-landings-search]').hidden")
 
 
-def test_generate_is_visible_and_disabled(page):
+def test_generate_is_visible_and_opens_its_panel(page):
     gen = page.get_by_role("button", name="Generate")
-    assert gen.is_visible() and gen.is_disabled()
+    assert gen.is_visible() and gen.is_enabled()
 
 
 def test_pick_one_gets_100_then_two_get_50_50_then_three_33_33_34(page):
@@ -287,3 +298,16 @@ def test_cards_show_instance_count_and_the_grouped_totals(page):
     page.locator("[data-landing-id]").first.wait_for()
     assert page.locator("[data-landings-summary]").inner_text() == "4 unique configurations · 9 landings"
     assert "2 pages" in page.locator("[data-landing-id]").first.inner_text()
+
+
+def test_generate_prefills_domain_and_chosen_landings_and_sends_the_request(page):
+    _pick(page, "aaa", "aaa")
+    page.get_by_role("button", name="Generate").click()
+    assert page.locator("[data-lqa-domain]").input_value() == "root.example"
+    page.wait_for_function("document.querySelector('[data-lqa-urls]').value.includes('lp.example.com/aaa')")
+    page.fill("[data-lqa-urls]", "https://lp.example.com/aaa\nhttps://free.example/text")
+    page.click("[data-lqa-go]")
+    page.wait_for_function("document.querySelector('[data-lqa-msg]').textContent === 'Request sent.'")
+    assert page.sent == [{"source_urls": ["https://lp.example.com/aaa", "https://free.example/text"],
+                          "target_domain": "root.example", "country": "Chile", "facebook_account": "Demo"}]
+    assert "In progress" in page.locator("[data-lqa-result]").inner_text()
