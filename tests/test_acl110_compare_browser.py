@@ -78,6 +78,13 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         if u.hostname == 'acl.test' and u.path == '/multilogin-slots-repair':
             assert req.method == 'POST'
             return r.fulfill(json={'ok': True, 'repaired': False, 'cleared': [], 'kept': '', 'message': ''})
+        # ACL-2899: обычное открытие страницы подтягивает аккаунты юзера с хаба (пишет только
+        # машинную карту). В режиме сравнения скрипт её не запускает; здесь она приходит, когда
+        # тест снимает сравнение и страница становится обычной. Ответ «ничего не изменилось».
+        if u.hostname == 'acl.test' and u.path == '/api/user-accounts/sync':
+            assert req.method == 'POST'
+            assert 'compare' not in parse_qs(urlparse(p.url).query), 'sync fired in a comparison view'
+            return r.fulfill(json={'ok': True, 'status': 'not_modified', 'changed': False})
         assert req.method == 'GET', (req.method, u.path)
         if req.resource_type == 'document' or u.path == '/account-map':
             query = parse_qs(u.query)
@@ -204,7 +211,8 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         assert all(host in ('acl.test', 'unpkg.com') for _, host, _ in requests)
         assert all(method == 'GET' or (method, host, path) in
                    (('POST', 'acl.test', '/account-refresh/page-open'),
-                    ('POST', 'acl.test', '/multilogin-slots-repair'))
+                    ('POST', 'acl.test', '/multilogin-slots-repair'),
+                    ('POST', 'acl.test', '/api/user-accounts/sync'))
                    for method, host, path in requests)
     finally:
         ctx.close()

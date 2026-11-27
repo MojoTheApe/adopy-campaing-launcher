@@ -24,6 +24,8 @@ from src.meta_campaign_agent.multilogin_launcher import StartedProfile
 @pytest.fixture(autouse=True)
 def _quiet(monkeypatch):
     # Журнал пилота и остановок — не на диск машины; холодные отметки — свои.
+    # ACL-2668: паузу после остановки (по умолчанию 0) включаем аварийным рычагом — 180 с.
+    monkeypatch.setenv(stop_log.RESTART_COOLDOWN_ENV, "180")
     monkeypatch.setattr(launch, "_record", lambda event: None)
     monkeypatch.setattr(stop_log, "refusal", lambda pid, log_=None: "")
     monkeypatch.setattr(launch, "_PACER", launch.StartPacer(limit=lambda: 0))
@@ -296,7 +298,8 @@ def test_mlx_listing_a_profile_we_just_stopped_is_not_attached(monkeypatch):
     assert err.value.code == "restart_cooldown"
 
 
-def test_recent_stop_is_only_reported_during_the_cooldown(tmp_path):
+def test_recent_stop_is_only_reported_during_the_cooldown(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_PROFILE_RESTART_COOLDOWN_S", "180")     # ACL-2818: the code default is now 0 s
     now = [1000.0]
     log = stop_log.StopLog(tmp_path / "stops.json", wall=lambda: now[0])
     log.record("P1")
@@ -442,14 +445,22 @@ def test_proxy_auth_race_on_the_probe_is_retried_once_and_facebook_is_never_hit_
     tab, cdp, slept = _nav_tab([AUTH, ""])
     tab.navigate(FB)
     assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL, launch.DEFAULT_PROXY_PROBE_URL, FB]
-    assert slept == [launch.PROXY_RETRY_S]
+    assert slept == [launch.PROXY_PROBE_POLL_S]      # ACL-2792: быстрая проба, не 12 с
 
 
-def test_proxy_auth_error_on_the_retry_is_final():
-    tab, cdp, slept = _nav_tab([AUTH, AUTH])
+def test_proxy_that_answers_two_seconds_after_the_first_failure_is_accepted_fast():
+    tab, cdp, slept = _nav_tab([AUTH, AUTH, ""])
+    tab.navigate(FB)
+    assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL] * 3 + [FB]
+    assert sum(slept) <= 2.0
+
+
+def test_dead_proxy_fails_with_the_same_message_after_the_same_total_budget():
+    tab, cdp, slept = _nav_tab([AUTH] * 50)
     with pytest.raises(cdp_mod.PageError, match="ERR_INVALID_AUTH_CREDENTIALS"):
         tab.navigate(FB)
-    assert FB not in cdp.urls and len(slept) == 1
+    assert sum(slept) == launch.PROXY_RETRY_S
+    assert set(cdp.urls) == {launch.DEFAULT_PROXY_PROBE_URL}    # только нейтральный хост, не Meta
 
 
 def test_proxy_auth_error_on_a_warm_profile_is_final():

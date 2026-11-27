@@ -120,7 +120,8 @@ def validate(values: dict) -> dict:
 # -- reading the sheet -------------------------------------------------------
 
 SIGN_IN_TIMEOUT_SECONDS = 180
-_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly", "openid",
+             "https://www.googleapis.com/auth/userinfo.email"]  # ACL-2899: + email для входа в хаб
 
 
 def _token_path() -> Path:
@@ -150,7 +151,11 @@ def _service(interactive: bool):
 
             from config import token_vault
 
-            creds = Credentials.from_authorized_user_info(json.loads(token_vault.read_secret_text(token)), _READONLY)
+            from src.analysis_agent import gsheet_accounts as _ga
+
+            saved = json.loads(token_vault.read_secret_text(token))
+            # ACL-2899: старый токен читает таблицу под своими правами, пока не будет нового входа
+            creds = Credentials.from_authorized_user_info(saved, _ga.saved_token_scopes(saved))
             if not creds.valid:
                 creds.refresh(google.auth.transport.requests.Request())
             return build("sheets", "v4", credentials=creds, cache_discovery=False)
@@ -163,7 +168,8 @@ def _service(interactive: bool):
         raise SettingsError("Google sign-in is not set up on this computer (oauth_client.json is missing or "
                             "empty). Ask your team lead for it, or update ACL to the latest version.")
     try:
-        service = ga._build_sheets_service_oauth(str(client), str(token), timeout_seconds=SIGN_IN_TIMEOUT_SECONDS)
+        service = ga._build_sheets_service_oauth(str(client), str(token), timeout_seconds=SIGN_IN_TIMEOUT_SECONDS,
+                                               require_identity=True)
     except Exception:
         service = None
     if service is None:

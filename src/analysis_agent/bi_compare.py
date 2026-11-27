@@ -91,13 +91,24 @@ def period_rows(df: pd.DataFrame, date_from: str = "", date_to: str = "") -> pd.
 DEFAULT_SOURCE_CURRENCY = "USD"
 
 
+def _distinct(series: Any, clean: Any) -> set:
+    """Множество `clean(v)` по значениям колонки: функция — раз на уникальное значение.
+
+    Колонки метаданных почти не меняются от строки к строке, а на книге в
+    сотни тысяч строк построчный разбор занимал секунды на каждый вызов (ACL-2808).
+    Результат тот же: интересны только различные значения и есть ли среди них
+    непустое.
+    """
+    return {clean(v) for v in series.unique()}
+
+
 def _source_currency(frame: Any) -> tuple[str, bool]:
     """(валюта, подставлена ли по умолчанию). Строка без валюты считается USD;
     разные валюты по строкам дают пустую валюту (смесь), а не USD."""
     column = METADATA_COLUMNS["currency_code"]
     if frame is None or frame.empty or column not in frame:
         return DEFAULT_SOURCE_CURRENCY, True
-    declared = [currency_code(v) for v in frame[column]]
+    declared = _distinct(frame[column], currency_code)
     values = {v or DEFAULT_SOURCE_CURRENCY for v in declared}
     if len(values) != 1:
         return "", False
@@ -119,7 +130,7 @@ def _source_setting(frame: Any, key: str, default: str) -> tuple[str, bool]:
     if frame is None or frame.empty or column not in frame:
         return default, True
     clean = timezone_name if key == "timezone" else text
-    declared = [clean(v) for v in frame[column]]
+    declared = _distinct(frame[column], clean)
     values = {v or default for v in declared}
     if len(values) != 1:
         return "", False
@@ -134,7 +145,7 @@ def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict
     if frame.empty:
         sources = []
     elif SOURCE_COLUMN in frame:
-        sources = sorted({text(v) or "unknown" for v in frame[SOURCE_COLUMN]})
+        sources = sorted({v or "unknown" for v in _distinct(frame[SOURCE_COLUMN], text)})
     else:
         sources = ["workbook" if source == "excel" else "unknown"]
 

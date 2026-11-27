@@ -494,7 +494,7 @@ def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
 def test_pixel_missing_for_website_conversions(tmp_path):
     d = _draft(tmp_path, ads=1)
     out = _audit(AuditMeta(pixels=[]), d)
-    assert _by(out)["pixel_ok"]["status"] == "error" and "pixels/datasets" in _by(out)["pixel_ok"]["detail"]
+    assert _by(out)["pixel_ok"]["status"] == "error" and "no pixel/dataset" in _by(out)["pixel_ok"]["detail"]
 
 
 def test_instant_form_needs_an_active_form_of_the_page(tmp_path):
@@ -516,7 +516,8 @@ def test_country_language_and_interests_need_exact_matches(tmp_path):
     assert got["country_resolves"]["status"] == "error" and "not found" in got["country_resolves"]["detail"]
     assert _by(_audit(AuditMeta(locale=False), d))["language_resolves"]["status"] == "error"
     got = _by(_audit(AuditMeta(bad_interests=True), d))
-    assert got["interests_resolve"]["status"] == "error" and "Detailed targeting" in got["interests_resolve"]["detail"]
+    # ACL-2925: a term Meta does not know is removed from the request, not an error
+    assert got["interests_resolve"]["status"] == "ok" and "Removed '" in got["interests_resolve"]["detail"]
     d2 = _draft(tmp_path, ads=1)
     d2.language = ""
     assert _by(_audit(AuditMeta(locale=False), d2))["language_resolves"]["status"] == "ok", "язык не задан — нечего искать"

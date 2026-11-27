@@ -442,14 +442,14 @@ def test_a_grid_without_01_to_05_on_every_day_shows_account_time(lt):
     assert json.loads(lt.input_value("[name$='_schedule']")) == NO_01_05
     _offset, shift = _new_york_offset_and_shift(lt)
     assert lt.inner_text("[data-lt-acc-preview]") == \
-        (f"Meta gets account time (America/New_York): Every day: 00:00–{(1 + shift) % 24:02d}:00, "
-         f"{(5 + shift) % 24:02d}:00–24:00")
+        (f"In Ads Manager (America/New_York): Mon–Sun 00–{(1 + shift) % 24:02d}, "
+         f"Mon–Sun {(5 + shift) % 24:02d}–24")
 
 
 def test_the_preview_asks_to_wait_for_check_plan_when_the_account_zone_is_unknown(lt):
     lt.evaluate("document.querySelector('.cb-acc-row').dataset.accLabel = 'unknown-account'")
     _set_no_01_05(lt)
-    assert lt.inner_text("[data-lt-acc-preview]") == "Account time zone is read on Check plan; hours are converted then."
+    assert lt.inner_text("[data-lt-acc-preview]") == "Ads Manager hours appear after Check plan reads the account time zone"
 
 
 def _set_no_01_05(lt):
@@ -512,7 +512,7 @@ def test_the_account_preview_reads_the_start_date_difference(lt):
         cbLifetime.sync(document.getElementById('slot')); }""")
     _offset, shift = _new_york_offset_and_shift(lt)
     assert lt.inner_text("[data-lt-acc-preview]") == \
-        f"Meta gets account time (America/New_York): Mon–Fri {(9 + shift) % 24:02d}:00–{(18 + shift) % 24:02d}:00"
+        f"In Ads Manager (America/New_York): Mon–Fri {(9 + shift) % 24:02d}–{(18 + shift) % 24:02d}"
 
 
 def test_a_half_hour_account_zone_is_flagged_in_the_preview(lt):
@@ -547,3 +547,100 @@ def test_start_in_the_past_is_compared_by_the_absolute_time_of_israel(lt):
     assert any("Israel time" in p["text"] for p in lt.evaluate("cbLifetime.problems(document.getElementById('slot'))"))
     lt.evaluate("document.querySelector('[name$=\"_start_time\"]').value = '2999-01-01T10:00'")
     assert not any(p["id"] == "lt_past" for p in lt.evaluate("cbLifetime.problems(document.getElementById('slot'))"))
+
+
+# ───────────────────────── ACL-2839: строка «In Ads Manager» под сеткой ─────────────────────────
+
+def _ads_line(lt, wins, start="2026-11-10T00:00", end="2026-11-17T00:00"):
+    lt.evaluate("""([wins, start, end]) => { const s = document.getElementById('slot');
+        s.querySelector('[name$="_start_time"]').value = start;
+        s.querySelector('[name$="_end_time"]').value = end;
+        const hid = s.querySelector('[name$="_schedule"]');
+        hid.disabled = false;
+        s.querySelector('.cb-sched-on').checked = true;
+        hid.value = JSON.stringify(wins);
+        cbLifetime.sync(s); }""", [wins, start, end])
+    return lt.inner_text("[data-lt-acc-preview]")
+
+
+def _win(days, a, b):
+    return {"days": days, "start_minute": a * 60, "end_minute": b * 60}
+
+
+def test_ads_manager_line_for_the_i04_case_in_eastern_time(lt):
+    # Владелец, KLD_BFL_I04: Израиль Пн-Пт 00-02 и каждый день 15-24 -> Eastern.
+    wins = [_win([1, 2, 3, 4, 5], 0, 2), _win(EVERY_DAY, 15, 24)]
+    assert _ads_line(lt, wins) == "In Ads Manager (America/New_York): Mon–Thu 08–19, Fri–Sat 08–17, Sun 08–19"
+
+
+def test_ads_manager_line_moves_hours_across_midnight_to_the_previous_day(lt):
+    # Вторник 01-03 по Израилю = понедельник 18-20 в Нью-Йорке (-7 ч в ноябре).
+    assert _ads_line(lt, [_win([2], 1, 3)]) == "In Ads Manager (America/New_York): Mon 18–20"
+    # Понедельник 01-03 уходит на воскресенье (кольцо недели).
+    assert _ads_line(lt, [_win([1], 1, 3)]) == "In Ads Manager (America/New_York): Sun 18–20"
+
+
+def test_ads_manager_line_follows_dst_of_the_campaign_dates(lt):
+    wins = [_win(EVERY_DAY, 10, 12)]
+    # Ноябрь: Израиль +2, Нью-Йорк -5 -> -7 ч. 20 марта 2027: Израиль ещё +2, Нью-Йорк уже -4 -> -6 ч.
+    assert _ads_line(lt, wins, "2026-11-10T00:00", "2026-11-17T00:00") == "In Ads Manager (America/New_York): Mon–Sun 03–05"
+    assert _ads_line(lt, wins, "2027-03-20T00:00", "2027-03-27T00:00") == "In Ads Manager (America/New_York): Mon–Sun 04–06"
+
+
+def test_ads_manager_line_matches_what_publish_writes():
+    wins = [_win([1, 2, 3, 4, 5], 0, 2), _win(EVERY_DAY, 15, 24)]
+    got = tt.team_grid_to_account_windows(wins, ISRAEL, "America/New_York", _at(2026, 11, 10, 0))
+    # Окна Publish: Вс-Чт (0-4) 08-19 и Пт-Сб (5-6) 08-17 - те же, что показывает строка (Пн-Чт и Вс 08-19, Пт-Сб 08-17).
+    assert {(w["start_minute"] // 60, w["end_minute"] // 60): sorted(w["days"]) for w in got} ==         {(8, 19): [0, 1, 2, 3, 4], (8, 17): [5, 6]}
+
+
+def test_ads_manager_line_waits_for_the_zone_and_fills_in_place_after_check_plan(lt):
+    lt.evaluate("document.querySelector('.cb-acc-row').dataset.accLabel = 'later-account'")
+    wins = [_win([2], 1, 3)]
+    assert _ads_line(lt, wins) == "Ads Manager hours appear after Check plan reads the account time zone"
+    lt.evaluate("""() => cbLifetime.ingestPlan(document.querySelector('.cb-acc-row'), {results: [
+        {campaign_name: 'x', plan: {summary: {timezone_name: 'America/New_York', currency: 'USD'}}}]})""")
+    assert lt.inner_text("[data-lt-acc-preview]") == "In Ads Manager (America/New_York): Mon 18–20"
+
+
+def _grid_windows(lt):
+    return json.loads(lt.input_value("[name$='_schedule']"))
+
+
+def test_every_day_range_past_midnight_sets_all_seven_nights(lt):
+    """15:00 – 02:00 по Израилю: 15–24 и 00–02 на всех 7 днях, ночи после пятницы и субботы не теряются."""
+    lt.select_option(".cb-sg-from", "15")
+    lt.select_option(".cb-sg-to", "2")
+    lt.click(".cb-sg-apply")
+    assert lt.evaluate("document.querySelector('.cb-sched-on').checked") is True
+    assert _grid_windows(lt) == [
+        {"days": [0, 1, 2, 3, 4, 5, 6], "start_minute": 0, "end_minute": 120},
+        {"days": [0, 1, 2, 3, 4, 5, 6], "start_minute": 900, "end_minute": 1440},
+    ]
+    assert lt.evaluate("document.querySelector('[data-lt-uneven]').hidden") is True
+
+
+def test_every_day_range_inside_one_day_and_full_day(lt):
+    lt.select_option(".cb-sg-from", "8")
+    lt.select_option(".cb-sg-to", "19")
+    lt.click(".cb-sg-apply")
+    assert _grid_windows(lt) == [{"days": [0, 1, 2, 3, 4, 5, 6], "start_minute": 480, "end_minute": 1140}]
+    lt.select_option(".cb-sg-to", "8")          # тот же час - круглые сутки, расписания нет
+    lt.click(".cb-sg-apply")
+    assert lt.evaluate("document.querySelector('.cb-sched-on').checked") is False
+
+
+def test_night_hours_on_weekdays_only_are_flagged(lt):
+    """Ошибка 25.11: 00–02 только Пн–Пт - в ночи после пятницы и субботы показ обрывается в полночь."""
+    lt.evaluate("""() => {
+        const wins = [{days: [1, 2, 3, 4, 5], start_minute: 0, end_minute: 120},
+                      {days: [0, 1, 2, 3, 4, 5, 6], start_minute: 900, end_minute: 1440}];
+        const slot = document.getElementById('slot');
+        slot.querySelector('.cb-sched-on').checked = true;
+        slot.querySelector('[name$="_schedule"]').value = JSON.stringify(wins);
+        cbLifetime.sync(slot);
+    }""")
+    note = lt.inner_text("[data-lt-uneven]")
+    assert lt.evaluate("document.querySelector('[data-lt-uneven]').hidden") is False
+    assert "Sat–Sun without 00–02" in note
+    assert "the night after Friday is Sat 00–02" in note

@@ -27,8 +27,8 @@ from src.fb_api import profile as prof  # noqa: E402
 from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError  # noqa: E402
 from tests.test_acl1812_warm_sessions import Rig  # noqa: E402
 
-LOST_TEXT = ("Multilogin on this computer lost the shared KLD sign-in (it was used on another computer). "
-             "Sign in again in the Multilogin app here, then press Retry.")
+LOST_TEXT = ("Multilogin refused to open this KLD profile - the Multilogin app may be signed in to "
+             "Inhouse (switch it to KLD), or the KLD sign-in is in use on another computer")
 SKIP_TEXT = "Multilogin: sign in again, then press Retry."   # ACL-2668: одна общая причина пропуска
 PROXY_TEXT = "The proxy login for this profile is wrong or expired — update it in Multilogin"
 E403 = "Start profile failed HTTP 403: restricted permission"
@@ -81,7 +81,7 @@ def _jwt(claims: dict) -> str:
 @pytest.mark.parametrize("text,slot,want", [
     (E403, "B", mlx.SESSION_LOST),
     ("Start profile failed HTTP 403: Request is not allowed FORBIDDEN_REQUEST", "B", mlx.SESSION_LOST),
-    (E403, "A", ""),                                    # слот A: тот же текст не подменяем
+    (E403, "A", mlx.WORKSPACE_MISMATCH),                # ACL-2821: слот A тоже узнаётся
     ("Start profile failed HTTP 500: internal error", "B", ""),
     ("Start profile failed HTTP 403: some other reason", "B", ""),
     ("cant lock profile", "B", ""),
@@ -110,7 +110,7 @@ def test_launcher_error_carries_status_and_code(monkeypatch):
         launcher.start_profile("F", _pid(1))
     assert ei.value.status == 403 and ei.value.error_code == "FORBIDDEN_REQUEST"
     assert mlx.classify(ei.value, "B") == mlx.SESSION_LOST
-    assert mlx.classify(ei.value, "A") == ""
+    assert mlx.classify(ei.value, "A") == mlx.WORKSPACE_MISMATCH
 
 
 # ───────────────────────── API-путь: open_profile ─────────────────────────
@@ -139,10 +139,11 @@ def test_slot_b_403_gets_stable_code_and_message(sentry):
     assert ei.value.code == "mlx_session_lost" and str(ei.value) == LOST_TEXT
 
 
-def test_slot_a_403_is_not_reclassified():
+def test_slot_a_403_is_classified_as_workspace_mismatch():
     launcher = FakeLauncher("A", MultiloginLauncherError(E403, status=403))
-    with pytest.raises(MultiloginLauncherError):
+    with pytest.raises(prof.ProfileError) as ei:
         _open("A", launcher)
+    assert ei.value.code == "mlx_workspace_mismatch"
 
 
 def test_other_start_errors_pass_through_untouched():

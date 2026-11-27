@@ -97,7 +97,8 @@ def test_latest_failed_attempt_keeps_a_recent_success_from_hiding_retry(env, sta
                          "error": "The profile was opened by hand"}
     assert not ar.is_fresh("A", now=NOW)
     q = _queue(env)
-    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
+    # ACL-2668 #26: обычная неудача не ждёт часа — раскрытие читает сразу.
+    assert q.request("A", "attention") == {"queued": True, "reason": "queued"}
     assert env.snaps["A"] is cached and env.read == []
     assert q.request("A", "retry", force=True) == {"queued": True, "reason": "queued"}
     q._drain_once()
@@ -217,19 +218,17 @@ def test_retry_clears_halt(env):
     assert q.state()["rows"]["A"]["state"] == "ok"
 
 
-def test_halt_lifts_after_cooldown(env):
+def test_meta_slow_down_marks_only_its_account(env):
+    # ACL-2668 (решение 1): лимит Meta на одном аккаунте не ставит очередь на паузу.
     env.failures["A"] = _failed("A", "Meta asked to slow down for A; waiting before the next read (about 5 min). Nothing was called.")
     q = _queue(env)
     q.request("A", "attention")
     q.request("B", "schedule")
     q._drain_once()
-    halt = q.state()["halt"]
-    assert halt and halt["until"] is not None
-    assert env.read == [("A", "attention")]
-    env.clock.t = halt["until"] + 1
-    q._drain_once()
-    assert q.state()["halt"] is None
-    assert env.read[-1] == ("B", "schedule")
+    st = q.state()
+    assert st["halt"] is None
+    assert env.read == [("A", "attention"), ("B", "schedule")]
+    assert st["rows"]["A"]["state"] == "failed" and st["rows"]["B"]["state"] == "ok"
 
 
 def test_halt_without_cooldown_does_not_lift_by_time(env):
@@ -243,10 +242,14 @@ def test_halt_without_cooldown_does_not_lift_by_time(env):
 
 def test_classify_variants():
     assert ar.classify(ci.Snapshot(account="A", state="ok")) == "ok"
-    assert ar.classify(_failed("A", "x", "call_budget")) == "global"
-    assert ar.classify(_failed("A", "The A profile is on a Facebook checkpoint")) == "global"
-    assert ar.classify(_failed("A", "Meta rate limit reached; the read was stopped.")) == "global"
+    # ACL-2668: машину останавливают только Multilogin / API / общее состояние.
     assert ar.classify(_failed("A", "x", "mlx_session_lost")) == "global"
+    assert ar.classify(_failed("A", "x", "mlx_token_expired")) == "global"
+    assert ar.classify(_failed("A", "[WinError 10061] launcher.mlx.yt")) == "global"
+    assert ar.classify(_failed("A", "x", "call_budget")) == "account"
+    # ACL-2653: a checkpoint holds only its own profile (a hold), never the machine.
+    assert ar.classify(_failed("A", "The A profile is on a Facebook checkpoint")) == "person"
+    assert ar.classify(_failed("A", "Meta rate limit reached; the read was stopped.")) == "account"
     assert ar.classify(_failed("A", "no access to the ad account")) == "account"
     assert ar.classify(_failed("A", "logged out", "logged_out")) == "account"
 
@@ -298,39 +301,26 @@ def test_read_into_records_stop_kind():
     assert ci._snapshot_from({"account": "A", "state": "ok"}).stop == ""  # старые записи читаются
 
 
-def test_partial_with_stop_halts_and_is_not_fresh(env):
-    env.failures["A"] = _stop_partial("A", "checkpoint")
+@pytest.mark.parametrize("kind", ["checkpoint", "rate_limited", "policy_block", "call_budget",
+                                  "logged_out", "page_unresponsive"])
+def test_meta_stop_marks_only_its_account_and_is_not_fresh(env, kind):
+    # ACL-2668 (решение 1): стоп Meta на A помечает только строку A; B читается дальше.
+    env.failures["A"] = _stop_partial("A", kind)
     q = _queue(env)
     q.request("A", "attention")
     q.request("B", "schedule")
     q._drain_once()
-    assert [a for a, _ in env.read] == ["A"]
+    assert [a for a, _ in env.read] == ["A", "B"]
     st = q.state()
-    assert st["halt"] and st["halt"]["until"] is None  # чекпоинт: только явный Retry
-    assert st["rows"]["A"]["state"] == "failed"
-    assert ar.classify(env.failures["A"]) == "global"
+    assert st["halt"] is None
+    assert st["rows"]["A"]["state"] == "failed" and st["rows"]["B"]["state"] == "ok"
+    # ACL-2653: a checkpoint becomes its own profile's hold ("person"); the rest are account rows.
+    assert ar.classify(env.failures["A"]) == ("person" if kind == "checkpoint" else "account")
     env.snaps["A"] = env.failures["A"]
     assert not ar.is_fresh("A", now=NOW)
     env.snaps["A"] = ci.Snapshot(account="A", state="partial", finished_at_utc=_iso(NOW),
                                  steps={"campaigns": "ok", "adsets": "failed"})
     assert not ar.is_fresh("A", now=NOW)
-
-
-@pytest.mark.parametrize("kind,wait", [("rate_limited", 300.0), ("policy_block", 1800.0)])
-def test_timed_stops_use_cooldown_table(env, kind, wait):
-    env.failures["A"] = _stop_partial("A", kind)
-    q = _queue(env)
-    q.request("A", "attention")
-    q._drain_once()
-    assert q.state()["halt"]["until"] == NOW + wait
-
-
-def test_call_budget_stop_is_untimed(env):
-    env.failures["A"] = _stop_partial("A", "call_budget")
-    q = _queue(env)
-    q.request("A", "attention")
-    q._drain_once()
-    assert q.state()["halt"]["until"] is None
 
 
 def test_account_level_stop_kinds_do_not_halt():
@@ -368,21 +358,6 @@ def test_forced_retry_does_not_read_others_while_halt_stands(env):
     q.request("A", "retry", force=True)
     q._drain_once()
     assert [a for a, _ in env.read] == ["A", "A", "A"] and q.state()["halt"] is not None
-
-
-def test_forced_request_waits_for_timer_in_timed_halt(env):
-    env.failures["A"] = _failed("A", "Meta asked to slow down (about 5 min). Nothing was called.")
-    q = _queue(env)
-    q.request("A", "attention")
-    q._drain_once()
-    until = q.state()["halt"]["until"]
-    del env.failures["A"]
-    assert q.request("B", "action", force=True) == {"queued": True, "reason": "halted"}
-    q._drain_once()
-    assert [a for a, _ in env.read] == ["A"]
-    env.clock.t = until + 1
-    q._drain_once()
-    assert env.read[-1] == ("B", "action") and q.state()["halt"] is None
 
 
 def test_requests_during_halt_are_queued_not_dropped(env):
@@ -475,23 +450,21 @@ def test_skip_telemetry_is_not_an_api_read(monkeypatch):
 
 # ───────── ACL-2063: разбор ревью очереди ─────────
 
-def test_success_of_another_account_does_not_clear_a_checkpoint_halt(env):
+def test_checkpoint_on_one_account_never_stops_the_others(env):
+    # ACL-2668 (решение 1): чекпоинт A не трогает чтения B и C; Retry самого A по-прежнему читает.
     env.failures["A"] = ci.Snapshot(account="A", state="failed", error="Facebook checkpoint", stop="checkpoint")
     q = _queue(env)
     q.request("A", "attention")
     q._drain_once()
-    halt = q.state()["halt"]
-    assert halt and halt["kind"] == "checkpoint" and halt["account"] == "A" and halt["until"] is None
-    # Явный Retry соседа читается мимо паузы, но его удача чекпоинт A не снимает.
-    assert q.request("B", "retry", force=True) == {"queued": True, "reason": "queued"}
-    q._drain_once()
-    assert [a for a, _ in env.read] == ["A", "B"]
-    assert q.state()["halt"] is not None
-    # Удачный Retry самого A снимает.
-    del env.failures["A"]
-    q.request("A", "retry", force=True)
-    q._drain_once()
     assert q.state()["halt"] is None
+    assert q.request("B", "attention") == {"queued": True, "reason": "queued"}
+    assert q.request("C", "schedule") == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert [a for a, _ in env.read] == ["A", "B", "C"]
+    del env.failures["A"]
+    assert q.request("A", "retry", force=True) == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert env.read[-1] == ("A", "retry") and q.state()["rows"]["A"]["state"] == "ok"
 
 
 def test_non_checkpoint_halt_is_cleared_by_any_successful_forced_read(env):
@@ -527,42 +500,46 @@ def test_start_after_timed_out_stop_keeps_a_worker(env):
     q.stop()
 
 
-def test_checkpoint_halt_is_restored_from_the_store(env):
-    env.stops["A"] = ("checkpoint", _iso(NOW - 60))
-    q = _queue(env)  # новый процесс или рестарт: в памяти ничего нет
-    halt = q.state()["halt"]
-    assert halt and halt["kind"] == "checkpoint" and halt["account"] == "A"
-    assert q.request("B", "attention") == {"queued": True, "reason": "halted"}
-    q._drain_once()
-    assert env.read == []
-    # Retry самого A мимо паузы; удача перезаписала запись (остановки в хранилище больше нет).
-    q.request("A", "retry", force=True)
-    env.stops.clear()
-    q._drain_once()
-    assert q.state()["halt"] is None
-    assert [a for a, _ in env.read] == ["A", "B"]
-
-
-def test_timed_stop_in_the_store_expires_with_its_cooldown(env):
-    env.stops["A"] = ("rate_limited", _iso(NOW - 10))
+@pytest.mark.parametrize("kind", ["checkpoint", "rate_limited", "call_budget"])
+def test_saved_stop_of_one_account_does_not_halt_after_restart(env, kind):
+    # ACL-2668: сохранённый стоп одного аккаунта после рестарта не становится паузой всей очереди.
+    env.stops["A"] = (kind, _iso(NOW - 60))
     q = _queue(env)
-    halt = q.state()["halt"]
-    assert halt and halt["until"] is not None
-    env.clock.t = halt["until"] + 1
     assert q.state()["halt"] is None
+    assert q.request("B", "attention") == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert env.read == [("B", "attention")]
 
 
-def test_recently_failed_account_is_not_reread_by_automatic_triggers(env):
-    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 600), "stop": ""}
+def test_legacy_saved_account_halt_in_memory_is_dropped(env):
+    # Пауза чекпоинта, сохранённая прежней сборкой в хранилище очереди, больше ничего не держит.
     q = _queue(env)
-    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
-    assert q.request("A", "schedule", window="morning") == {"queued": False, "reason": "recent_failure"}
-    assert q.state()["queued"] == []
-    # Явный Retry читает.
+    q._halt = {"reason": "A profile is on a Facebook checkpoint.", "until": None, "kind": "checkpoint", "account": "A"}
+    q.request("B", "attention")
+    q._drain_once()
+    assert q.state()["halt"] is None and env.read == [("B", "attention")]
+
+
+def test_failed_read_is_retried_by_expand_and_the_next_window_without_an_hour_wait(env):
+    # ACL-2668 #26: обычная неудача (сеть, таймаут, замена вкладки) не блокирует чтение на час.
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": ""}
+    q = _queue(env)
+    assert q.request("A", "attention") == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert env.read == [("A", "attention")]
+    assert q.request("A", "schedule", window="morning")["queued"] is True
     assert q.request("A", "retry", force=True)["queued"] is True
-    # Старая неудача (старше часа) не мешает.
-    env.attempts["B"] = {"state": "failed", "at_utc": _iso(NOW - ar.FRESH_S - 5), "stop": ""}
-    assert q.request("B", "attention")["queued"] is True
+
+
+def test_held_profile_still_skips_automatic_reads_after_a_failure(env, monkeypatch):
+    # Удержание профиля (ACL-2091) не меняется: автоматика его не читает, Retry — читает.
+    monkeypatch.setattr(ar, "_profile_held", lambda account: account == "A")
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 60), "stop": "checkpoint"}
+    q = _queue(env)
+    assert q.request("A", "attention") == {"queued": False, "reason": "profile_held"}
+    assert q.request("A", "schedule", window="morning") == {"queued": False, "reason": "profile_held"}
+    assert q.state()["queued"] == []
+    assert q.request("A", "retry", force=True)["queued"] is True
 
 
 def test_freshness_is_rechecked_when_the_request_is_taken(env):
@@ -578,19 +555,13 @@ def test_freshness_is_rechecked_when_the_request_is_taken(env):
     assert env.read == [("A", "retry")]
 
 
-def test_failure_recorded_while_queued_is_rechecked_when_taken(env):
+def test_failure_recorded_while_queued_does_not_drop_the_request(env):
+    # ACL-2668 #26: неудача другого процесса, пока заявка стояла, её не снимает.
     q = _queue(env)
     q.request("A", "attention")
     env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 5), "stop": ""}
     q._drain_once()
-    assert env.read == []
-
-
-def test_cooldown_from_text_is_not_shorter_than_the_table():
-    from src.analysis_agent.account_spend_api import COOLDOWN_S
-
-    assert ar._cooldown_s("checkpoint", "wait about 1 min") == COOLDOWN_S["checkpoint"]
-    assert ar._cooldown_s("rate_limited", "wait about 20 min") == 20 * 60.0
+    assert env.read == [("A", "attention")]
 
 
 def test_forced_request_for_the_running_account_joins_the_existing_read(env):

@@ -1,5 +1,10 @@
 from types import SimpleNamespace
+import sys
+from pathlib import Path
+
 import pytest
+
+sys.path.insert(0, str(Path(__file__).parent))
 from src.fb_api.creator import AccountFacts, resolve_page, PlanError
 
 
@@ -55,17 +60,17 @@ def test_page_discovery_preserves_order_names_and_rejects_truncation():
 
 def test_failed_read_differs_from_empty_and_retry_succeeds(monkeypatch, tmp_path):
     from src.web import account_pages as p
-    from src.analysis_agent import account_spend as accounts, account_spend_api as api
-    monkeypatch.setattr(accounts, 'serialized_browser', lambda **kw: lambda fn: fn)
-    monkeypatch.setattr(api, '_failure', lambda account, exc: ('Session unavailable', 'failed'))
+    from acl2850_fakes import fake_session, quiet, reader
+    fake_session(monkeypatch)
+    quiet(monkeypatch, 'pixels')
     def failed(account):
         raise RuntimeError('failed')
     monkeypatch.setattr(p, '_cache_path', lambda: tmp_path / 'account_pages_cache.json')
-    monkeypatch.setattr(p, '_read_in_session', failed)
+    monkeypatch.setattr(p, '_read_in_session', reader(failed))
     assert p.read_pages('Demo')['state'] == 'failed'
-    monkeypatch.setattr(p, '_read_in_session', lambda account: {'ok': True, 'state': 'empty', 'pages': []})
+    monkeypatch.setattr(p, '_read_in_session', reader(lambda account: {'ok': True, 'state': 'empty', 'pages': []}))
     assert p.read_pages('Demo', force=True)['state'] == 'empty'
-    monkeypatch.setattr(p, '_read_in_session', lambda account: {'ok': True, 'state': 'ready', 'pages': [{'id': '123', 'name': 'Page'}]})
+    monkeypatch.setattr(p, '_read_in_session', reader(lambda account: {'ok': True, 'state': 'ready', 'pages': [{'id': '123', 'name': 'Page'}]}))
     retried = p.read_pages('Demo', force=True)
     assert retried['ok'] and retried['state'] == 'ready' and 'cached_at' not in retried
 

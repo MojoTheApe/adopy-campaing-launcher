@@ -6,6 +6,9 @@ compatibility_date = "2026-11-01"
 [vars]
 LIBRARY_REPO = "MojoTheApe/acl-lib"
 HUB_URL = "https://acl-hub.acl-hub.workers.dev"
+# Вход юзеров ACL (ACL-2898): настоящие значения только в wrangler.local.toml.
+ALLOWED_EMAIL_DOMAINS = "example.com"   # домены через запятую
+GOOGLE_CLIENT_ID = "REPLACE_WITH_GOOGLE_CLIENT_ID"
 
 # Каждые 5 мин: зависшие задания и дайджест за вчера (после 07:00 по Израилю, один раз, с повтором).
 [triggers]
@@ -19,4 +22,5 @@ database_id = "REPLACE_WITH_D1_ID"
 migrations_dir = "migrations"
 
 # Секреты (только `wrangler secret put`, в файл не писать): OWNER_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
-# TG_ALLOWED_CHATS (id чатов через запятую).
+# TG_ALLOWED_CHATS (id чатов через запятую), USER_KEY_SECRET (подпись ключей юзеров, длинная случайная строка),
+# LIBRARY_TOKEN (токен общей библиотеки, который хаб отдаёт юзерам ACL на GET /v1/library-access; ACL-2914).

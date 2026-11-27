@@ -754,17 +754,27 @@ class PageTab:
                     probe = ""            # проба не про вход в прокси — не решает
                 else:
                     retried = True
-                    self._sleep(_launch.PROXY_RETRY_S)
-                    try:
-                        self._navigate_once(probe, min(timeout, 30.0))
-                    except CdpTimeout:
-                        probe = ""
-                    except PageError as again:
-                        _launch._record({"event": "fb_api_proxy_probe", "ok": False, "retried": True,
-                                         "took_s": round(time.monotonic() - began, 1)})
-                        if _launch.is_proxy_auth_error(str(again)):
-                            raise
-                        probe = ""
+                    # ACL-2792: вместо одного сна PROXY_RETRY_S — короткие повторные пробы
+                    # на тот же нейтральный хост в рамках того же общего бюджета.
+                    waited = 0.0
+                    while True:
+                        step = min(_launch.PROXY_PROBE_POLL_S, _launch.PROXY_RETRY_S - waited)
+                        self._sleep(step)
+                        waited += step
+                        try:
+                            self._navigate_once(probe, min(timeout, 30.0))
+                            break
+                        except CdpTimeout:
+                            probe = ""
+                            break
+                        except PageError as again:
+                            if not _launch.is_proxy_auth_error(str(again)):
+                                probe = ""
+                                break
+                            if waited >= _launch.PROXY_RETRY_S:
+                                _launch._record({"event": "fb_api_proxy_probe", "ok": False, "retried": True,
+                                                 "took_s": round(time.monotonic() - began, 1)})
+                                raise
         if probe:
             _launch._record({"event": "fb_api_proxy_probe", "ok": True, "retried": retried,
                              "took_s": round(time.monotonic() - began, 1)})
@@ -800,6 +810,19 @@ class PageTab:
             return True
         except Exception:
             return False
+
+    # -- ACL-2549: leave the tab open
+    def leave_open(self) -> None:
+        """Stop driving this tab but do NOT close it: the buyer solves a checkpoint / login there.
+
+        Marks the tab closed for us, drops it from `_LIVE` (no focus emulation or helper from now on),
+        closes our CDP socket. `Target.closeTarget` is never sent; nothing is clicked, typed or navigated.
+        """
+        if self.closed:
+            return
+        self.closed = True
+        PageTab._LIVE.discard(self.target_id)
+        self._safe_cdp_close()
 
     # -- закрытие
     def close(self, *, verify: bool = False) -> None:

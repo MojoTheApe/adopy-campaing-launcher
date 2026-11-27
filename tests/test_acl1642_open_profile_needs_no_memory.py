@@ -475,13 +475,17 @@ def test_hung_open_probe_only_defers_memory_eviction_for_a_bounded_freshness_win
         job.cancel(slots)
 
 
-def test_pending_open_probe_does_not_defer_an_actual_capacity_eviction():
+def test_a_kept_convenience_window_is_no_capacity_to_evict_even_with_a_ceiling_of_one():
+    # ACL-2668: «удобное» окно потолок не занимает — при потолке 1 закрывать его ради места
+    # незачем; задание ждёт только ответа «открыт ли профиль» и идёт, ничего не закрыв.
     m, slots, probe, job, finish, evictions = _idle_window_with_pending_target(ceiling=1)
     try:
+        time.sleep(0.1)
+        assert evictions == [] and not job.done
+        finish.set()
         assert _until(lambda: job.done)
-        assert len(evictions) == 1 and job.grant["closed_for_room"][0]["job_id"] == "A"
-        assert job.grant["decision"]["running"] == 0
-        assert probe.read("p2") is None  # no fresh fact was used to evade the ceiling
+        assert job.grant["decision"]["reason"] == "profile_open"
+        assert job.grant["closed_for_room"] == [] and evictions == []
     finally:
         finish.set()
         job.cancel(slots)

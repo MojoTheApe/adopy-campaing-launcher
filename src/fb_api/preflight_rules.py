@@ -158,7 +158,8 @@ RULES: list[dict[str, Any]] = [
        "the ad is set for Instagram placements: in Ads Manager press 'Use Facebook Page' for this Page "
        "(or connect an Instagram account), then run Check plan again; or choose Manual Facebook-only placements"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
-       "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
+       "website conversions need a pixel: choose it in the Pixel field of this campaign "
+       "(Automatic works only when the ad account has exactly one)", sel=".cb-pixel-select",
        applies="website"),
     _r("form_active", "Instant Form of the Page", ERROR, "server",
        "pick an ACTIVE form of this Page (Refresh forms)", sel=".cb-form-select", level="ad",
@@ -822,7 +823,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     def interests() -> None:
         for s in plan.ad_sets:
             if s.interest_groups:
-                resolver.interests(s.interest_groups)
+                resolver.interests(s.interest_groups, s.name)
         put_resolved()
         put("interests_confirmed", OK)
 
@@ -830,7 +831,10 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         # ACL-1920: необязательный поиск, в котором Meta отказала, - предупреждение с названием поиска.
         fn = getattr(resolver, "targeting_warnings", None)
         warns = list(fn()) if fn else []
-        put("interests_resolve", WARNING if warns else OK, " ".join(warns))
+        # ACL-2925: что система решила сама (взяла близкое / убрала термин) - строки info, статус ok.
+        nf = getattr(resolver, "targeting_notes", None)
+        notes = list(nf()) if nf else []
+        put("interests_resolve", WARNING if warns else OK, " ".join(warns + (["; ".join(notes)] if notes else [])))
 
     def interests_guard() -> None:
         # ACL-1771: непонятый термин — ошибка с кандидатами; близкое совпадение — ошибка с Confirm.

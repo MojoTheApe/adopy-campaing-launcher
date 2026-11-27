@@ -126,10 +126,12 @@ def test_the_estimate_counts_the_original_in_64_mb_chunks(tmp_path, monkeypatch)
     assert cr.upload_calls(4096 * MB) == -(-4096 // 5) + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
     assert cr.upload_calls(16 * MB) == 0 and cr.upload_calls(16 * MB + 1) == 4 + 4 + cr.CALLS_UPLOAD_FIXED
     monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD")
-    # nothing is compressed: the planned size is the original even where ffmpeg exists
+    # ACL-2644: up to the compress threshold the planned size is the original; above it, the threshold (500 MB)
     from src.fb_ads_rpa import creative_compress as cc
     monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "/usr/bin/ffmpeg")
-    assert cr.planned_upload_size(str(tmp_path / "x.mp4"), 2500 * MB) == 2500 * MB
+    monkeypatch.delenv("ACL_VIDEO_COMPRESS_OVER_MB", raising=False)
+    assert cr.planned_upload_size(str(tmp_path / "x.mp4"), 500 * MB) == 500 * MB
+    assert cr.planned_upload_size(str(tmp_path / "x.mp4"), 2500 * MB) == 500 * MB
     assert cr.video_limit_bytes() == 4096 * MB
 
 
@@ -1365,11 +1367,10 @@ def test_small_videos_do_not_probe_the_worker(worker_small, tmp_path):
 def test_check_plan_counts_the_original_and_the_64_mb_chunks(tmp_path, monkeypatch):
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
     import tests.test_acl2370_chunk_budget as T
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_OVER_MB", "100000")   # ACL-2644: the size threshold is tested apart; here the budget fallback
     plan = T._plan(tmp_path, [2500], monkeypatch)
-    budget, refusal = T.publish_api.create_call_budget(plan)
-    assert refusal == ""                                              # a 2.5 GB file fits one run
-    # ACL-2639: chunked at 5 MB windows is the plan; a 2.5 GB file would not fit one run, so it is budgeted compressed
+    # ACL-2668: a publish run has no call budget, so a 2.5 GB file is never refused for its call count
+    # ACL-2639: chunked at 5 MB windows; only an explicit spare (a capped client) plans it compressed
     whole = cr.estimate_upload_calls(plan, size_of=lambda p: 2500 * MB)
     planned = cr.estimate_upload_calls(plan, size_of=lambda p: 2500 * MB, spare=100)
     assert whole > 500 and 0 < planned <= 100
-    assert budget >= cr.estimate_create_calls(plan) + planned

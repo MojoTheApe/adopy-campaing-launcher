@@ -90,15 +90,12 @@ def test_a_refused_lookup_is_not_retried_inside_the_job(tmp_path):
     assert "adworkemployer" in c.types()
 
 
-def test_a_user_typed_term_that_only_a_refused_lookup_could_match_blocks_with_a_clear_reason(tmp_path):
+def test_a_user_typed_term_that_only_a_refused_lookup_could_match_is_removed_and_the_lookup_named(tmp_path):
+    # ACL-2925: the refused lookup no longer blocks; the term leaves the request, the refusal stays a warning
     c = Refusing(refuse=("adTargetingCategory",), behaviors=[{"id": "9", "name": "Frequent Travelers"}])
     resolver = cr.TargetingResolver(c, _store(tmp_path))
-    with pytest.raises(cr.TargetingUnresolved) as ei:
-        resolver.interests([["Frequent Travelers"]])
-    item = ei.value.items[0]
-    assert item["state"] == "unresolved" and item["term"] == "Frequent Travelers"
-    assert "behaviors lookup" in item["reason"] and "could not be checked there" in item["reason"]
-    assert "behaviors lookup" in str(ei.value), "the user sees which lookup Meta refused"
+    assert resolver.interests([["Frequent Travelers"]]) == []
+    assert resolver.targeting_notes()[0] == "Removed 'Frequent Travelers': Meta has no match on this account"
     assert resolver.targeting_warnings()[0].startswith("Meta refused the behaviors lookup (adTargetingCategory)")
 
 
@@ -205,11 +202,15 @@ def test_check_plan_passes_with_optional_lookups_refused_and_lists_them_as_warni
     assert got["interests_confirmed"]["status"] == "ok"
 
 
-def test_check_plan_blocks_a_typed_term_only_a_refused_lookup_could_match(tmp_path):
+def test_check_plan_removes_a_typed_term_only_a_refused_lookup_could_match(tmp_path):
+    # ACL-2925: a refused lookup no longer blocks; the term leaves the request with an info line
     meta = RefusingMeta(refuse=("adTargetingCategory", "adinterestvalid"))
     out, got = _plan_check(meta, tmp_path, "Frequent Travelers")
-    assert out.stop_kind == "plan" and "behaviors lookup" in out.error
-    assert got["interests_resolve"]["status"] == "error" and pf.blocks(out.audit)
+    assert out.error == "" and not pf.blocks(out.audit)
+    assert got["interests_resolve"]["status"] == "warning"
+    assert "Removed 'Frequent Travelers': Meta has no match on this account" in got["interests_resolve"]["detail"]
+    assert "No detailed targeting left on this ad set" in got["interests_resolve"]["detail"]
+    assert "Removed 'Frequent Travelers': Meta has no match on this account" in out.warnings
     assert any("(adTargetingCategory)" in w for w in out.warnings), "the refused lookup is named as a warning too"
 
 
@@ -235,8 +236,7 @@ def test_check_plan_without_refusals_has_no_new_warnings(tmp_path):
     assert got["interests_resolve"]["status"] == "ok"
 
 
-@pytest.mark.parametrize("count_term", [True, False])
-def test_late_permission_refusal_counts_every_page_and_blocks_more_reads(tmp_path, count_term):
+def test_late_permission_refusal_counts_every_page_and_blocks_more_reads(tmp_path):
     class Transport:
         def request(self, method, path, params):
             if params["type"] == "adTargetingCategory":
@@ -250,33 +250,25 @@ def test_late_permission_refusal_counts_every_page_and_blocks_more_reads(tmp_pat
 
     client = g.GraphClient(Transport(), allow_writes=False, min_interval_s=0,
                            sleep=lambda _: None, max_calls=100)
-    resolver = tr.TermResolver(client, _store(tmp_path), term_cap=3, job_cap=3)
-    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3,
-                            count_term=count_term) == []
+    resolver = tr.TermResolver(client, _store(tmp_path))
+    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3) == []
     assert client.calls == 3
     assert resolver.reads == 3
-    assert resolver._term_reads == (3 if count_term else 0)
     assert "adTargetingCategory" in resolver.refused
-    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3,
-                            count_term=count_term) == []
-    with pytest.raises(tr._Spent):
-        resolver._lookup("adworkposition", {"type": "adworkposition"}, 1)
-    assert client.calls == 3 and client.writes == 0
+    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3) == []
+    assert client.calls == 3 and client.writes == 0, "отказанный поиск не повторяется в задании"
 
 
-@pytest.mark.parametrize("count_term", [True, False])
-def test_refused_client_without_call_counter_still_charges_one_read(tmp_path, count_term):
+def test_refused_client_without_call_counter_still_charges_one_read(tmp_path):
     class NoCounterClient:
         def get_all(self, path, params, *, max_pages):
             raise _denied()
 
-    resolver = tr.TermResolver(NoCounterClient(), _store(tmp_path), term_cap=1, job_cap=1)
-    assert resolver._lookup("adworkposition", {"type": "adworkposition"}, 1,
-                            count_term=count_term) == []
+    resolver = tr.TermResolver(NoCounterClient(), _store(tmp_path))
+    assert resolver._lookup("adworkposition", {"type": "adworkposition"}, 1) == []
     assert resolver.reads == 1
-    assert resolver._term_reads == (1 if count_term else 0)
-    with pytest.raises(tr._Spent):
-        resolver._lookup("adworkemployer", {"type": "adworkemployer"}, 1)
+    assert resolver._lookup("adworkemployer", {"type": "adworkemployer"}, 1) == []
+    assert resolver.reads == 2
 
 
 @pytest.mark.parametrize("refused", [
@@ -310,17 +302,18 @@ def test_compound_interests_still_offer_components_when_optional_searches_are_re
     assert client.writes == 0
 
 
-def test_a_budget_unknown_compound_is_not_silently_split(tmp_path):
+def test_acl2668_a_compound_found_nowhere_is_checked_in_full_and_not_split(tmp_path):
     class Transport:
         def request(self, method, path, params):
             return {"status": 200, "body": {"data": []}}
 
     client = g.GraphClient(Transport(), allow_writes=False, min_interval_s=0,
                            sleep=lambda _: None, max_calls=200)
-    resolver = tr.TermResolver(client, _store(tmp_path), term_cap=1, job_cap=1)
+    resolver = tr.TermResolver(client, _store(tmp_path))
     result = resolver.resolve("Alpari Group or Plus500")
-    assert result["state"] == "unknown" and not result.get("split")
-    assert result["picks"] == [] and client.calls <= 1 and client.writes == 0
+    assert result["state"] == "unresolved" and not result.get("split")
+    assert [p["term"] for p in result["parts"]] == ["Alpari Group", "Plus500"]
+    assert result["picks"] == [] and client.calls > 1 and client.writes == 0
 
 
 def test_acl2473_term_with_candidates_gets_no_refused_lookup_note(tmp_path):

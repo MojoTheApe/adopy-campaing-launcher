@@ -167,7 +167,7 @@ def test_heavy_gate_uses_the_share_too():
     from src.web import profile_slots as ps
 
     mem = [_mem(87)]
-    gate = warm.HeavyGate(limit=lambda: 3, memory=lambda: mem[0], settings=lambda: _s90(),
+    gate = warm.HeavyGate(memory=lambda: mem[0], settings=lambda: _s90(),
                           usage=None, tick_s=0.01)
     gate.acquire("a")
     gate.acquire("b", wait_s=0.2)                       # 87% in use: the second action goes
@@ -324,10 +324,10 @@ def test_next_profile_waits_for_the_previous_one_to_be_ready(tmp_path):
     assert waiting and views[-1] is None
 
 
-def test_next_start_waits_for_the_cpu_to_settle(tmp_path):
+def test_next_start_does_not_wait_for_the_cpu(tmp_path):
+    # ACL-2668 (решение №13): CPU больше не держит старт.
     rig = Rig(tmp_path)
-    reads = [96.0, 96.0, 91.0]
-    rig.reg._cpu = lambda: reads.pop(0) if reads else 40.0
+    rig.reg._cpu = lambda: 96.0
     started_at = []
     real_start = rig.reg._start_profile
 
@@ -339,8 +339,7 @@ def test_next_start_waits_for_the_cpu_to_settle(tmp_path):
     t0 = rig.now[0]
     with warm.job_wait(lambda: False, lambda v: None):
         assert rig.reg.open_one("A", _entry(PID))["ok"]
-    # three busy looks (6 s), then the CPU must stay below the level for the settle time
-    assert started_at[0] - t0 >= 6 + warm.DEFAULT_START_CPU_SETTLE_S
+    assert started_at[0] - t0 < 2.0
 
 
 def test_a_failed_start_gives_the_turn_back(tmp_path):
@@ -450,15 +449,17 @@ def test_wait_ready_keeps_waiting_while_patient_then_reports_the_silence():
 # ---- the job loop ----
 
 class _FakeReg:
-    def __init__(self, clear_after):
+    def __init__(self, clear_after, reasons=("cpu_high", "memory_high")):
         self.calls = 0
         self.clear_after = clear_after
+        self.reasons = list(reasons)
 
     def load_snapshot(self, pid=""):
         self.calls += 1
+        # ACL-2676: the CPU reading alone never holds a restart; memory / warming profiles do.
         return {"loaded": True, "clear": self.calls >= self.clear_after, "cpu_pct": 91.0, "cpu_level": 85.0,
                 "available_mb": 2500, "used_pct": 88.0, "max_used_pct": 90.0, "running": 3, "warming": 1,
-                "reasons": ["cpu_high"]}
+                "reasons": self.reasons}
 
     def restart_wait_s(self, pid):
         return 0.0
@@ -565,6 +566,16 @@ def test_one_start_at_a_time_it_waits_for_the_load_to_clear_before_each_start(mo
     pj._open_with_load_requeue(job_id, pub, "B97")
     assert order[0] == ("open", 0) and order[1][1] >= 100 or clock["t"] >= 300
     assert len(order) == 2
+
+
+def test_high_cpu_alone_does_not_hold_a_restart(monkeypatch, job):
+    # ACL-2676: after the backoff the restart goes ahead at high CPU.
+    pj, job_id, clock = job
+    reg = _FakeReg(clear_after=10 ** 9, reasons=("cpu_high",))
+    monkeypatch.setattr(warm, "registry", lambda: reg)
+    pub = _FlakyPublisher(fails=1)
+    pj._open_with_load_requeue(job_id, pub, "B97")
+    assert pub.attempts == 2 and clock["t"] < 100
 
 
 def test_cancel_of_a_requeued_job_stops_the_wait(monkeypatch, job):

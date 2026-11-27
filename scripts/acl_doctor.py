@@ -73,6 +73,30 @@ def check_path(label: str, path: str, *, required: bool, fix: str) -> None:
         report(MISSING if required else WARN, label, path or "(not set)", fix)
 
 
+def check_stats_source() -> None:
+    """ACL-2867: статистика идёт из BI, книга Excel — лишь запасной вариант."""
+    path = get_excel_path()
+    if path and os.path.exists(path):
+        report(OK, "Stats workbook", path)
+        return
+    try:
+        from src.analysis_agent import bi_stats
+
+        bi = bi_stats.bi_enabled()
+    except Exception:
+        bi = False
+    if bi:
+        report(OK, "Stats source", "BI (the Excel workbook is not needed)")
+        return
+    report(
+        WARN,
+        "Stats source",
+        "BI is not connected and no stats workbook was found",
+        "Sign in with Google in the dashboard (Connections) so statistics come from BI. "
+        "Without it the dashboard shows no statistics.",
+    )
+
+
 def check_account_map() -> None:
     path = get_ad_account_map_path()
     if not os.path.exists(path):
@@ -382,12 +406,7 @@ def main() -> int:
     check_multilogin()
     check_campaign_manager_identity()
     check_accounts_sheet()
-    check_path(
-        "Stats workbook",
-        get_excel_path(),
-        required=True,
-        fix="Set FB_STATS_EXCEL in .env if your report workbook lives elsewhere.",
-    )
+    check_stats_source()
     check_path(
         "Upload FB workbook",
         get_upload_fb_excel_path(),

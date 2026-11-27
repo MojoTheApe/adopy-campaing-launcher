@@ -1,0 +1,22 @@
+{# ACL-2900 / ACL-2920 / ACL-2924: назначение аккаунтов байеру, выбранному в «Logged as». Рисуется только там, где есть
+   ключ владельца хаба (user_assign_enabled); логика — /static/user_assign.js, стили — классы amap-*. #}
+<details class="amap-assign" id="ua-root">
+  <summary><h3 style="display:inline">Assign accounts to <span id="ua-who">the selected buyer</span></h3></summary>
+  <div class="amap-add" style="flex-wrap:wrap">
+    {#- Почта байера на хабе: показывается здесь же и правится на месте (Enter или выход из поля). -#}
+    <label class="amap-note" for="ua-email">Hub user</label>
+    <input type="email" id="ua-email" placeholder="Buyer's email" size="30" autocomplete="off" spellcheck="false"
+           title="The buyer's email on the hub. Edit it and press Enter to change it for this buyer.">
+    <span class="amap-msg" id="ua-msg" role="status"></span>
+  </div>
+  <div id="ua-list" class="ua-assigned"></div>
+  <div class="amap-add" style="flex-wrap:wrap;align-items:flex-start">
+    <textarea id="ua-text" rows="6" cols="60" spellcheck="false"
+      placeholder="One per line: account name, ad account number, act_123… or an Ads Manager link. Not in the map yet? Write: account name, PE"></textarea>
+    <span style="display:flex;flex-direction:column;gap:0.4rem">
+      <button type="button" class="amap-btn" id="ua-check">Check</button>
+      <button type="button" class="amap-btn" id="ua-send">Assign</button>
+    </span>
+  </div>
+  <div id="ua-results" class="ua-results"></div>
+</details>

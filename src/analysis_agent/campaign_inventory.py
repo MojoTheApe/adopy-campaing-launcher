@@ -3,7 +3,7 @@
 Только чтение и только `ACL_FB_BACKEND=api`. Опись берётся тем же путём, что
 «Read spend» (ACL-1756/1760): GET-запросы `fetch()` из вкладки профиля через
 `account_spend_api._session` — та же очередь, тот же замок профиля, те же
-потолок вызовов, охлаждение после лимита и правило «профиль, который не мы
+охлаждение после лимита и правило «профиль, который не мы
 подняли, не останавливаем» (`CLOSE_GRACE_S`). Второй сессии здесь нет.
 
 Правила данных (решение владельца):
@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import hashlib
 import logging
@@ -125,7 +126,7 @@ class Snapshot:
     currency: str = ""
     error: str = ""
     error_code: str = ""
-    #: Вид остановки Meta/клиента (`checkpoint`, `rate_limited`, `call_budget`…), если чтение
+    #: Вид остановки Meta/клиента (`checkpoint`, `rate_limited`…), если чтение
     #: оборвалось на ней — даже когда снимок «partial» и `error` пуст (ACL-2063).
     stop: str = ""
     #: Человеческие причины «неполно»: страницы упёрлись в лимит, шаг не прочитан…
@@ -935,6 +936,16 @@ def record_status(snap: Snapshot) -> bool:
         return False
 
 
+def _consume_person_open(account: str) -> bool:
+    """ACL-2652: is this `open` status read the one right after a person's Open profile press? Never raises."""
+    try:
+        from src.fb_api import account_blocks
+
+        return account_blocks.consume_person_open(_as._profile_key(account))  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def read_status_only(account: str, *, trigger: str = "open") -> Snapshot:
     """ACL-2419: после Open ровно ОДИН Graph-запрос - сам кабинет (`client.account`).
 
@@ -1131,11 +1142,17 @@ def _run_read(account: str, *, trigger: str, baseline=None, persist: bool = True
             # this result's durable settlement, not only through _session.
             from src.analysis_agent import account_refresh, account_spend_api
             cached = get_snapshot(account)
-            if trigger.split(":")[0] == "open":
+            kind_ = trigger.split(":")[0]
+            if kind_ == "open" or (kind_ == "retry" and account_refresh._profile_held(account)):  # noqa: SLF001
                 # ACL-2419: после Open - только статус кабинета, один запрос, без дерева.
+                # ACL-2652: Retry on a held profile is the same one request (the account), not the whole list.
                 from src.fb_api.connection import user_started_action
 
-                with user_started_action(False):
+                from src.fb_api import account_blocks as _blocks_
+
+                person = kind_ == "open" and _consume_person_open(account)
+                with user_started_action(kind_ in USER_TRIGGERS), (
+                        _blocks_.person_edit() if person else contextlib.nullcontext()):
                     done = read_status_only(account, trigger=trigger)
             elif (account_refresh.is_fresh(account)
                     and (trigger.split(":")[0] in {"schedule", "attention"}
@@ -1181,7 +1198,7 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
     from src.analysis_agent.account_refresh_state import target_activity
     coordinator = machine if machine is not None else MachineStore()
     clock = now if now is not None else time.time
-    force = trigger.split(":")[0] in {"action", "retry"}
+    force = trigger.split(":")[0] in {"action", "retry", "open"}      # ACL-2653: a person's Open reads past an untimed stop
     try:
         profile = _as._profile_key(account)  # noqa: SLF001
         # ACL-2668: чтения разных аккаунтов идут параллельно; одно чтение на аккаунт
@@ -1196,7 +1213,11 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
                 paused._machine_committed = True
                 return paused
             done = None
-            if trigger.split(":")[0] == "open":
+            from src.analysis_agent import account_refresh as _ar
+
+            kind_ = trigger.split(":")[0]
+            # ACL-2652: Retry on a held profile is the same one status request as Open, so it ends the same way.
+            if kind_ == "open" or (kind_ == "retry" and _ar._profile_held(account)):  # noqa: SLF001
                 # ACL-2419: статус-чтение не публикует опись. Удача - без записи в общее
                 # хранилище результатов (оно заменило бы опись пустой); неудача идёт обычным путём.
                 done = operation()

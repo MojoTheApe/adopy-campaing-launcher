@@ -33,7 +33,6 @@ class MachineConfigTests(unittest.TestCase):
             apply_machine_configuration(
                 configuration,
                 config,
-                stats_workbook=r"C:\Data\stats.xlsx",
                 creatives_directory=r"C:\Data\Creatives",
             )
 
@@ -55,6 +54,8 @@ class MachineConfigTests(unittest.TestCase):
             for gone in ("GSHEET_ACCOUNTS_ID", "UPLOAD_FB_EXCEL"):
                 self.assertNotIn(gone, env)
             self.assertFalse((config / "oauth_client.json").exists())
+            # ACL-2867: без книги Excel строка FB_STATS_EXCEL не пишется.
+            self.assertNotIn("FB_STATS_EXCEL", env)
 
 
 if __name__ == "__main__":
