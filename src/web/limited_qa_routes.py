@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 
 from src.limited_qa import client, service
 
 router = APIRouter()
+_templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 _log = logging.getLogger(__name__)
 
 _PUBLIC = ("request_id", "status", "jira_status", "dispatch_state", "result_urls", "result_items",
@@ -25,9 +28,7 @@ def _public(rec: dict) -> dict:
 
 @router.get("/limited-qa", response_class=HTMLResponse)
 def limited_qa_page(request: Request):
-    from src.web.app import templates
-
-    return templates.TemplateResponse(request, "limited_qa.html", {"configured": client.is_configured()})
+    return _templates.TemplateResponse(request, "limited_qa.html", {"configured": client.is_configured()})
 
 
 @router.get("/api/limited-qa/requests")
