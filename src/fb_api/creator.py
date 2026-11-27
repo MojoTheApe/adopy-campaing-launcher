@@ -2130,12 +2130,14 @@ class CampaignCreator:
                  compress_video: Callable[[str], Any] | None = None,
                  compress_to_fit: Callable[[str, float, float], Any] | None = None,
                  journal: "_oj.OperationJournal | None" = None, request_key: str = "", slot: int = 0,
-                 use_facebook_page: Callable[[str, str], str] | None = None):
+                 use_facebook_page: Callable[[str, str], str] | None = None,
+                 pressed: "set[tuple[str, str]] | None" = None):
         self.client = client
         #: ACL-2787: нажать «Use Facebook Page» в профиле (act, page_id) -> "" при успехе, иначе причина.
         self._use_facebook_page = use_facebook_page or self._press_in_profile
         #: ACL-2787: Страницы, для которых нажатие уже пробовали в этом прогоне (один раз на Страницу).
-        self._ig_pressed: set[str] = set()
+        #: Ключ (кабинет, Страница); множество общее на прогон (его даёт ApiPublisher), а не на одно объявление.
+        self._ig_pressed: set[tuple[str, str]] = pressed if pressed is not None else set()
         #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
         self.journal = journal
         #: ACL-1856: the submit key of the page (bound per campaign); the journal refuses its reuse for another plan.
@@ -2197,9 +2199,10 @@ class CampaignCreator:
 
     def _press_use_facebook_page(self, plan: CampaignPlan, got: _ig.IgIdentity) -> _ig.IgIdentity:
         """ACL-2787: только для `none` и один раз на Страницу; успех -> перечитать; отказ -> прежнее сообщение."""
-        if plan.page_id in self._ig_pressed:
+        key = (str(plan.act), str(plan.page_id))
+        if key in self._ig_pressed:
             return got
-        self._ig_pressed.add(plan.page_id)
+        self._ig_pressed.add(key)
         try:
             why = self._use_facebook_page(plan.act, plan.page_id)
         except Exception as exc:  # noqa: BLE001 - отказ нажатия не должен ронять проверку; остаётся ручное сообщение

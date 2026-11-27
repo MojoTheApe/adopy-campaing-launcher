@@ -194,3 +194,40 @@ def test_selectors_live_in_the_yaml_config():
     cfg = pbu._config()
     assert cfg["url"].format(act_id="1").endswith("simple_create?act=1")
     assert cfg["ig"] == ["instagram profile"] and cfg["btn"] == ["use facebook page"] and cfg["page"] == ["facebook page"]
+
+
+@pytest.mark.parametrize("href", [
+    "https://adsmanager.facebook.com/adsmanager/manage/simple_create?act=999",
+    "https://adsmanager.facebook.com/adsmanager/manage/simple_create",
+    "https://adsmanager.facebook.com/adsmanager/manage/simple_create?act=123&selected_campaign_ids=5",
+    "https://adsmanager.facebook.com/adsmanager/manage/simple_create?act=123&selected_adset_ids=5",
+    "https://adsmanager.facebook.com/adsmanager/manage/campaigns/edit?act=123",
+    "https://adsmanager.facebook.com/adsmanager/manage/adsets/edit/standalone?act=123",
+])
+def test_allow_list_refuses_everything_but_this_accounts_new_editor(page, href):
+    why, tab = _press(page, href=href)
+    assert why.startswith("unexpected page") and _clicks(page) == [] and tab.closed
+
+
+def test_only_beforeunload_dialogs_are_accepted(page):
+    _, tab = _press(page)
+    seen = []
+    tab.call = lambda m, p=None, **k: seen.append((m, p))
+    tab.on_event({"method": "Page.javascriptDialogOpening", "params": {"type": "beforeunload"}})
+    tab.on_event({"method": "Page.javascriptDialogOpening", "params": {"type": "confirm"}})
+    assert seen == [("Page.handleJavaScriptDialog", {"accept": True}),
+                    ("Page.handleJavaScriptDialog", {"accept": False})]
+
+
+def test_a_control_that_keeps_moving_is_not_clicked(page):
+    class Moving(FakeTab):
+        n = 0
+        def evaluate_main(self, expr, timeout=10.0):
+            got = super().evaluate_main(expr, timeout)
+            if got.get("state") == "ready":
+                Moving.n += 1
+                got["x"] += Moving.n
+            return got
+    tab = Moving(page, HTML)
+    why = pbu.press("act_123", "111", cdp_url="http://x", page_name="Sample Page", open_tab=lambda u: tab, **FAST)
+    assert why.startswith("timed out") and _clicks(page) == [] and tab.closed

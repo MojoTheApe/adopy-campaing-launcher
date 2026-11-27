@@ -80,3 +80,21 @@ def test_default_press_without_a_profile_tab_keeps_the_manual_message(tmp_path):
     assert pbu.press("act_1", "111", page_name="Sample Page") == "the account's profile tab is not available"
     out = _audit(AuditMeta(instagram="none"), _draft(tmp_path, ads=1))
     assert _by(out)["instagram_identity"]["detail"] == ig.MSG_NO_INSTAGRAM
+
+
+@pytest.mark.parametrize("fail", ["control not found", ""])
+def test_n_drafts_on_one_page_press_once_per_run(tmp_path, fail):
+    # по одному создателю на объявление, но множество «уже пробовали» общее на прогон (ApiPublisher.ig_pressed)
+    shared: set = set()
+    press = Presser(FakeMeta(instagram="none"), fail=fail)
+    for _ in range(3):
+        meta = FakeMeta(instagram="none")
+        press.meta = meta
+        _run(meta, _draft(tmp_path, ads=1), use_facebook_page=press, pressed=shared)
+    assert len(press.calls) == 1 and len(shared) == 1
+
+
+def test_publisher_hands_one_pressed_set_to_every_creator():
+    from src.web import publish_api
+    pub = publish_api.ApiPublisher(dry_run=True)
+    assert isinstance(pub.ig_pressed, set)
