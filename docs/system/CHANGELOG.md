@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2605 — Source-vs-account comparison in the diagnostic bundle — 2026-11-27
+
+The Windows diagnostic bundle now includes `source_vs_account.json`: saved source spend versus saved account readings for the default period, built only from files already on the machine, with ids masked.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1605).
+
 ## ACL-2788 — Control Center Refresh button pulls batches from the old event log — 2026-11-27
 
 The Control Center now has a Refresh button: the Hub fetches new batches (up to 30 per press) from the old event log and ingests them, so machines that are not yet updated show up too.
