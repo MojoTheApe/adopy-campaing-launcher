@@ -39,8 +39,8 @@ def env(tmp_path, monkeypatch):
             raise item
         return item
 
-    monkeypatch.setattr(client.requests, "post", lambda url, **kw: _next("post", url, kw))
-    monkeypatch.setattr(client.requests, "get", lambda url, **kw: _next("get", url, kw))
+    monkeypatch.setattr(client._SESSION, "post", lambda url, **kw: _next("post", url, kw))
+    monkeypatch.setattr(client._SESSION, "get", lambda url, **kw: _next("get", url, kw))
     return calls, script
 
 
@@ -101,7 +101,7 @@ def test_record_saved_before_post_and_headers_sent(env):
         calls.append(("post", url, kw))
         return FakeResp(202, {**RUNNING, "request_id": "x"})
 
-    client.requests.post = post
+    client._SESSION.post = post
     rec = submit()
     assert seen["stored"] == "submitting"           # persisted before the network call
     _, url, kw = calls[0]
@@ -229,3 +229,15 @@ def test_routes_hide_internals_and_validate(env, monkeypatch):
     assert listing["requests"][0]["status"] == "running"
     assert TOKEN not in json.dumps(listing) and "idempotency_key" not in listing["requests"][0]
     assert c.post("/api/limited-qa/requests/not-a-uuid/refresh", headers=H).status_code == 400
+
+
+def test_requests_are_pinned_to_ipv4_unless_auto(monkeypatch):
+    seen = {}
+    monkeypatch.delenv(client.IP_ENV, raising=False)
+    monkeypatch.setattr(client.HTTPAdapter, "init_poolmanager", lambda self, *a, **kw: seen.update(kw))
+    client._IPv4Adapter().init_poolmanager(1, 1)
+    assert seen["source_address"] == ("0.0.0.0", 0)
+    seen.clear()
+    monkeypatch.setenv(client.IP_ENV, "auto")
+    client._IPv4Adapter().init_poolmanager(1, 1)
+    assert "source_address" not in seen

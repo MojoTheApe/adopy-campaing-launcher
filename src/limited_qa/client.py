@@ -15,10 +15,14 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
+from requests.adapters import HTTPAdapter
 
 TOKEN_ENV = "ACM_DEV_TOKEN"
 URL_ENV = "ACM_LIMITED_QA_URL"
 TIMEOUT_S = 20
+#: DEV access is allow-listed by IPv4 address. Dual-stack machines prefer IPv6 and
+#: get a Cloudflare 403, so requests go out over IPv4 unless this is set to "auto".
+IP_ENV = "ACM_LIMITED_QA_IP"
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -137,6 +141,18 @@ def build_body(request_id: str, source_urls: Any, target_domain: Any, country: A
 
 # --------------------------------------------------------------------- HTTP --
 
+class _IPv4Adapter(HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        if (os.environ.get(IP_ENV) or "").strip().lower() != "auto":
+            kwargs["source_address"] = ("0.0.0.0", 0)  # makes urllib3 resolve IPv4 only
+        super().init_poolmanager(*args, **kwargs)
+
+
+_SESSION = requests.Session()
+_SESSION.mount("https://", _IPv4Adapter())
+_SESSION.mount("http://", _IPv4Adapter())
+
+
 def _config() -> tuple[str, str]:
     token = (os.environ.get(TOKEN_ENV) or "").strip()
     url = (os.environ.get(URL_ENV) or "").strip().rstrip("/")
@@ -171,7 +187,7 @@ def _reply(resp: requests.Response) -> Reply:
 def post_request(body: dict[str, Any]) -> Reply:
     token, url = _config()
     try:
-        resp = requests.post(url, json=body, headers=_headers(token, json_body=True), timeout=TIMEOUT_S)
+        resp = _SESSION.post(url, json=body, headers=_headers(token, json_body=True), timeout=TIMEOUT_S)
     except requests.RequestException as exc:
         raise Unreachable(type(exc).__name__) from None  # never chain: urls/headers stay out of logs
     return _reply(resp)
@@ -180,7 +196,7 @@ def post_request(body: dict[str, Any]) -> Reply:
 def get_status(request_id: str) -> Reply:
     token, url = _config()
     try:
-        resp = requests.get(f"{url}-status", params={"request_id": normalize_request_id(request_id)},
+        resp = _SESSION.get(f"{url}-status", params={"request_id": normalize_request_id(request_id)},
                             headers=_headers(token, json_body=False), timeout=TIMEOUT_S)
     except requests.RequestException as exc:
         raise Unreachable(type(exc).__name__) from None
