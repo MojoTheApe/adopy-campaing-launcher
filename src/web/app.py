@@ -4274,6 +4274,8 @@ async def api_user_assign_send(request: Request) -> JSONResponse:
             added.append(r["account_name"])
         else:
             r.update(state="not_found", row=None, error=body.get("error") or "Could not add the account to the map.")
+    for r in results:
+        r["added"] = r.get("state") == "add" and r.get("account_name") in added
     rows = _ua.found_rows(results)
     if not rows:
         return JSONResponse({"ok": False, "error": "Nothing to assign: no line matched an account.",

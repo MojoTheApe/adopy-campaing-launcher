@@ -124,3 +124,46 @@ def test_owner_key_still_never_reaches_the_page(hub):
 
     answer = _send("Dan Dicker", "Gamma 9, PE")[1]
     assert OWNER_KEY not in json.dumps(answer)
+
+
+# ── Fix round 1 (ревью) ──────────────────────────────────────────────────
+
+def test_a_shared_list_name_with_a_country_is_still_added_to_the_map(hub):
+    from unittest.mock import patch
+
+    with patch("src.analysis_agent.gsheet_accounts.fetch_account_rows",
+               return_value=[{"account_label": "Sheet Only"}]):
+        (res,) = _preview("Sheet Only, PE")
+        assert res["state"] == "add" and res["country"] == "Peru"
+        status, data = _send("Dan Dicker", "Sheet Only, PE")
+    assert data["ok"] and data["added"] == ["Sheet Only"]
+    assert _by_name("Sheet Only")["country"] == "Peru"
+
+
+def test_a_partial_name_does_not_beat_an_explicit_add(hub):
+    (res,) = _preview("Alpha, PE")                                     # в карте есть «Alpha 1»
+    assert res["state"] == "add" and res["account_name"] == "Alpha"
+    (res,) = _preview("alpha 1, PE")                                   # точное имя без учёта регистра — существующий
+    assert res["state"] == "found" and res["account_name"] == "Alpha 1"
+
+
+def test_added_but_not_assigned_is_reported_as_added(hub):
+    from unittest.mock import patch
+
+    real_call = type(hub).__call__
+
+    def failing(self, method, url, body, headers):
+        if method == "POST" and url.endswith("/api/assignments"):
+            return 500, {"error": "hub is down"}
+        return real_call(self, method, url, body, headers)
+
+    with patch.object(type(hub), "__call__", failing):
+        status, data = _send("Dan Dicker", "Gamma 9, PE")
+    assert data["ok"] is False and data["added"] == ["Gamma 9"]
+    assert data["results"][0]["added"] is True and not data["results"][0].get("sent")
+    assert _by_name("Gamma 9")["country"] == "Peru"                    # в карте осталась
+
+
+def test_a_number_instead_of_a_country_says_no_country_code(hub):
+    (res,) = _preview("Gamma 9, 123")
+    assert res["state"] == "not_found" and "No country code" in res["error"] and '""' not in res["error"]

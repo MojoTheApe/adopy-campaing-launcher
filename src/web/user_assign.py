@@ -237,8 +237,12 @@ def resolve_lines(
         add = None
         if not candidates:
             add = parse_add_line(line)
-            if add:
-                # Название из «название, страна» может уже быть в карте — тогда это обычная строка.
+            if add and add["code"]:
+                # «название, страна» — явное «новый аккаунт»: существующим он считается только при точном совпадении
+                # имени с картой этой машины (без учёта регистра). Общий список и часть имени не в счёт (ревью ACL-2945).
+                exact = [n for n in account_map if (n or "").strip().lower() == add["name"].lower()]
+                candidates, partial = exact[:1], False
+            elif add:
                 candidates, partial, _ = match(add["name"])
         if len(candidates) > 1:
             res.update(state="ambiguous", candidates=candidates)
@@ -269,6 +273,9 @@ def resolve_lines(
 def _resolve_new_account(res: dict, add: dict, account_map, by_act, seen, normalise, line: str) -> None:
     """Аккаунта нет в карте, строка «название, код страны»: state `add` или понятное «Not found»."""
     code = add["code"].upper()
+    if not code:
+        res["error"] = "No country code. Write the account as: name, PE"
+        return
     country = country_name_for(code, account_map)
     if not country:
         res["error"] = f'Unknown country code "{add["code"]}". Use a 2-letter code such as PE or SA.'
