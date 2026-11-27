@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   var STATES = {
-    found: 'Found', not_found: 'Not found', ambiguous: 'Several match',
+    found: 'Found', add: 'Will be added', not_found: 'Not found', ambiguous: 'Several match',
     duplicate: 'Duplicate line', clash: 'Ad account clash'
   };
   var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -95,8 +95,11 @@
       if (r.state === 'found') extra = esc(r.account_name) + (r.sent ? ' · assigned' : '');
       else if (r.state === 'ambiguous') extra = esc((r.candidates || []).join(', '));
       else if (r.state === 'clash') extra = esc(r.error || '');
+      else if (r.state === 'add') extra = esc(r.account_name) + (r.sent ? ' · assigned' : r.added ? ' · added to the map, not assigned' : '') + (r.note ? ' · ' + esc(r.note) : '');
+      else if (r.state === 'not_found') extra = esc(r.error || '');
       else if (r.state === 'duplicate') extra = esc(r.account_name) + ' is already in this list';
-      var label = (r.state === 'found' && r.match === 'partial') ? 'Matched by part of the name' : (STATES[r.state] || r.state);
+      var label = (r.state === 'found' && r.match === 'partial') ? 'Matched by part of the name'
+        : (r.state === 'add') ? ((r.sent || r.added) ? 'Added to ' : 'Will be added to ') + (r.country || '') : (STATES[r.state] || r.state);
       return '<div class="ua-line ua-' + esc(r.state) + '"><span class="ua-in">' + esc(r.input) + '</span> '
         + '<b>' + esc(label) + '</b> <span class="amap-note">' + extra + '</span></div>';
     }).join('');
@@ -136,7 +139,8 @@
         if (s.need_email) { askEmail(); msg(s.error || 'Enter the buyer\'s email.', true); return; }
         if (!s.ok) { if (s.results) render(s.results); msg(s.error || 'Could not assign.', true); return; }
         render(s.results);
-        msg('Assigned ' + (s.assigned || []).length + ' to ' + who + '.');
+        msg('Assigned ' + (s.assigned || []).length + ' to ' + who
+          + ((s.added || []).length ? ' (' + s.added.length + ' added to the map).' : '.'));
         loadAccounts();
       } finally { btn.disabled = false; }
     } else {

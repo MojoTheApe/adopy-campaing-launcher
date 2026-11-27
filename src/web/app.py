@@ -4122,7 +4122,14 @@ def _user_assign_resolve(text: str) -> list[dict]:
                 labels.append(label)
     except Exception:  # noqa: BLE001 — общий список необязателен, карта владельца важнее
         labels = []
-    return _ua.resolve_lines(_ua.parse_lines(text), account_map, labels, normalise=normalise_ad_account_id)
+    try:
+        from src.web import account_links as _links
+
+        link_countries = _links.all_values("country")
+    except Exception:  # noqa: BLE001 — без связей берём написание из карты
+        link_countries = []
+    return _ua.resolve_lines(_ua.parse_lines(text), account_map, labels, normalise=normalise_ad_account_id,
+                             link_countries=link_countries)
 
 
 def _user_assign_enabled() -> bool:
@@ -4160,6 +4167,16 @@ async def api_user_assign_preview(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     results = await _in_report_pool(_user_assign_resolve, str(data.get("text") or ""))
     return JSONResponse({"ok": True, "results": results})
+
+
+class _JsonBody:
+    """Тело запроса для вызова обработчика напрямую (ACL-2945): только `await request.json()`."""
+
+    def __init__(self, data: dict):
+        self._data = data
+
+    async def json(self) -> dict:
+        return self._data
 
 
 def _user_assign_target(client, buyer: str, email_hint: str) -> "tuple[str, dict | None]":
@@ -4249,6 +4266,32 @@ async def api_user_assign_send(request: Request) -> JSONResponse:
     if problem is not None:
         return JSONResponse(problem)
     results = await _in_report_pool(_user_assign_resolve, str(data.get("text") or ""))
+    # ACL-2945: аккаунты «название, страна», которых нет в карте, сначала попадают в карту этой машины
+    # (тот же /account-map-patch, что и при ручном добавлении), и только потом уходят в хаб.
+    added: list[str] = []
+    for r in results:
+        if r.get("state") != "add":
+            continue
+        patch = {"account_name": r["account_name"], "country": r.get("country", "")}
+        if r["row"].get("ad_account_id"):
+            patch["ad_account_id"] = r["row"]["ad_account_id"]
+        resp = await account_map_patch(_JsonBody(patch))
+        body = json.loads(resp.body)
+        if resp.status_code == 200 and body.get("ok"):
+            added.append(r["account_name"])
+            # Страница Home строит страны из связей (account_links), а колонка country в карте — одно значение
+            # для робота: без связи аккаунт остаётся в Available accounts. Ставим обе.
+            try:
+                from src.web import account_links as _links
+                from src.web.buyer import get_selected_cm
+
+                _links.link(r["account_name"], "country", r.get("country", ""), buyer=get_selected_cm())
+            except Exception:  # noqa: BLE001 — связь не должна ронять назначение; аккаунт уже в карте, строка получит пометку
+                r["note"] = f"added to the map, not placed under {r.get('country', '')}"
+        else:
+            r.update(state="not_found", row=None, error=body.get("error") or "Could not add the account to the map.")
+    for r in results:
+        r["added"] = r.get("state") == "add" and r.get("account_name") in added
     rows = _ua.found_rows(results)
     if not rows:
         return JSONResponse({"ok": False, "error": "Nothing to assign: no line matched an account.",
@@ -4256,13 +4299,13 @@ async def api_user_assign_send(request: Request) -> JSONResponse:
     try:
         await _in_report_pool(client.assign, email, rows, buyer)
     except _ua.HubError as exc:
-        return JSONResponse({"ok": False, "error": str(exc), "results": results})
+        return JSONResponse({"ok": False, "error": str(exc), "results": results, "added": added})
     if _ua.clean_email(hint):
         _ua.remember_buyer(buyer, hint)
     for r in results:
-        r["sent"] = r.get("state") == "found"
-    return JSONResponse({"ok": True, "assigned": [r["account_name"] for r in rows], "results": results,
-                         "user_email": email})
+        r["sent"] = r.get("state") in ("found", "add")
+    return JSONResponse({"ok": True, "assigned": [r["account_name"] for r in rows], "added": added,
+                         "results": results, "user_email": email})
 
 
 @app.post("/api/user-assign/remove")
