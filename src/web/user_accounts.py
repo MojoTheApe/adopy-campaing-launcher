@@ -21,7 +21,7 @@ import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +122,7 @@ def load_state() -> dict:
     names = state.get("names")
     hidden = state.get("sync_hidden")
     seeded = state.get("seeded_for")
+    placed = state.get("placed")
     return {"names": [n for n in names if isinstance(n, str)] if isinstance(names, list) else [],
             "etag": str(state.get("etag") or ""),
             # Скрытые самой синхронизацией: вернуть можно только их, ручные скрытия юзера не трогаем
@@ -129,17 +130,21 @@ def load_state() -> dict:
             # Предложение войти заново уже показано на этой машине (один раз, не на каждую вкладку)
             "signin_prompted": bool(state.get("signin_prompted")),
             # ACL-2901: для каких юзеров карта машины уже перенесена на хаб (один раз на юзера)
-            "seeded_for": [n for n in seeded if isinstance(n, str)] if isinstance(seeded, list) else []}
+            "seeded_for": [n for n in seeded if isinstance(n, str)] if isinstance(seeded, list) else [],
+            # ACL-2950: аккаунты, которым синхронизация уже определила страну на карте Home (ключи имён)
+            "placed": [n for n in placed if isinstance(n, str)] if isinstance(placed, list) else []}
 
 
 def _save_state(names: list[str], etag: str, sync_hidden: list[str] | None = None,
-                signin_prompted: bool | None = None, seeded_for: list[str] | None = None) -> None:
+                signin_prompted: bool | None = None, seeded_for: list[str] | None = None,
+                placed: list[str] | None = None) -> None:
     old = load_state()
     _write_json(_local(_STATE_FILE), {
         "names": sorted(set(names), key=str.casefold), "etag": etag,
         "sync_hidden": sorted(set(old["sync_hidden"] if sync_hidden is None else sync_hidden), key=str.casefold),
         "signin_prompted": old["signin_prompted"] if signin_prompted is None else signin_prompted,
         "seeded_for": sorted(set(old["seeded_for"] if seeded_for is None else seeded_for)),
+        "placed": sorted(set(old["placed"] if placed is None else placed)),
     })
 
 
@@ -293,6 +298,117 @@ def merge_into_map(accounts: list[dict], state_names: list[str], *, map_path: Pa
             "hidden": hidden_done, "shown": shown_done, "sync_hidden": list(ours.values())}
 
 
+# -- ACL-2950: страна синхронизированного аккаунта на карте Home -----------------
+
+MAX_COUNTRY_LEN = 60
+
+
+def _clean_country(value: object) -> str:
+    """Страна из карты: одиночные пробелы, без невидимых символов. '' — писать нельзя."""
+    import unicodedata
+
+    text = "".join(ch for ch in str(value or "") if unicodedata.category(ch) != "Cf")
+    text = " ".join(text.split())
+    if not text or len(text) > MAX_COUNTRY_LEN or text[0] in "=+-@":
+        return ""
+    if any(unicodedata.category(ch) == "Cc" for ch in text):
+        return ""
+    return text
+
+
+def place_countries(names: list[str], sync_hidden: list[str] | None = None, done: "Iterable[str]" = (), *,
+                    map_path: Path | None = None) -> dict:
+    """Поставить синхронизированные аккаунты в их страну на карте Home (хранилище связей).
+
+    Карта хранит страну в одной колонке, а Home группирует по связям: без записи в связи аккаунт
+    лежит в «Available accounts». Каждый аккаунт ставится один раз: ключи уже обработанных (`done`,
+    в файле состояния) пропускаются, иначе ручное снятие аккаунта со страны или Close на Home
+    отменялось бы следующей синхронизацией. Пока список пуст (первая синхронизация после выпуска),
+    подтягиваются и аккаунты, синхронизированные раньше. Правила:
+    аккаунт, уже стоящий в любой стране, не трогаем (ручная расстановка главнее), связи не удаляем;
+    написание страны берём из уже существующей группы (KW и Kuwait — одна группа), иначе как в карте;
+    снятые с хаба и убранные из Available accounts не ставим. Все новые связи пишутся одним разом.
+    Не бросает: сбой записи — заметка по аккаунтам, синхронизация идёт дальше (повтор в следующий раз).
+    Возвращает {placed: [...], failed: {имя: заметка}, handled: [ключи]}.
+    """
+    out: dict = {"placed": [], "failed": {}, "handled": []}
+    try:
+        from config.paths import get_ad_account_map_path
+        from src.web import account_links, hidden_accounts
+        from src.web.buyer import get_selected_cm
+        from src.web.user_assign import name_key
+
+        path = map_path or Path(get_ad_account_map_path())
+        if not names or not path.is_file():
+            return out
+        skip = ({_name_key(n) for n in (sync_hidden or [])} | hidden_accounts.load()
+                | account_links.hidden_keys() | set(done))
+        wanted = {name_key(n) for n in names if name_key(n) not in skip and _name_key(n) not in skip}
+        if not wanted:
+            return out
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+        with account_links._links_lock:
+            if not account_links.links_path().exists():
+                # Файл создаст эта запись; без посева страны, выставленные в карте вручную, потом не посеялись бы.
+                # Аккаунты хаба посев не трогает: их ставят правила ниже.
+                account_links.seed_from_account_map(exclude=names)
+            try:
+                links = account_links.load()
+            except Exception:  # noqa: BLE001 - файл связей испорчен или не читается
+                out["failed"]["(links file)"] = "could not be read; countries were not placed"
+                return out
+            placed = {name_key(r["account_name"]) for r in links if r["kind"] == "country" and r["account_name"]}
+            groups = [r["value"] for r in links if r["kind"] == "country"]
+            buyer = get_selected_cm()
+            seen: set[str] = set()
+            todo: list[tuple[str, str, str]] = []
+            for row in rows:
+                name = str(row.get("account_name") or "").strip()
+                key = name_key(name)
+                if not key or key not in wanted or key in seen:
+                    continue
+                seen.add(key)
+                if key in placed:
+                    out["handled"].append(key)       # уже стоит в стране (в том числе поставлен вручную)
+                    continue
+                country = _clean_country(row.get("country"))
+                if not country:
+                    if str(row.get("country") or "").strip():
+                        out["failed"][name] = "country is not usable"
+                    continue
+                value = next((g for g in sorted(groups, key=str.casefold)
+                              if account_links._same_country(country, g)), country)
+                if all(value.casefold() != g.casefold() for g in groups):
+                    groups.append(value)
+                todo.append((name, value, key))
+            if todo:
+                try:
+                    account_links.link_many([(n, v) for n, v, _ in todo], buyer=buyer)
+                except Exception:  # noqa: BLE001 - файл связей занят или только для чтения
+                    for n, _, _ in todo:
+                        out["failed"][n] = "could not be placed under its country"
+                    return out
+                out["placed"] = [n for n, _, _ in todo]
+                out["handled"].extend(k for _, _, k in todo)
+    except Exception:  # noqa: BLE001 - расстановка стран не должна ронять синхронизацию
+        log.info("User accounts: countries were not placed.")
+        out["failed"].setdefault("(links file)", "countries were not placed")
+    return out
+
+
+def _place_and_remember(out: dict, names: list[str], sync_hidden: list[str], state: dict, etag: str) -> None:
+    """Расстановка стран после синхронизации: результат в ответ, обработанные ключи в файл состояния."""
+    placement = place_countries(names, sync_hidden, state["placed"])
+    if placement["placed"]:
+        out["placed"] = len(placement["placed"])
+        out["changed"] = True
+    if placement["failed"]:
+        out["place_notes"] = placement["failed"]
+    if placement["handled"]:
+        _save_state(names, etag, placed=[*state["placed"], *placement["handled"]])
+
+
 # -- главный вход ------------------------------------------------------------
 
 def sync(http: Http | None = None, token_provider: Callable[[], str] | None = None) -> dict:
@@ -347,7 +463,10 @@ def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
     if status in (200, 304):
         _ensure_library(http, key)  # ACL-2915: вход в Google подключает и общую библиотеку
     if status == 304:
-        return {"ok": True, "status": "not_modified", "changed": False}
+        # ACL-2950: страны ставим и когда список не менялся: так подтягиваются аккаунты, синхронизированные раньше
+        out = {"ok": True, "status": "not_modified", "changed": False}
+        _place_and_remember(out, state["names"], state["sync_hidden"], state, state["etag"])
+        return out
     if status != 200 or not isinstance(data, dict) or not isinstance(data.get("accounts"), list):
         log.info("User accounts: hub answered %s.", status)
         return {"ok": True, "status": "offline" if status >= 500 or status == 0 else "no_session", "changed": False}
@@ -376,6 +495,7 @@ def _sync_locked(http: Http, token_provider: Callable[[], str]) -> dict:
     _save_state(result["names"], str(hdrs.get("etag") or ""), sync_hidden=result["sync_hidden"])
     out = {"ok": True, "status": "updated", "changed": result["changed"],
            "hidden": len(result["hidden"]), "shown": len(result["shown"])}
+    _place_and_remember(out, result["names"], result["sync_hidden"], state, str(hdrs.get("etag") or ""))
     if seeded:
         out["seeded"] = seeded
     return out

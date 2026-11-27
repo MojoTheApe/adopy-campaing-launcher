@@ -28,6 +28,7 @@ anything else.
 from __future__ import annotations
 
 import csv
+import functools
 import os
 import threading
 import uuid
@@ -46,6 +47,19 @@ _SEEDED_MARK = ".account_links.seeded"
 #: ACL-1319: аккаунты, которые владелец сам убрал из Available accounts.
 HIDDEN_FIELDNAMES = ["account_name", "hidden_at"]
 _hidden_lock = threading.Lock()
+
+#: ACL-2950: записи связей идут по одной очереди. Фоновая синхронизация и клики на Home пишут один файл
+#: целиком («прочитать, изменить, заменить»); без очереди чужая запись теряется.
+_links_lock = threading.RLock()
+
+
+def _locked(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _links_lock:
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def links_path() -> Path:
@@ -191,6 +205,7 @@ def accounts_visible_for(kind: str, value: str, buyer: str | None) -> list[str]:
     return [a for a in names if account_buyer.is_visible(a, selected=buyer)]
 
 
+@_locked
 def add_value(kind: str, value: str, buyer: str | None = None) -> bool:
     """Завести страну (или ассет) без аккаунтов. False — если уже есть.
 
@@ -233,6 +248,7 @@ def add_value(kind: str, value: str, buyer: str | None = None) -> bool:
     return True
 
 
+@_locked
 def link(account: str, kind: str, value: str, buyer: str | None = None) -> bool:
     """Add one link. Returns False if it was already there.
 
@@ -259,6 +275,41 @@ def link(account: str, kind: str, value: str, buyer: str | None = None) -> bool:
     return True
 
 
+@_locked
+def link_many(pairs, buyer: str | None = None) -> list[str]:
+    """Add several country links with one read and one write. Returns the accounts that were added.
+
+    Same rules as `link` for every pair (an existing link is skipped; a placeholder row of the country is dropped
+    once it has a real account). A write failure raises and nothing is written."""
+    rows = load()
+    have = {_key(**r) for r in _rows_as_kwargs(rows)}
+    added: list[str] = []
+    values: set[str] = set()
+    for account, value in pairs:
+        account, value = _norm(account), _norm(value)
+        if not account or not value:
+            continue
+        k = _key(account, "country", value)
+        if k in have:
+            continue
+        have.add(k)
+        rows.append({"account_name": account, "kind": "country", "value": value})
+        added.append(account)
+        values.add(value.lower())
+    if not added:
+        return []
+    mine = _norm(buyer).casefold()
+    rows = [
+        r for r in rows
+        if r["account_name"]
+        or not (r["kind"] == "country" and r["value"].lower() in values)
+        or (mine and _norm(r.get(BUYER_COLUMN)).casefold() not in ("", mine))
+    ]
+    _write(rows)
+    return added
+
+
+@_locked
 def unlink(account: str, kind: str, value: str) -> bool:
     """Remove one link. The account itself is never deleted here — it keeps its
     row in the account map, its profile and its history, and simply stops being
@@ -281,6 +332,7 @@ def unlink(account: str, kind: str, value: str) -> bool:
     return True
 
 
+@_locked
 def close_country(kind: str, value: str, buyer: str | None = None) -> tuple[list[str], int]:
     """Drop a country or asset entirely. Returns (freed accounts, rows removed).
 
@@ -467,7 +519,7 @@ def restore_accounts(accounts: list[str]) -> list[str]:
         return restored
 
 
-def seed_from_account_map() -> int:
+def seed_from_account_map(exclude=()) -> int:
     """Carry the existing single-country column into links, once.
 
     Every machine already has accounts placed in a country — in the one column
@@ -477,6 +529,9 @@ def seed_from_account_map() -> int:
 
     Runs once; the marker sits next to the store so a later manual removal of a
     link is not undone on the next start.
+
+    ACL-2950: ``exclude`` — ключи имён (`hidden_key`), которых посев не касается: аккаунты хаба
+    расставляет синхронизация по своим правилам, а посев нужен остальным, ручным.
     """
     marker = links_path().with_name(_SEEDED_MARK)
     if marker.exists() or links_path().exists():
@@ -484,13 +539,14 @@ def seed_from_account_map() -> int:
     map_path = Path(get_ad_account_map_path())
     if not map_path.is_file():
         return 0
+    skip = {hidden_key(n) for n in exclude}
     rows: list[dict[str, str]] = []
     seen: set[tuple[str, str, str]] = set()
     with map_path.open(encoding="utf-8-sig", newline="") as fh:
         for row in csv.DictReader(fh):
             account = _norm(row.get("account_name"))
             country = _norm(row.get("country"))
-            if not account or not country:
+            if not account or not country or hidden_key(account) in skip:
                 continue
             k = _key(account, "country", country)
             if k in seen:
