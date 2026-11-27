@@ -174,7 +174,8 @@ def country_name_for(code: str, account_map: Mapping[str, Any]) -> str:
 
 def parse_add_line(line: str) -> "dict | None":
     """«Название, PE» или «Название, PE, act_123» → {name, code, act}. Без запятой — None (строка как раньше)."""
-    parts = [p.strip() for p in (line or "").split(",")]
+    # Разделитель — запятая или табуляция: столбцы, скопированные из таблицы, приходят через Tab.
+    parts = [p.strip() for p in re.split(r"[,	]", line or "")]
     parts = [p for p in parts if p]
     if len(parts) < 2:
         return None

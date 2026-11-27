@@ -167,3 +167,11 @@ def test_added_but_not_assigned_is_reported_as_added(hub):
 def test_a_number_instead_of_a_country_says_no_country_code(hub):
     (res,) = _preview("Gamma 9, 123")
     assert res["state"] == "not_found" and "No country code" in res["error"] and '""' not in res["error"]
+
+
+def test_a_column_pasted_from_a_spreadsheet_with_tabs_works_like_commas(hub):
+    results = _preview("Gamma 9\tPE\nDelta 4\tSA\tact_" + D3)
+    assert [(r["state"], r["country"]) for r in results] == [("add", "Peru"), ("add", "Saudi Arabia")]
+    assert results[1]["row"]["ad_account_id"] == "act_" + D3
+    status, data = _send("Dan Dicker", "Gamma 9\tPE")
+    assert data["ok"] and _by_name("Gamma 9")["country"] == "Peru"
