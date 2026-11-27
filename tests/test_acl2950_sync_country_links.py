@@ -8,8 +8,16 @@ from tests.test_acl2899_user_accounts import (  # noqa: F401  (фикстура 
 
 
 @pytest.fixture(autouse=True)
-def _buyer(monkeypatch):
+def _buyer(monkeypatch, env):
     monkeypatch.setattr("src.web.buyer.get_selected_cm", lambda: "")
+    monkeypatch.setattr(account_links, "get_local_config_dir", lambda: str(env))
+    monkeypatch.setattr(account_links, "get_ad_account_map_path", lambda: str(env / "map.csv"))
+
+
+def forget_handled():
+    """Как на машине до выпуска: синхронизация ещё не определила ничьих стран."""
+    st = ua.load_state()
+    ua._save_state(st["names"], st["etag"], placed=[])
 
 
 def links():
@@ -79,24 +87,21 @@ def test_resync_changes_nothing(env):
 def test_an_account_synced_earlier_is_placed_on_the_next_sync(env):
     run(Hub([acc("Early", country="Peru")]))
     (env / "account_links.csv").unlink()                       # как на машине до выпуска: связей нет
+    forget_handled()
     r = run(Hub([acc("Early", country="Peru")]))               # 304
     assert r["status"] == "not_modified" and r["placed"] == 1 and r["changed"] is True
     assert links() == [("Early", "Peru")]
 
 
-def test_a_link_failure_does_not_fail_the_sync_and_is_noted_for_that_account(env, monkeypatch):
-    real = account_links.link
+def test_a_link_failure_does_not_fail_the_sync_and_is_noted_per_account(env, monkeypatch):
+    def broken(pairs, buyer=None):
+        raise PermissionError("read-only")
 
-    def flaky(account, kind, value, buyer=None):
-        if account == "Bad":
-            raise PermissionError("read-only")
-        return real(account, kind, value, buyer=buyer)
-
-    monkeypatch.setattr(account_links, "link", flaky)
-    r = run(Hub([acc("Good", country="Peru"), acc("Bad", country="Peru")]))
-    assert r["ok"] and r["status"] == "updated" and r["placed"] == 1
-    assert list(r["place_notes"]) == ["Bad"]
-    assert "Bad" in read_map(env) and links() == [("Good", "Peru")]   # карта слита, остальное не пострадало
+    monkeypatch.setattr(account_links, "link_many", broken)
+    r = run(Hub([acc("One", country="Peru"), acc("Two", country="Peru"), acc("NoCountry")]))
+    assert r["ok"] and r["status"] == "updated" and "placed" not in r
+    assert sorted(r["place_notes"]) == ["One", "Two"]           # заметка у тех, кого не удалось поставить
+    assert {"One", "Two", "NoCountry"} <= set(read_map(env))    # карта слита
 
 
 def test_empty_country_stays_in_available_accounts(env):
@@ -119,8 +124,8 @@ def test_name_variants_match_an_existing_placement(env):
 
 def test_account_removed_from_the_hub_is_not_placed(env):
     run(Hub([acc("Keep", country="Peru"), acc("Gone", country="Peru")]))
-    for n in ("Keep", "Gone"):
-        account_links.unlink(n, "country", "Peru")
+    account_links.unlink("Gone", "country", "Peru")
+    forget_handled()
     run(Hub([acc("Keep", country="Peru"), acc("Gone", country="Peru", removed_at="2026-11-26T10:00:00Z")], etag='"e2"'))
     assert links() == [("Keep", "Peru")]
     run(Hub([acc("Keep", country="Peru"), acc("Gone", country="Peru", removed_at="2026-11-26T10:00:00Z")], etag='"e2"'))
@@ -160,7 +165,9 @@ def test_duplicate_names_in_the_map_make_one_link(env):
 def test_manual_accounts_not_from_the_hub_are_not_touched(env):
     write_map(env, [{"account_name": "Mine", "country": "Peru"}])
     run(Hub([acc("Server", country="Chile")]))
-    assert links() == [("Server", "Chile")]
+    assert ("Server", "Chile") in links() and read_map(env)["Mine"]["country"] == "Peru"
+    run(Hub([acc("Server", country="Chile"), acc("Other", country="Chile")], etag='"e2"'))
+    assert ("Mine", "Peru") in links() and len(links()) == 3
 
 
 def test_missing_links_file_is_created(env):
@@ -189,7 +196,7 @@ def test_unreadable_links_file_does_not_fail_the_sync(env, monkeypatch):
 
 
 def test_a_missing_map_places_nothing(env):
-    assert ua.place_countries(["A"], []) == {"placed": [], "failed": {}}
+    assert ua.place_countries(["A"], []) == {"placed": [], "failed": {}, "handled": []}
 
 
 def test_empty_placeholder_country_is_replaced_by_the_first_account(env):
@@ -201,4 +208,89 @@ def test_empty_placeholder_country_is_replaced_by_the_first_account(env):
 def test_no_extra_files_or_state_fields(env):
     run(Hub([acc("A", country="Peru")]))
     state = ua.load_state()
-    assert set(state) <= {"names", "etag", "sync_hidden", "seeded_for", "signin_prompted"}
+    assert set(state) <= {"names", "etag", "sync_hidden", "seeded_for", "signin_prompted", "placed"}
+
+
+# ── Fix round 1: один раз на аккаунт, одна запись, скрытые, испорченный файл, посев ──
+
+def test_a_hand_unlink_is_not_undone_by_the_next_sync(env):
+    hub = Hub([acc("Alpha", country="Peru"), acc("Beta", country="Peru")])
+    run(hub)
+    account_links.unlink("Alpha", "country", "Peru")
+    for _ in range(3):
+        r = run(hub)                                           # 304 при каждом открытии Home
+        assert "placed" not in r
+    run(Hub([acc("Alpha", country="Peru"), acc("Beta", country="Peru")], etag='"e2"'))   # и новый список
+    assert links() == [("Beta", "Peru")]
+
+
+def test_close_country_is_not_undone_by_the_next_sync(env):
+    hub = Hub([acc("A", country="Peru"), acc("B", country="Peru")])
+    run(hub)
+    account_links.close_country("country", "Peru")
+    r = run(hub)
+    assert "placed" not in r and links() == [] and account_links.all_values("country") == []
+
+
+def test_a_newly_assigned_account_is_still_placed_after_a_hand_removal(env):
+    run(Hub([acc("A", country="Peru")]))
+    account_links.close_country("country", "Peru")
+    r = run(Hub([acc("A", country="Peru"), acc("New", country="Chile")], etag='"e2"'))
+    assert r["placed"] == 1 and links() == [("New", "Chile")]
+
+
+def test_the_handled_keys_live_in_the_state_file_and_start_empty(env):
+    assert ua.load_state()["placed"] == []
+    run(Hub([acc("Alpha  1", country="Peru")]))
+    assert ua.load_state()["placed"] == ["alpha 1"]
+
+
+def test_a_failed_write_is_retried_on_the_next_sync(env, monkeypatch):
+    real = account_links._write
+    monkeypatch.setattr(account_links, "_write", lambda rows: (_ for _ in ()).throw(PermissionError("ro")))
+    hub = Hub([acc("A", country="Peru")])
+    assert "place_notes" in run(hub)
+    monkeypatch.setattr(account_links, "_write", real)
+    assert run(hub)["placed"] == 1 and links() == [("A", "Peru")]
+
+
+def test_all_new_links_are_written_once(env, monkeypatch):
+    calls = []
+    real = account_links._write
+    monkeypatch.setattr(account_links, "_write", lambda rows: (calls.append(len(rows)), real(rows))[1])
+    run(Hub([acc(f"Acc {i}", country="Peru") for i in range(40)]))
+    assert calls == [40] and len(links()) == 40
+
+
+def test_writes_to_the_links_file_take_turns(env):
+    import threading
+
+    assert isinstance(account_links._links_lock, type(threading.RLock()))
+    held = []
+    with account_links._links_lock:                            # Home держит замок: связи не пишутся параллельно
+        t = threading.Thread(target=lambda: (account_links.link("X", "country", "Peru"), held.append(1)))
+        t.start()
+        t.join(0.3)
+        assert held == [] and t.is_alive()
+    t.join(5)
+    assert held == [1] and links() == [("X", "Peru")]
+
+
+def test_accounts_removed_from_available_accounts_are_not_placed(env):
+    account_links.hide_accounts(["Quiet"])
+    run(Hub([acc("Quiet", country="Peru"), acc("Loud", country="Peru")]))
+    assert links() == [("Loud", "Peru")]
+
+
+def test_an_undecodable_links_file_gives_a_note(env):
+    (env / "account_links.csv").write_bytes(b"account_name,kind,value\n" + b"\xff\xfe\xfa,country,Peru\n")
+    r = run(Hub([acc("A", country="Peru")]))
+    assert r["ok"] and r["status"] == "updated" and "A" in read_map(env)
+    assert list(r["place_notes"]) == ["(links file)"]
+
+
+def test_creating_the_links_file_still_seeds_manual_map_countries(env):
+    write_map(env, [{"account_name": "Manual", "country": "Chile"}])
+    assert not (env / "account_links.csv").exists()
+    run(Hub([acc("Server", country="Peru")]))
+    assert sorted(links()) == [("Manual", "Chile"), ("Server", "Peru")]

@@ -22,6 +22,7 @@ def env(tmp_path, monkeypatch):
     from src.web import account_links
 
     monkeypatch.setattr(account_links, "get_local_config_dir", lambda: str(local))  # ACL-2950: не трогать настоящий файл связей
+    monkeypatch.setattr(account_links, "get_ad_account_map_path", lambda: str(local / "map.csv"))
     monkeypatch.setattr(paths, "get_ad_account_map_path", lambda: str(local / "map.csv"))
     monkeypatch.setattr(paths, "get_hidden_accounts_path", lambda: str(local / "hidden.json"))
     monkeypatch.setattr(hidden_accounts, "get_hidden_accounts_path", lambda: str(local / "hidden.json"))
