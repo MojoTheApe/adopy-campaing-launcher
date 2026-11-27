@@ -71,6 +71,9 @@ def hub(monkeypatch, tmp_path):
     local = tmp_path / "local"
     local.mkdir()
     monkeypatch.setattr(paths, "get_local_config_dir", lambda: str(local))
+    from src.web import account_links   # хранилище связей импортирует get_local_config_dir по имени: подменяем и его
+
+    monkeypatch.setattr(account_links, "get_local_config_dir", lambda: str(local))
     csv_path = tmp_path / "ad_account_map.csv"
     csv_path.write_text(
         "account_name,ad_account_id,page_id,multilogin_instance,folder_id,profile_id\n"
