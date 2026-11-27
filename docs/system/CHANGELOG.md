@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2788 — Control Center Refresh button pulls batches from the old event log — 2026-11-27
+
+The Control Center now has a Refresh button: the Hub fetches new batches (up to 30 per press) from the old event log and ingests them, so machines that are not yet updated show up too.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1788).
+
+## ACL-2634 — Null-safe waits in the dashboard browser test — 2026-11-27
+
+The `.amap-campaigns` wait predicates in `tests/test_acl2063_dashboard_browser.py` no longer throw while the table re-renders, so the test stops failing at random.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1634).
+
+## ACL-2572 — Builder shows partial publish progress and next action — 2026-11-27
+
+The builder result of a partly created campaign now lists what was already created (Meta ids as copyable text), the stage that stopped or is unknown (never counted as created) and the plain next action; a fully created campaign looks as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1572).
+
 ## ACL-2950 — Hub sync places assigned accounts under their country on the buyer's Home map — 2026-11-27
 
 Accounts synced from the hub carried their country only into the machine's account map, while Home groups by the links store, so a buyer saw every assigned account under "Available accounts". After each sync every hub account with a country is now placed under it (an existing group's spelling is reused, so "SA" and "Saudi Arabia" stay one group). An account the buyer already placed is never moved, links are never removed, accounts removed from the hub are skipped, and a write failure never fails the sync. Accounts synced earlier are placed on the next sync.
