@@ -182,19 +182,51 @@ def country_name_for(code: str, account_map: Mapping[str, Any], link_countries: 
 def parse_add_line(line: str) -> "dict | None":
     """«Название, PE» или «Название, PE, act_123» → {name, code, act}. Без запятой — None (строка как раньше)."""
     # Разделитель — запятая или табуляция: столбцы, скопированные из таблицы, приходят через Tab.
-    parts = [p.strip() for p in re.split(r"[,	]", line or "")]
+    raw = line or ""
+    if "," not in raw and chr(9) not in raw:
+        return None
+    parts = [p.strip() for p in re.split("[," + chr(9) + "]", raw)]
     parts = [p for p in parts if p]
     if len(parts) < 2:
-        return None
-    name, code, act = parts[0], "", ""
+        return {"name": "", "code": "", "act": "", "error": ADD_FORMAT_HINT}
+    name, code, act = norm_name(parts[0]), "", ""
     for extra in parts[1:]:
         if looks_like_id(extra) and not act:
             act = extra
         elif not code:
             code = extra
         else:
-            return None
+            return {"name": name, "code": "", "act": "",
+                    "error": "Too many parts on this line. " + ADD_FORMAT_HINT
+                             + " The name itself cannot contain a comma or a Tab."}
     return {"name": name, "code": code, "act": act}
+
+
+ADD_FORMAT_HINT = "Write the account as: name, PE (a 2-letter country code; an act_ number is optional)."
+MAX_NAME_LEN = 200
+
+
+def norm_name(name: str) -> str:
+    """Название с одиночными пробелами: «Alpha  1» и «Alpha 1» — один аккаунт."""
+    return " ".join(str(name or "").split())
+
+
+def name_key(name: str) -> str:
+    """Ключ сравнения названий: одиночные пробелы и без учёта регистра (в том числе не-ASCII)."""
+    return norm_name(name).casefold()
+
+
+def bad_new_name(name: str) -> str:
+    """Причина, по которой название нельзя завести в карту ('' — можно). Для ещё не существующих аккаунтов."""
+    if not name:
+        return "The account name is empty. " + ADD_FORMAT_HINT
+    if len(name) > MAX_NAME_LEN:
+        return f"The account name is longer than {MAX_NAME_LEN} characters."
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        return "The account name contains control characters."
+    if name[0] in "=+-@":
+        return 'The account name cannot start with "=", "+", "-" or "@".'
+    return ""
 
 
 def resolve_lines(
@@ -215,7 +247,7 @@ def resolve_lines(
     for n in list(account_map) + [s for s in sheet_labels if s]:
         n = (n or "").strip()
         if n:
-            names.setdefault(n.lower(), n)
+            names.setdefault(name_key(n), n)
     by_act: dict[str, list[str]] = {}
     for n, e in account_map.items():
         act = str(getattr(e, "ad_account_id", "") or "").strip()
@@ -227,7 +259,7 @@ def resolve_lines(
         if looks_like_id(text):
             act = normalise(text)
             return (sorted(by_act.get(act, [])) if act else []), False, act
-        low = text.lower()
+        low = name_key(text)
         if low in names:
             return [names[low]], False, ""
         if len(low) >= 4:
@@ -249,9 +281,9 @@ def resolve_lines(
             if add and add["code"]:
                 # «название, страна» — явное «новый аккаунт»: существующим он считается только при точном совпадении
                 # имени с картой этой машины (без учёта регистра). Общий список и часть имени не в счёт (ревью ACL-2945).
-                exact = [n for n in account_map if (n or "").strip().lower() == add["name"].lower()]
+                exact = [n for n in account_map if name_key(n) == name_key(add["name"])]
                 candidates, partial = exact[:1], False
-            elif add:
+            elif add and not add.get("error"):
                 candidates, partial, _ = match(add["name"])
         if len(candidates) > 1:
             res.update(state="ambiguous", candidates=candidates)
@@ -261,8 +293,8 @@ def resolve_lines(
             act = str(getattr(entry, "ad_account_id", "") or "").strip() if entry is not None else ""
             other = [n for n in by_act.get(act, []) if n != name] if act else []
             res["account_name"] = name
-            if name.lower() in seen:
-                res.update(state="duplicate", duplicate_of=seen[name.lower()])
+            if name_key(name) in seen:
+                res.update(state="duplicate", duplicate_of=seen[name_key(name)])
             elif other:
                 # Тот же кабинет записан за другим аккаунтом: как и /account-map-patch, не гадаем.
                 res.update(state="clash", candidates=other,
@@ -272,7 +304,9 @@ def resolve_lines(
                 if partial:
                     # Ревью ACL-2900: найдено по части имени — владелец должен это видеть до отправки
                     res["match"] = "partial"
-                seen[name.lower()] = line
+                seen[name_key(name)] = line
+        elif add and add.get("error"):
+            res["error"] = add["error"]
         elif add:
             _resolve_new_account(res, add, account_map, by_act, seen, normalise, line, link_countries)
         out.append(res)
@@ -281,10 +315,22 @@ def resolve_lines(
 
 def _resolve_new_account(res: dict, add: dict, account_map, by_act, seen, normalise, line: str,
                          link_countries: Iterable[str] = ()) -> None:
-    """Аккаунта нет в карте, строка «название, код страны»: state `add` или понятное «Not found»."""
+    """Аккаунта нет в карте, строка «название, код страны»: state `add` или понятное «Not found».
+
+    Порядок проверок: название → повтор в этой вставке (первая строка побеждает, вторая — duplicate) → код страны →
+    номер кабинета (нечитаемый, уже занятый картой или другой строкой вставки)."""
+    name = add["name"]
+    reason = bad_new_name(name)
+    if reason:
+        res["error"] = reason
+        return
+    res["account_name"] = name
+    if name_key(name) in seen:
+        res.update(state="duplicate", duplicate_of=seen[name_key(name)])
+        return
     code = add["code"].upper()
     if not code:
-        res["error"] = "No country code. Write the account as: name, PE"
+        res["error"] = "No country code. " + ADD_FORMAT_HINT
         return
     country = country_name_for(code, account_map, link_countries)
     if not country:
@@ -298,18 +344,20 @@ def _resolve_new_account(res: dict, add: dict, account_map, by_act, seen, normal
             return
         other = by_act.get(act, [])
         if other:
-            res.update(state="clash", candidates=other, account_name=add["name"],
+            res.update(state="clash", candidates=other,
                        error=f'Ad account {act} is also linked to "{other[0]}".')
             return
-    name = add["name"]
-    res["account_name"] = name
-    if name.lower() in seen:
-        res.update(state="duplicate", duplicate_of=seen[name.lower()])
-        return
+        used = seen.get("act:" + act)
+        if used:
+            res.update(state="clash", candidates=[used],
+                       error=f'Ad account {act} is already given for "{used}" in this list.')
+            return
     row = {k: "" for k in ROW_FIELDS}
     row.update(account_name=name, ad_account_id=act, country=country)
     res.update(state="add", country=country, row=row)
-    seen[name.lower()] = line
+    seen[name_key(name)] = line
+    if act:
+        seen["act:" + act] = name
 
 
 def found_rows(results: Iterable[dict]) -> list[dict]:

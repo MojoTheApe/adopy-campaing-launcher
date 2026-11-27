@@ -223,3 +223,73 @@ def test_an_account_linked_to_another_country_gets_a_second_one_not_moved(hub):
     account_links.link("Alpha 1", "country", "Chile")
     assert _send("Dan Dicker", "Alpha 1, PE")[1]["ok"]                 # уже в карте: строка как раньше, страна не меняется
     assert account_links.values_for("Alpha 1", "country") == ["Chile"]
+
+
+# ── Fix round 5 (ревью пакета): пробелы, лишние части, проверка названий, остальное пространство ввода ──
+
+def _lines(*items):
+    return chr(10).join(items)
+
+
+def test_inner_spaces_and_case_do_not_make_duplicates(hub):
+    (res,) = _preview("Alpha  1, PE")                                  # в карте «Alpha 1»
+    assert res["state"] == "found" and res["account_name"] == "Alpha 1"
+    results = _preview(_lines("gamma   9, PE", "GAMMA 9, PE", "Gamma 9, SA"))
+    assert [r["state"] for r in results] == ["add", "duplicate", "duplicate"]
+    assert results[0]["account_name"] == "gamma 9"                      # имя с одиночными пробелами
+    status, data = _send("Dan Dicker", _lines("gamma   9, PE", "GAMMA 9, PE"))
+    assert data["ok"] and data["added"] == ["gamma 9"]
+    assert len([r for r in _map_rows() if r["account_name"].lower() == "gamma 9"]) == 1
+
+
+def test_an_extra_part_gets_a_reason_on_its_row(hub):
+    (res,) = _preview("Name, PE, SA")
+    assert res["state"] == "not_found" and "Too many parts" in res["error"]
+    (res,) = _preview("Na" + chr(9) + "me" + chr(9) + "PE")           # табуляция внутри названия
+    assert res["state"] == "not_found" and "Too many parts" in res["error"]
+
+
+@pytest.mark.parametrize("name", ["=HYPERLINK(1)", "+x", "-x", "@x", "Bad" + chr(0) + "Name", "x" * 201])
+def test_bad_new_names_are_refused_with_a_reason(hub, name):
+    (res,) = _preview(name + ", PE")
+    assert res["state"] == "not_found" and res["error"] and not res.get("row")
+    status, data = _send("Dan Dicker", name + ", PE")
+    assert data["ok"] is False and _by_name(name) is None
+
+
+def test_a_name_of_the_longest_allowed_length_and_non_ascii_names_work(hub):
+    ok_name = "x" * 200
+    results = _preview(_lines(ok_name + ", PE", "Ñandú Ünï 9, PE", "ÉCOLE 1, PE", "école   1, PE"))
+    assert [r["state"] for r in results] == ["add", "add", "add", "duplicate"]
+    status, data = _send("Dan Dicker", "Ñandú Ünï 9, PE")
+    assert data["ok"] and _by_name("Ñandú Ünï 9")["country"] == "Peru"
+
+
+def test_empty_and_separator_only_lines(hub):
+    assert _preview(_lines("", "   ", chr(9))) == []                    # пустые строки отбрасываются
+    for line in (",", " , , ", ", PE", "," + chr(9) + ","):
+        (res,) = _preview(line)
+        assert res["state"] == "not_found" and "name, PE" in res["error"], line
+
+
+def test_a_duplicate_line_with_another_country_keeps_the_first_one(hub):
+    results = _preview(_lines("Gamma 9, PE", "Gamma 9, SA"))
+    assert [(r["state"], r.get("country")) for r in results] == [("add", "Peru"), ("duplicate", None)]
+    status, data = _send("Dan Dicker", _lines("Gamma 9, PE", "Gamma 9, SA"))
+    from src.web import account_links
+
+    assert data["ok"] and account_links.values_for("Gamma 9", "country") == ["Peru"]
+
+
+def test_number_outcomes_unreadable_used_by_the_map_used_twice_in_one_paste(hub):
+    (res,) = _preview("Gamma 9, PE, act_0")                              # нечитаемый номер
+    assert res["state"] == "not_found" and "Could not read the ad account number" in res["error"]
+    (res,) = _preview("Gamma 9, PE, act_" + D1)                          # занят Alpha 1 в карте
+    assert res["state"] == "clash" and "Alpha 1" in res["error"]
+    first, second = _preview(_lines("Gamma 9, PE, act_" + D3, "Delta 4, SA, act_" + D3))   # один номер в двух строках
+    assert first["state"] == "add" and second["state"] == "clash" and "Gamma 9" in second["error"]
+
+
+def test_lowercase_and_padded_country_codes_work(hub):
+    results = _preview(_lines("Gamma 9, pe", "Delta 4,   sa  "))
+    assert [(r["state"], r["country"]) for r in results] == [("add", "Peru"), ("add", "Saudi Arabia")]
