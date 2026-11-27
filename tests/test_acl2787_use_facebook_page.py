@@ -75,7 +75,8 @@ def test_the_press_is_tried_once_per_page_per_run(tmp_path):
     assert out.stop_kind == "plan" and len(press.calls) == 1
 
 
-def test_default_driver_is_inert_until_the_selector_is_verified(tmp_path):
-    assert pbu.press("act_1", "111") == pbu.NOT_LOCATED
+def test_default_press_without_a_profile_tab_keeps_the_manual_message(tmp_path):
+    # у поддельного клиента нет вкладки профиля: драйвер ничего не открывает и отказывает
+    assert pbu.press("act_1", "111", page_name="Sample Page") == "the account's profile tab is not available"
     out = _audit(AuditMeta(instagram="none"), _draft(tmp_path, ads=1))
     assert _by(out)["instagram_identity"]["detail"] == ig.MSG_NO_INSTAGRAM

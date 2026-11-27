@@ -2133,7 +2133,7 @@ class CampaignCreator:
                  use_facebook_page: Callable[[str, str], str] | None = None):
         self.client = client
         #: ACL-2787: нажать «Use Facebook Page» в профиле (act, page_id) -> "" при успехе, иначе причина.
-        self._use_facebook_page = use_facebook_page or _pbu.press
+        self._use_facebook_page = use_facebook_page or self._press_in_profile
         #: ACL-2787: Страницы, для которых нажатие уже пробовали в этом прогоне (один раз на Страницу).
         self._ig_pressed: set[str] = set()
         #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
@@ -2187,6 +2187,13 @@ class CampaignCreator:
             if got.status == _ig.NONE:
                 got = self._ig_cache[plan.page_id] = self._press_use_facebook_page(plan, got)
         return got
+
+    def _press_in_profile(self, act: str, page_id: str) -> str:
+        """ACL-2787: нажатие в браузере ЭТОГО профиля (адрес отладки рабочей вкладки); без него - отказ."""
+        tab = getattr(getattr(self.client, "transport", None), "tab", None)
+        names = getattr(self.facts, "page_names", None) or {}
+        return _pbu.press(act, page_id, cdp_url=str(getattr(tab, "_cdp_url", "") or ""),
+                          page_name=str(names.get(page_id) or ""))
 
     def _press_use_facebook_page(self, plan: CampaignPlan, got: _ig.IgIdentity) -> _ig.IgIdentity:
         """ACL-2787: только для `none` и один раз на Страницу; успех -> перечитать; отказ -> прежнее сообщение."""
