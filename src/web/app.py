@@ -4272,6 +4272,15 @@ async def api_user_assign_send(request: Request) -> JSONResponse:
         body = json.loads(resp.body)
         if resp.status_code == 200 and body.get("ok"):
             added.append(r["account_name"])
+            # Страница Home строит страны из связей (account_links), а колонка country в карте — одно значение
+            # для робота: без связи аккаунт остаётся в Available accounts. Ставим обе.
+            try:
+                from src.web import account_links as _links
+                from src.web.buyer import get_selected_cm
+
+                _links.link(r["account_name"], "country", r.get("country", ""), buyer=get_selected_cm())
+            except Exception:  # noqa: BLE001 — связь не должна ронять назначение; аккаунт уже в карте
+                pass
         else:
             r.update(state="not_found", row=None, error=body.get("error") or "Could not add the account to the map.")
     for r in results:

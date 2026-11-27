@@ -11,6 +11,16 @@ from tests.test_acl2920_assign_follows_logged_as import (  # noqa: F401  (фик
     D1, D2, _accounts, _post, _send, hub,
 )
 
+@pytest.fixture(autouse=True)
+def _links_in_tmp(monkeypatch, tmp_path):
+    """Связи стран (account_links.csv) в пустой временной папке, а не в настоящем настоящей папке ACL."""
+    from src.web import account_links
+
+    links_dir = tmp_path / "links"
+    links_dir.mkdir()
+    monkeypatch.setattr(account_links, "get_local_config_dir", lambda: str(links_dir))
+
+
 D3 = "3" * 16   # номер собираем в тесте: сканер секретов не любит длинные цифры в коде
 
 
@@ -175,3 +185,13 @@ def test_a_column_pasted_from_a_spreadsheet_with_tabs_works_like_commas(hub):
     assert results[1]["row"]["ad_account_id"] == "act_" + D3
     status, data = _send("Dan Dicker", "Gamma 9\tPE")
     assert data["ok"] and _by_name("Gamma 9")["country"] == "Peru"
+
+
+def test_added_accounts_are_placed_in_their_country_on_the_home_map(hub):
+    from src.web import account_links
+
+    status, data = _send("Dan Dicker", "Gamma 9, PE" + chr(10) + "Delta 4" + chr(9) + "SA")
+    assert data["ok"]
+    assert account_links.values_for("Gamma 9", "country") == ["Peru"]      # иначе аккаунт висит в Available accounts
+    assert account_links.values_for("Delta 4", "country") == ["Saudi Arabia"]
+    assert "Gamma 9" not in account_links.available_accounts(["Gamma 9", "Delta 4"])
