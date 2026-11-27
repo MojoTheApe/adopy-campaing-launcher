@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2945 — Assign accounts: add accounts missing from the map by name and country — 2026-11-27
+
+In the "Assign accounts to…" block a line can now be "account name, PE" (optionally with an `act_…` number). An account that is not in this machine's map is added to it under its country and assigned to the buyer selected in "Logged as"; Check shows "Will be added to Peru". Unknown country codes stay "Not found" with the code named.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1945).
+
 ## ACL-2939 — Targeting refusal notes per campaign — 2026-11-26
 
 A Meta refusal of an optional targeting search is now shown only on the campaign that hit it (or reused that lookup from the cache), not on every later campaign of the run.
