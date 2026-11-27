@@ -11,16 +11,6 @@ from tests.test_acl2920_assign_follows_logged_as import (  # noqa: F401  (фик
     D1, D2, _accounts, _post, _send, hub,
 )
 
-@pytest.fixture(autouse=True)
-def _links_in_tmp(monkeypatch, tmp_path):
-    """Связи стран (account_links.csv) в пустой временной папке, а не в настоящем настоящей папке ACL."""
-    from src.web import account_links
-
-    links_dir = tmp_path / "links"
-    links_dir.mkdir()
-    monkeypatch.setattr(account_links, "get_local_config_dir", lambda: str(links_dir))
-
-
 D3 = "3" * 16   # номер собираем в тесте: сканер секретов не любит длинные цифры в коде
 
 
@@ -195,3 +185,41 @@ def test_added_accounts_are_placed_in_their_country_on_the_home_map(hub):
     assert account_links.values_for("Gamma 9", "country") == ["Peru"]      # иначе аккаунт висит в Available accounts
     assert account_links.values_for("Delta 4", "country") == ["Saudi Arabia"]
     assert "Gamma 9" not in account_links.available_accounts(["Gamma 9", "Delta 4"])
+
+
+# ── Fix round 4 (ревью) ──────────────────────────────────────────────────
+
+def test_the_existing_group_spelling_wins_so_one_country_is_one_group(hub):
+    from src.web import account_links
+
+    account_links.link("Old 1", "country", "SA")                       # группа записана кодом
+    account_links.link("Old 2", "country", "Peru")                     # другая — названием
+    (res,) = _preview("New 1, SA")
+    assert res["country"] == "SA"
+    status, data = _send("Dan Dicker", "New 1, SA" + chr(10) + "New 2, PE")
+    assert data["ok"]
+    assert account_links.values_for("New 1", "country") == ["SA"]
+    assert account_links.values_for("New 2", "country") == ["Peru"]
+    assert sorted(account_links.all_values("country")) == ["Peru", "SA"]   # новых групп не появилось
+    assert _by_name("New 1")["country"] == "SA"                       # то же написание в строке карты
+
+
+def test_a_failed_link_keeps_the_assign_and_marks_that_line_only(hub):
+    from unittest.mock import patch
+
+    from src.web import account_links
+
+    with patch.object(account_links, "link", side_effect=OSError("disk")):
+        status, data = _send("Dan Dicker", "Gamma 9, PE" + chr(10) + "Alpha 1")
+    assert data["ok"] and data["assigned"] == ["Gamma 9", "Alpha 1"]
+    by = {r["input"]: r for r in data["results"]}
+    assert by["Gamma 9, PE"]["note"] == "added to the map, not placed under Peru"
+    assert "note" not in by["Alpha 1"]
+
+
+def test_an_account_linked_to_another_country_gets_a_second_one_not_moved(hub):
+    from src.web import account_links
+
+    account_links.link("Alpha 1", "country", "Chile")
+    assert _send("Dan Dicker", "Alpha 1, PE")[1]["ok"]                 # уже в карте: строка как раньше, страна не меняется
+    assert account_links.values_for("Alpha 1", "country") == ["Chile"]

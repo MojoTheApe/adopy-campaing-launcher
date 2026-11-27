@@ -95,7 +95,7 @@
       if (r.state === 'found') extra = esc(r.account_name) + (r.sent ? ' · assigned' : '');
       else if (r.state === 'ambiguous') extra = esc((r.candidates || []).join(', '));
       else if (r.state === 'clash') extra = esc(r.error || '');
-      else if (r.state === 'add') extra = esc(r.account_name) + (r.sent ? ' · assigned' : r.added ? ' · added to the map, not assigned' : '');
+      else if (r.state === 'add') extra = esc(r.account_name) + (r.sent ? ' · assigned' : r.added ? ' · added to the map, not assigned' : '') + (r.note ? ' · ' + esc(r.note) : '');
       else if (r.state === 'not_found') extra = esc(r.error || '');
       else if (r.state === 'duplicate') extra = esc(r.account_name) + ' is already in this list';
       var label = (r.state === 'found' && r.match === 'partial') ? 'Matched by part of the name'

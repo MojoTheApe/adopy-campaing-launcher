@@ -4122,7 +4122,14 @@ def _user_assign_resolve(text: str) -> list[dict]:
                 labels.append(label)
     except Exception:  # noqa: BLE001 — общий список необязателен, карта владельца важнее
         labels = []
-    return _ua.resolve_lines(_ua.parse_lines(text), account_map, labels, normalise=normalise_ad_account_id)
+    try:
+        from src.web import account_links as _links
+
+        link_countries = _links.all_values("country")
+    except Exception:  # noqa: BLE001 — без связей берём написание из карты
+        link_countries = []
+    return _ua.resolve_lines(_ua.parse_lines(text), account_map, labels, normalise=normalise_ad_account_id,
+                             link_countries=link_countries)
 
 
 def _user_assign_enabled() -> bool:
@@ -4279,8 +4286,8 @@ async def api_user_assign_send(request: Request) -> JSONResponse:
                 from src.web.buyer import get_selected_cm
 
                 _links.link(r["account_name"], "country", r.get("country", ""), buyer=get_selected_cm())
-            except Exception:  # noqa: BLE001 — связь не должна ронять назначение; аккаунт уже в карте
-                pass
+            except Exception:  # noqa: BLE001 — связь не должна ронять назначение; аккаунт уже в карте, строка получит пометку
+                r["note"] = f"added to the map, not placed under {r.get('country', '')}"
         else:
             r.update(state="not_found", row=None, error=body.get("error") or "Could not add the account to the map.")
     for r in results:

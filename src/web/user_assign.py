@@ -158,13 +158,20 @@ def _country_name_table() -> dict[str, str]:
     return out
 
 
-def country_name_for(code: str, account_map: Mapping[str, Any]) -> str:
-    """Название страны по коду. Предпочитаем написание, которое карта уже использует (Saudi Arabia, а не SAUDI ARABIA)."""
+def country_name_for(code: str, account_map: Mapping[str, Any], link_countries: Iterable[str] = ()) -> str:
+    """Название страны по коду.
+
+    Порядок: написание уже существующей группы на карте Home (связи; там бывает и «SA», и «Saudi Arabia» — иначе
+    получится две группы одной страны), затем написание из карты аккаунтов, затем имя из справочника."""
     from src.analysis_agent.country_names import COUNTRY_CODES
+    from src.web.account_links import _same_country
 
     code = (code or "").strip().upper()
     if len(code) != 2 or not code.isalpha():
         return ""
+    for used in link_countries:
+        if used and _same_country(code, used):
+            return used
     for entry in account_map.values():
         used = str(getattr(entry, "country", "") or "").strip()
         if used and COUNTRY_CODES.get(used.lower()) == code:
@@ -196,6 +203,7 @@ def resolve_lines(
     sheet_labels: Iterable[str] = (),
     *,
     normalise: Callable[[str], str],
+    link_countries: Iterable[str] = (),
 ) -> list[dict]:
     """Состояние каждой строки: found / not_found / ambiguous / duplicate / clash.
 
@@ -266,18 +274,19 @@ def resolve_lines(
                     res["match"] = "partial"
                 seen[name.lower()] = line
         elif add:
-            _resolve_new_account(res, add, account_map, by_act, seen, normalise, line)
+            _resolve_new_account(res, add, account_map, by_act, seen, normalise, line, link_countries)
         out.append(res)
     return out
 
 
-def _resolve_new_account(res: dict, add: dict, account_map, by_act, seen, normalise, line: str) -> None:
+def _resolve_new_account(res: dict, add: dict, account_map, by_act, seen, normalise, line: str,
+                         link_countries: Iterable[str] = ()) -> None:
     """Аккаунта нет в карте, строка «название, код страны»: state `add` или понятное «Not found»."""
     code = add["code"].upper()
     if not code:
         res["error"] = "No country code. Write the account as: name, PE"
         return
-    country = country_name_for(code, account_map)
+    country = country_name_for(code, account_map, link_countries)
     if not country:
         res["error"] = f'Unknown country code "{add["code"]}". Use a 2-letter code such as PE or SA.'
         return
