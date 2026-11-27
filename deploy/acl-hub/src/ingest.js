@@ -132,7 +132,7 @@ export async function ingestEvents(env, events, { batchId, failedRuns = null }) 
 }
 
 // Распаковать gzip с ограничением размера; null — если не влезло.
-async function gunzipText(body) {
+export async function gunzipText(body) {
   const reader = new Response(body).body.pipeThrough(new DecompressionStream("gzip")).getReader();
   const parts = [];
   let size = 0;

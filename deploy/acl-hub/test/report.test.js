@@ -35,6 +35,12 @@ async function makeEnv(events = [...YOTAM, ...gil()]) {
   await ingestEvents(env, events, { batchId: "b" });
   return env;
 }
+// Лента смотрит 48 ч назад от «сейчас»: часы фиксируются на времени фикстур, иначе тест стареет вместе с ними.
+async function atFixtureTime(fn) {
+  const real = Date.now;
+  Date.now = () => Date.parse("2026-11-17T12:00:00Z");
+  try { return await fn(); } finally { Date.now = real; }
+}
 const get = async (env, path) => {
   const res = await worker.fetch(new Request(`https://hub${path}`, { headers: { Authorization: `Bearer ${OWNER}` } }), env);
   return { status: res.status, body: res.status === 200 ? await res.json() : null };
@@ -77,7 +83,7 @@ test("summary empty day", async () => {
 
 test("live levels and text", async () => {
   const env = await makeEnv();
-  const { body } = await get(env, "/api/live?limit=50");
+  const { body } = await atFixtureTime(() => get(env, "/api/live?limit=50"));
   assert.ok(body.events.every((e) => !e.type.startsWith("raw.")));
   assert.ok(body.events[0].ts >= body.events.at(-1).ts);
   const fail = body.events.find((e) => e.campaign === "CL_ML_All_Video_CL_HV_TRD_45_16.11" && e.type === "publish.result");
@@ -147,7 +153,7 @@ test("live filters by manager on the server", async () => {
   const noisy = Array.from({ length: 30 }, (_, i) => ({ ...gil()[0], event_id: `n:${i}`, type: "plan.checked",
     ts: `2026-11-17T10:00:${String(i).padStart(2, "0")}.000+00:00`, job_id: null, payload: {} }));
   const env = await makeEnv([...YOTAM, ...gil(), ...noisy]);
-  const { body } = await get(env, "/api/live?limit=10&manager=" + encodeURIComponent("Yotam Balteriski"));
+  const { body } = await atFixtureTime(() => get(env, "/api/live?limit=10&manager=" + encodeURIComponent("Yotam Balteriski")));
   assert.ok(body.events.length > 0);
   assert.ok(body.events.every((e) => e.manager === "Yotam Balteriski"));
 });
@@ -161,7 +167,7 @@ test("jobs counted from runs when job.created is missing", async () => {
 test("object errors are shown as text", async () => {
   const bad = { ...gil()[7], event_id: "o:1", campaign: "G_obj", payload: { campaign_name: "G_obj", success: false, error: { message: "boom" } } };
   const env = await makeEnv([bad]);
-  const { body } = await get(env, "/api/live");
+  const { body } = await atFixtureTime(() => get(env, "/api/live"));
   assert.ok(!body.events[0].text.includes("[object Object]"));
   assert.match(body.events[0].text, /boom/);
 });
