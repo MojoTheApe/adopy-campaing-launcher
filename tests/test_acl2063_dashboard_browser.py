@@ -196,7 +196,7 @@ def test_first_window_serial_sweep_skips_fresh_and_reload_does_not_repeat(dashbo
     site.save('Acc', age=7200)
     goto(page, 'http://acl.test/')
     wait_ready(page)
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.summaries.Acc.age_s < 3600")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.summaries?.Acc?.age_s < 3600")
     assert site.reads == [('Acc', 'schedule:2026-10-24/08:00')]
     page.reload(); wait_ready(page)
     assert site.reads == [('Acc', 'schedule:2026-10-24/08:00')]
@@ -226,13 +226,13 @@ def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashbo
     site.fail.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
     goto(page, 'http://acl.test/'); wait_ready(page)
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh && document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc.state === 'failed'")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.refreshRows?.Fresh && document.querySelector('.amap-campaigns')?._hc?.state?.refreshRows?.Acc?.state === 'failed'")
     assert [a for a, _ in site.reads] == ['Acc', 'Fresh']
     retry = page.locator('tr:has(td[data-account="Acc"]) button.hc-rc')
     assert retry.is_visible() and retry.inner_text() == 'Retry'
     assert page.locator('button.hc-rc:visible').count() == 1
     site.fail.clear(); retry.click()
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc.state === 'ok'")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.refreshRows?.Acc?.state === 'ok'")
     assert site.reads[-1] == ('Acc', 'retry') and len(site.reads) == 3
     assert not retry.is_visible() and site.errors == []
 
@@ -243,14 +243,14 @@ def test_checkpoint_shows_on_its_account_only_and_other_reads_continue(dashboard
     site.checkpoint.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
     goto(page, 'http://acl.test/'); wait_ready(page)
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.refreshRows?.Fresh?.state === 'ok'")
     assert sorted(a for a, _ in site.reads) == ['Acc', 'Fresh']
     assert site.q.state()['halt'] is None
     assert page.locator('#account-refresh-status[role=alert]').count() == 0
     assert page.locator('#account-lock-status').count() == 0
     site.checkpoint.clear()
     page.locator('tr:has(td[data-account="Acc"]) button.hc-rc').click()
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.refreshRows?.Acc?.state === 'ok'")
     assert [r for r in site.reads if r[0] == 'Acc'][-1] == ('Acc', 'retry')
     assert [a for a, _ in site.reads].count('Fresh') == 1 and site.errors == []
 
@@ -263,7 +263,7 @@ def test_initial_mlx_refusal_survives_local_status_and_recovers_only_on_action(d
     monkeypatch.setattr(site.web, '_mlx_batch_refusal', lambda *a: site.web.JSONResponse(
         {'ok': False, 'code': 'mlx_session_lost', 'error': 'Multilogin session lost. Reopen Multilogin.'}, status_code=409))
     goto(page, 'http://acl.test/'); wait_ready(page)
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.readsAvailable !== null")
+    page.wait_for_function("!!document.querySelector('.amap-campaigns')?._hc?.state && document.querySelector('.amap-campaigns')._hc.state.readsAvailable !== null")
     page.evaluate('window.aclAccountRefresh.load()')
     banner = page.locator('#account-refresh-status')
     assert banner.is_visible() and 'Multilogin' in banner.inner_text()
@@ -275,7 +275,7 @@ def test_initial_mlx_refusal_survives_local_status_and_recovers_only_on_action(d
         page.screenshot(path=str(Path(os.environ['ACL2063_FIX_SHOTS']) / f'mlx-refusal-{width}.png'), full_page=True)
     monkeypatch.setattr(site.web, '_mlx_batch_refusal', lambda *a: None)
     open_acc(page, 'Acc')
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.refreshRows?.Acc?.state === 'ok'")
     assert site.reads == [('Acc', 'attention')] and banner.is_hidden()
     assert site.requests.count(('POST', '/account-refresh/page-open')) == 1
 
@@ -296,7 +296,7 @@ def test_later_mlx_admission_refusal_survives_local_status(dashboard, monkeypatc
     assert site.requests.count(('POST', '/account-refresh/page-open')) == 1
     monkeypatch.setattr(site.web, '_mlx_batch_refusal', lambda *a: None)
     page.evaluate('window.aclAccountRefresh.request("Acc", "retry")')
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.refreshRows?.Acc?.state === 'ok'")
     assert site.reads == [('Acc', 'retry')] and banner.is_hidden()
 
 
@@ -321,12 +321,12 @@ def test_hand_edit_pause_refuses_write_shows_message_and_refreshes_account(dashb
     site.save('Acc')
     goto(page, 'http://acl.test/?view_only=1'); wait_ready(page); open_acc(page, 'Acc')
     switch = page.locator(f'.hc-switch[data-object-id="{CAMP_A}"]')
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.avail !== null")
+    page.wait_for_function("!!document.querySelector('.amap-campaigns')?._hc?.state && document.querySelector('.amap-campaigns')._hc.state.avail !== null")
     switch.click()
     page.wait_for_selector('dialog.acm-confirm[open]')
     world.meta.objs[CAMP_A]['status'] = 'PAUSED'
     page.click('dialog.acm-confirm [data-acm="confirm"]')
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.summaries.Acc.counts.campaigns > 0")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.summaries?.Acc?.counts?.campaigns > 0")
     # The batch note left the toolbar with ACL-2374: the refusal now shows as the row's failure marker.
     page.wait_for_function("(document.querySelector('.hc-mk.bad')||{getAttribute:()=>''}).getAttribute('aria-label').toLowerCase().includes('previous state kept')")
     page.wait_for_function(f"document.querySelector('.hc-switch[data-object-id=\"{CAMP_A}\"]').getAttribute('aria-checked') === 'false'")
@@ -370,3 +370,17 @@ def test_cpl_default_order_survives_structure_refresh(dashboard):
     headings=page.locator('.hc-table .hc-heads th').all_inner_texts()
     assert headings.index('CPL')==headings.index('CPA (FTD)')-1
     assert site.reads==[] and site.errors==[]
+
+
+def test_acl2634_hc_wait_predicates_are_null_safe():
+    # ACL-2634: пока .amap-campaigns пересобирается, querySelector даёт null;
+    # предикат обязан вернуть false, а не бросить «reading '_hc'».
+    src = Path(__file__).read_text(encoding='utf-8')
+    preds = re.findall(r'wait_for_function\("(.*?)"\)', src)
+    hc = [p for p in preds if '_hc' in p]
+    assert len(hc) >= 10
+    for p in hc:
+        # каждое обращение к _hc/state/rows… — только через ?. либо после проверки на null
+        for m in re.finditer(r"querySelector\('\.amap-campaigns'\)(\??)\._hc", p):
+            assert m.group(1) == '?' or p.startswith('!!document.querySelector'), p
+        assert not re.search(r"\._hc\.", p) or p.startswith('!!document'), p
