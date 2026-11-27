@@ -6,11 +6,13 @@ import json
 import os
 import platform
 import re
+import sqlite3
 import sys
 import tempfile
 import zipfile
 import uuid
-from datetime import datetime, timezone
+from contextlib import closing
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -221,6 +223,127 @@ def _account_name_rules_summary() -> dict[str, Any]:
         return {"ok": False, "rules": 0, "error": f"{type(exc).__name__}: {exc}"}
 
 
+ARCHIVE_FILE = "bi_stats_archive.sqlite3"
+SPEND_STORE_FILE = "account_spend.json"
+
+
+def _default_period(dates: list[str], today: date | None = None) -> tuple[str, str]:
+    """Тот же период, что открывает дешборд: месяц по сегодня, иначе последний месяц данных."""
+    if not dates:
+        return "", ""
+    today = today or date.today()
+    start, end = today.replace(day=1).isoformat(), today.isoformat()
+    if any(start <= day <= end for day in dates):
+        return start, end
+    last = dates[-1]
+    return last[:7] + "-01", last
+
+
+def _saved_source_frame(path: Path):
+    """Сохранённая статистика (архив на этой машине), только чтение: ни БД, ни миграций."""
+    import pandas as pd
+    from src.analysis_agent import bi_compare
+
+    if not path.is_file():
+        return None
+    with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5)) as conn:
+        frame = pd.read_sql_query("SELECT * FROM stats_rows", conn)
+    frame["Date"] = pd.to_datetime(frame["Date"], errors="coerce")
+    frame = frame[frame["Date"].notna()]
+    for column in ("$ Spend",):
+        frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
+    frame["Account Alias"] = frame["Account Alias"].fillna("").astype(str)
+    frame = frame[frame["Account Alias"].str.strip() != ""]
+    return frame.rename(columns={"source": bi_compare.SOURCE_COLUMN})
+
+
+def _saved_readings(path: Path, date_from: str, date_to: str) -> tuple[dict[str, dict], set[str]]:
+    """Сохранённые чтения аккаунтов за период + все аккаунты, у которых есть любые чтения."""
+    from src.analysis_agent import account_spend
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}, set()
+    if not isinstance(data, dict):
+        return {}, set()
+    want = f"|{date_from}|{date_to}"
+    readings: dict[str, dict] = {}
+    known: set[str] = set()
+    for key, raw in data.items():
+        if not isinstance(raw, dict) or str(key).startswith("status|") or str(key).count("|") < 2:
+            continue
+        known.add(str(key).split("|", 1)[0])
+        if not (date_from and str(key).endswith(want)):
+            continue
+        try:
+            reading = account_spend._restore_reading(key, raw).to_dict()
+        except Exception:
+            continue
+        # Только числа и единицы: текст ошибок, снимки и дерево кампаний в архив не идут.
+        readings[str(key)[:-len(want)]] = {
+            name: reading.get(name) for name in
+            ("state", "spend", "currency", "currency_code", "timezone", "day_boundary")}
+    return readings, known
+
+
+def _machine_account_names(config_dir: Path) -> set[str]:
+    names: set[str] = set()
+    try:
+        with (config_dir / "ad_account_map.csv").open(newline="", encoding="utf-8-sig") as stream:
+            for row in csv.DictReader(stream):
+                name = (row.get("account_name") or row.get("account") or "").strip()
+                if name:
+                    names.add(name)
+    except Exception:
+        pass
+    return names
+
+
+def source_vs_account_summary(config_directory: str | Path, today: date | None = None) -> dict[str, Any]:
+    """ACL-2605: сохранённое сравнение «источник против аккаунта» за период по умолчанию.
+
+    Только то, что уже лежит на машине: архив статистики и сохранённые чтения
+    аккаунтов. Ни BI, ни профилей, ни API Meta. Никогда не бросает.
+    """
+    config_dir = Path(config_directory)
+    try:
+        from src.analysis_agent import bi_compare
+        from src.analysis_agent.account_names import account_key
+
+        frame = _saved_source_frame(config_dir / ARCHIVE_FILE)
+        if frame is None or frame.empty:
+            return {"available": False, "reason": "no saved source statistics", "date_from": "", "date_to": "", "rows": []}
+        dates = sorted({d.strftime("%Y-%m-%d") for d in frame["Date"]})
+        date_from, date_to = _default_period(dates, today)
+        readings, reading_accounts = _saved_readings(config_dir / SPEND_STORE_FILE, date_from, date_to)
+        # Архив хранит строки всех менеджеров: в пакет идут только аккаунты этой машины.
+        known = {account_key(name) for name in reading_accounts | _machine_account_names(config_dir)}
+        frame = frame[[account_key(name) in known for name in frame["Account Alias"]]]
+        scoped = bi_compare.period_rows(frame, date_from, date_to)
+        info = bi_compare.provenance(frame=scoped)
+        rows = bi_compare.compare_spend(
+            bi_compare.source_spend_by_account(frame, date_from, date_to),
+            readings,
+            source_context=bi_compare.source_context_by_account(frame, date_from, date_to),
+        )
+        keep = ("account", "source_spend", "source_currency", "account_spend", "account_currency",
+                "account_timezone", "account_day_boundary", "comparison_state", "gap", "differs")
+        return {
+            "available": True, "date_from": date_from, "date_to": date_to,
+            "source": {k: info.get(k) for k in ("source", "currency_code", "timezone", "day_boundary")},
+            "rows": [{k: row.get(k) for k in keep} for row in rows],
+        }
+    except Exception as exc:
+        return {"available": False, "reason": f"{type(exc).__name__}", "date_from": "", "date_to": "", "rows": []}
+
+
+def _sanitize_source_vs_account(section: dict[str, Any], local_values: Iterable[str], config_dir: Path) -> dict[str, Any]:
+    """Как весь пакет, но имена аккаунтов из карты остаются читаемыми: идентификаторы (act_, профили, токены) маскируются."""
+    labels = _machine_account_names(config_dir)
+    return _sanitize_document(section, [value for value in local_values if value not in labels])
+
+
 def _sanitize_document(value: Any, local_values: Iterable[str]) -> Any:
     if isinstance(value, str):
         return sanitize_text(value, local_values)
@@ -246,6 +369,11 @@ def export_diagnostics(config_directory: str | Path, manifest_path: str | Path) 
             summary_text = json.dumps(_sanitize_document(build_summary(config_dir, manifest_path), local_values), indent=2, sort_keys=True) + "\n"
             assert_sanitized(summary_text)
             archive.writestr("summary.json", summary_text)
+            comparison_text = json.dumps(
+                _sanitize_source_vs_account(source_vs_account_summary(config_dir), local_values, config_dir),
+                indent=2, sort_keys=True) + "\n"
+            assert_sanitized(comparison_text)
+            archive.writestr("source_vs_account.json", comparison_text)
             log_dir = config_dir / "logs"
             logs = sorted(
                 (path for path in log_dir.glob("*.log") if path.is_file()),
@@ -258,7 +386,7 @@ def export_diagnostics(config_directory: str | Path, manifest_path: str | Path) 
                 archive.writestr(f"logs/{index:02d}.txt", sanitized)
             archive.writestr(
                 "README.txt",
-                "Sanitized ACL diagnostics. Configuration, account mappings, OAuth files, and tokens are excluded.\n",
+                "Sanitized ACL diagnostics. Configuration, account mappings, OAuth files, and tokens are excluded. source_vs_account.json holds saved statistics versus saved account readings.\n",
             )
         os.replace(temp, output)
     finally:
