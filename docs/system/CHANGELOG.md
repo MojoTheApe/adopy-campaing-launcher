@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2950 — Hub sync places assigned accounts under their country on the buyer's Home map — 2026-11-27
+
+Accounts synced from the hub carried their country only into the machine's account map, while Home groups by the links store, so a buyer saw every assigned account under "Available accounts". After each sync every hub account with a country is now placed under it (an existing group's spelling is reused, so "SA" and "Saudi Arabia" stay one group). An account the buyer already placed is never moved, links are never removed, accounts removed from the hub are skipped, and a write failure never fails the sync. Accounts synced earlier are placed on the next sync.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1950).
+
 ## ACL-2945 — Assign accounts: add accounts missing from the map by name and country — 2026-11-27
 
 In the "Assign accounts to…" block a line can now be "account name, PE" (optionally with an `act_…` number). An account that is not in this machine's map is added to it under its country and assigned to the buyer selected in "Logged as"; Check shows "Will be added to Peru". Unknown country codes stay "Not found" with the code named.
