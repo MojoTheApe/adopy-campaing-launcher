@@ -288,3 +288,49 @@ def _node_cases(cases):
         Path(path).unlink(missing_ok=True)
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout)
+
+
+# ───────────────────────── ACL-2527: прогон по странным значениям ─────────────────────────
+
+@pytest.mark.parametrize("odd", ["", None, "see_details", " SEE_DETAILS ", "SEE DETAILS", "SEE_DETAILS2"])
+def test_odd_button_values_never_open_see_details_for_a_website_ad(tmp_path, odd):
+    """Пустое/регистр/пробелы/почти-значение: для сайта SEE_DETAILS не появляется ни в одном слое."""
+    try:
+        plan = cr.plan_from_draft(_website_draft(tmp_path, odd))
+    except cr.PlanError:
+        return
+    assert all(ad.cta != BTN for s in plan.ad_sets for ad in s.ads)
+
+
+@pytest.mark.parametrize("odd", ["SEE DETAILS", "SEE_DETAILS2", "SEE-DETAILS"])
+def test_near_miss_button_values_are_not_turned_into_see_details_for_a_form_ad(tmp_path, odd):
+    try:
+        plan = cr.plan_from_draft(_form_plan(tmp_path, odd))
+    except cr.PlanError:
+        return
+    assert all(ad.cta != BTN for s in plan.ad_sets for ad in s.ads)
+
+
+@pytest.mark.parametrize("odd", ["see_details", " SEE_DETAILS ", "See_Details"])
+def test_case_and_spaces_are_normalised_to_the_real_value_for_a_form_ad(tmp_path, odd):
+    plan = cr.plan_from_draft(_form_plan(tmp_path, odd))
+    assert all(ad.cta == BTN for s in plan.ad_sets for ad in s.ads)
+
+
+@pytest.mark.parametrize("empty", ["", None])
+def test_an_empty_button_on_a_form_ad_falls_back_to_the_default_not_see_details(tmp_path, empty):
+    plan = cr.plan_from_draft(_form_plan(tmp_path, empty))
+    assert all(ad.cta == "LEARN_MORE" for s in plan.ad_sets for ad in s.ads)
+
+
+@pytest.mark.parametrize("cta", [None, "", ["SEE_DETAILS", "LEARN_MORE"], 5])
+def test_policy_refuses_malformed_button_values_on_a_form_creative(cta):
+    story = _story(cta=cta)
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives", _creative_params(story), on_ad=True)
+
+
+def test_missing_call_to_action_is_not_a_see_details_bypass_for_website_ads():
+    web = {"page_id": "111", "link_data": {"message": "m", "link": "https://x.invalid/"}}
+    out = _node_cases([{"name": "web", "edge": "adcreatives", "params": _creative_params(web), "on_ad": False}])
+    assert out["web"] in ("sent", "refused")  # поведение без кнопки не менялось; главное - не падает
