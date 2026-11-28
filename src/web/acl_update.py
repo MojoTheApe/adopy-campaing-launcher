@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -104,28 +106,33 @@ def installed() -> dict[str, str]:
     return dict(_installed)
 
 
-# ── STAGE-значок в шапке (ACL-1267) ────────────────────────────────────
+# ── Значок версии в шапке (ACL-2638, раньше STAGE-значок ACL-1267) ──────
 #
-# Решение владельца 22.09: процесс остаётся как есть (ветка → stage → main,
-# релиз менеджерам — метка на main). Дешборд, запущенный из исходников, — это
-# версия, на которой владелец работает, и в шапке он хочет видеть STAGE и
-# сколько правок в ней ещё не залито в stage. Упакованная сборка — это то, что
-# стоит у менеджеров: значка у неё нет.
+# После пакетной доставки v2 (09.10) через ветку stage ничего не идёт, поэтому
+# сравнение с ней только росло и ничего не говорило. Теперь сборку, запущенную
+# из исходников, сравниваем с последним опубликованным выпуском
+# (MojoTheApe/acl-releases, Latest): равна выпуску — показываем его имя; впереди —
+# «+N tasks not in release» (задачи ACL по темам коммитов, коммиты — только если
+# задачи не распознаны); тестовая сборка с ветками задач поверх main — выпуск и
+# id этих задач. Выпуск неизвестен или недоступен — «release unknown».
+# Упакованная сборка (у менеджеров) значка не показывает.
 #
-# Считаем коммиты, которых нет в ветке stage проекта, без слияний и без копий,
-# уже перенесённых в stage тем же патчем (`--cherry-pick`). Ветку ищем у того
-# remote, который смотрит в репозиторий проекта: у владельца это `work`, на
-# свежем клоне — `origin`. Свежесть — фоновым fetch раз в STAGE_REFRESH_S, чтобы
-# отрисовка страницы никогда не ждала сеть.
+# Сеть — только в фоне раз в RELEASE_REFRESH_S: отрисовка шапки отдаёт последнее
+# известное и никогда не ждёт. До первой сверки — «release unknown».
 
 PROJECT_REPO = "MojoTheApe/adopy-campaing-launcher"
-STAGE_BRANCH = "stage"
-STAGE_REFRESH_S = 600
+RELEASES_REPO = "MojoTheApe/acl-releases"
+RELEASE_TAG_PREFIX = "acl-release-"
+RELEASE_REFRESH_S = 600
+RELEASE_API_TIMEOUT_S = 10
 
-_stage_lock = threading.Lock()
+_badge_lock = threading.Lock()
 # `checked` = None — ещё ни разу: monotonic() на Windows считает от загрузки
-# машины, и с нулём первая сверка откладывалась на 10 минут после старта.
-_stage_state: dict[str, Any] = {"checked": None, "fetching": False, "last": None}
+# машины, и с нулём первая сверка откладывалась бы на 10 минут после старта.
+_badge_state: dict[str, Any] = {"checked": None, "fetching": False, "last": None}
+
+_TASK_RE = re.compile(r"\bACL-(\d+)\b")
+_TITLE_PREFIX_RE = re.compile(r"^\w+(\([^)]*\))?!?:\s*")
 
 
 def _project_remote() -> str:
@@ -139,66 +146,133 @@ def _project_remote() -> str:
     return ""
 
 
-def _stage_count() -> dict[str, Any]:
-    """Сколько коммитов этой версии нет в stage — по уже скачанной ветке."""
+def _unknown(why: str, release: str = "") -> dict[str, Any]:
+    return {"known": False, "kind": "unknown", "release": release, "text": "release unknown",
+            "tooltip": f"The latest release could not be determined: {why}.", "tasks": [],
+            "commits": 0, "why": why}
+
+
+def _latest_release_tag() -> str:
+    """Имя последнего выпуска (Latest в acl-releases) или "" — сеть, только из фона."""
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{RELEASES_REPO}/releases/latest",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "acl-dashboard"})
+    with urllib.request.urlopen(req, timeout=RELEASE_API_TIMEOUT_S) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    tag = data.get("tag_name") if isinstance(data, dict) else ""
+    return tag.strip() if isinstance(tag, str) else ""
+
+
+def _release_name(tag: str) -> str:
+    return tag[len(RELEASE_TAG_PREFIX):] if tag.startswith(RELEASE_TAG_PREFIX) else tag
+
+
+def _tasks_in(rev_args: list[str]) -> tuple[list[tuple[str, str]], int]:
+    """Задачи ACL в выборке коммитов (без слияний): ([(id, название)], число коммитов)."""
+    out = _git_out("log", "--no-merges", "--format=%x1e%s%x1f%b", *rev_args)
+    seen: dict[str, str] = {}
+    commits = 0
+    for rec in out.split("\x1e"):
+        if not rec.strip():
+            continue
+        commits += 1
+        subject, _, body = rec.partition("\x1f")
+        for num in _TASK_RE.findall(subject + "\n" + body):
+            key = f"ACL-{num}"
+            if key not in seen:
+                seen[key] = _TITLE_PREFIX_RE.sub("", _TASK_RE.sub("", subject).strip(" []()—–-:·\t"))
+    tasks = sorted(seen.items(), key=lambda kv: int(kv[0][4:]))
+    return tasks, commits
+
+
+def _tooltip_lines(tasks: list[tuple[str, str]]) -> str:
+    return "\n".join(f"{i} — {t}" if t else i for i, t in tasks)
+
+
+def _compare(tag: str) -> dict[str, Any]:
+    """Сравнить HEAD с выпуском `tag` по уже скачанным тегам и ветке main."""
+    if not tag:
+        return _unknown("no release is published")
+    name = _release_name(tag)
+    head = _git_out("rev-parse", "HEAD").lower()
+    if not head:
+        return _unknown("this copy is not a git checkout", name)
+    rel_sha = _git_out("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}").lower()
+    if not rel_sha:
+        return _unknown(f"release {name} is not in this checkout yet", name)
+    if rel_sha == head:
+        return {"known": True, "kind": "equal", "release": name, "text": f"release {name}",
+                "tooltip": f"This build is release {name}.", "tasks": [], "commits": 0, "why": ""}
+    tasks, commits = _tasks_in([f"{rel_sha}..{head}"])
+    if commits == 0:
+        return {"known": True, "kind": "behind", "release": name, "text": f"older than release {name}",
+                "tooltip": f"Release {name} has changes this build does not have.",
+                "tasks": [], "commits": 0, "why": ""}
+    # Тестовая сборка — в ней есть коммиты, которых нет в main проекта (ветки задач).
     remote = _project_remote()
-    if not remote:
-        return {"known": False, "ahead": None, "ref": "",
-                "why": f"no git remote points at {PROJECT_REPO}"}
-    ref = f"{remote}/{STAGE_BRANCH}"
-    if not _git_out("rev-parse", "--verify", "--quiet", ref):
-        return {"known": False, "ahead": None, "ref": ref, "why": f"{ref} has not been fetched"}
-    count = _git_out("rev-list", "--count", "--no-merges", "--cherry-pick", "--right-only",
-                     f"{ref}...HEAD")
-    if not count.isdigit():
-        return {"known": False, "ahead": None, "ref": ref, "why": f"could not compare with {ref}"}
-    return {"known": True, "ahead": int(count), "ref": ref, "why": ""}
+    on_main = bool(remote) and bool(_git_out("rev-parse", "--verify", "--quiet", f"{remote}/main"))
+    extra = 0
+    if on_main:
+        extra = _tasks_in(["--cherry-pick", "--right-only", f"{remote}/main...{head}"])[1]
+    ids = [i for i, _ in tasks]
+    if extra:
+        if tasks:
+            text = f"release {name} + " + ", ".join(ids)
+            tip = f"Release {name} plus:\n" + _tooltip_lines(tasks)
+        else:
+            text = f"release {name} + {commits} commit{'s' if commits != 1 else ''}"
+            tip = f"Release {name} plus {commits} commit(s) that name no ACL task."
+        return {"known": True, "kind": "test", "release": name, "text": text, "tooltip": tip,
+                "tasks": ids, "commits": commits, "why": ""}
+    if tasks:
+        n = len(tasks)
+        text = f"+{n} task{'s' if n != 1 else ''} not in release"
+        tip = f"Not in release {name} yet:\n" + _tooltip_lines(tasks)
+    else:
+        text = f"+{commits} commit{'s' if commits != 1 else ''} not in release"
+        tip = f"{commits} commit(s) not in release {name}; none of them names an ACL task."
+    return {"known": True, "kind": "ahead", "release": name, "text": text, "tooltip": tip,
+            "tasks": ids, "commits": commits, "why": ""}
 
 
-def _stage_refresh() -> None:
-    # Неудачный fetch (сеть, таймаут) не отменяет счёт по уже скачанной ветке:
-    # число остаётся, только не свежее. Иначе таймаут менял известное число
-    # на «stage unknown».
+def _badge_refresh() -> None:
+    result: dict[str, Any]
     try:
-        remote = _project_remote()
-        if remote:
-            _git("fetch", "--quiet", remote, STAGE_BRANCH, timeout=60)
-    except Exception:  # noqa: BLE001 — сеть и git не должны ронять шапку
-        pass
-    try:
-        result = _stage_count()
-    except Exception as exc:  # pragma: no cover - defensive
-        result = {"known": False, "ahead": None, "ref": "", "why": str(exc)[:120]}
-    with _stage_lock:
-        _stage_state["last"] = result
-        _stage_state["checked"] = time.monotonic()
-        _stage_state["fetching"] = False
+        tag = _latest_release_tag()
+        if not tag:
+            result = _unknown("the release list is empty")
+        else:
+            remote = _project_remote()
+            if remote and not _git_out("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}"):
+                _git("fetch", "--quiet", remote, "main", "--tags", timeout=60)
+            result = _compare(tag)
+    except Exception as exc:  # noqa: BLE001 — сеть и git не должны ронять шапку
+        result = _unknown(type(exc).__name__)
+    with _badge_lock:
+        _badge_state["last"] = result
+        _badge_state["checked"] = time.monotonic()
+        _badge_state["fetching"] = False
 
 
-def stage_status() -> dict[str, Any]:
-    """Что показать в шапке: STAGE или ничего, и насколько версия ушла от stage.
+def release_badge() -> dict[str, Any]:
+    """Что показать в шапке: значок версии для запуска из исходников.
 
-    `channel` — "stage" для запуска из исходников, "release" для упакованной
-    сборки (у менеджеров). Никогда не ждёт сеть: отдаёт последнее известное, а
-    обновление запускает в фоне.
+    `channel` — "source" для запуска из исходников, "release" для упакованной
+    сборки (у менеджеров значка нет). Никогда не ждёт сеть: отдаёт последнее
+    известное («release unknown» до первой сверки), обновление идёт в фоне.
     """
     if getattr(sys, "frozen", False):
         return {"channel": "release"}
-    with _stage_lock:
-        last = _stage_state["last"]
-        checked = _stage_state["checked"]
-        stale = checked is None or time.monotonic() - checked > STAGE_REFRESH_S
-        start = stale and not _stage_state["fetching"]
+    with _badge_lock:
+        last = _badge_state["last"]
+        checked = _badge_state["checked"]
+        stale = checked is None or time.monotonic() - checked > RELEASE_REFRESH_S
+        start = stale and not _badge_state["fetching"]
         if start:
-            _stage_state["fetching"] = True
-    if last is None:
-        last = _stage_count()  # локально и быстро — без сети
-        with _stage_lock:
-            if _stage_state["last"] is None:
-                _stage_state["last"] = last
+            _badge_state["fetching"] = True
     if start:
-        threading.Thread(target=_stage_refresh, name="acl-stage-gap", daemon=True).start()
-    return {"channel": "stage", **last}
+        threading.Thread(target=_badge_refresh, name="acl-release-gap", daemon=True).start()
+    return {"channel": "source", **(last or _unknown("not checked yet"))}
 
 
 def is_supervised() -> bool:
