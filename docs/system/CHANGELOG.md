@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2650 — Rejected ads on campaign, ad set and account rows — 2026-11-28
+
+Campaign and ad set rows show a neutral "N rejected" badge (tooltip names the ads and Meta's reason), the account row shows the total, "ads not read" appears when the ad level was not read, and clicking the Alerts header lists rows with rejected ads first. Information only: no account colour change, no publish block, no extra Graph calls.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1650).
+
 ## ACL-2649 — A stale restricted status no longer keeps an account yellow — 2026-11-28
 
 A heavy status (restricted, disabled) older than 24 h (6 h when it came from page text) is shown as unknown, dim, with its date; any newer API read replaces a page status; Open names why its status read did not start (already running, queue paused until a time).
