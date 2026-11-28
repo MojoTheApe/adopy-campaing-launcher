@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2787 — Use Facebook Page for a Page without Instagram — 2026-11-19
+
+Check plan and publish now press the native "Use Facebook Page" control once per Page when the Page identity is `none`: a new unsaved ad is opened in the account's own browser profile, the "Instagram profile" block is checked to show exactly that Page, the control is clicked, the tab is closed (Meta may keep a leftover draft: pending owner decision), and the identity is read again, once per Page per run. Nothing is published; any failure keeps the existing manual message on that account's row.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1787).
+
 ## ACL-2605 — Source-vs-account comparison in the diagnostic bundle — 2026-11-27
 
 The Windows diagnostic bundle now includes `source_vs_account.json`: saved source spend versus saved account readings for the default period, built only from files already on the machine, with ids masked.
