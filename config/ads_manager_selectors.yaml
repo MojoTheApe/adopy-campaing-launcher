@@ -3,6 +3,8 @@
 
 urls:
   campaigns: "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act_id}"
+  # ACL-2787: НОВОЕ неотправленное объявление (редактор в один экран); не существующее: без selected_ad_ids.
+  new_ad: "https://adsmanager.facebook.com/adsmanager/manage/simple_create?act={act_id}"
 
 selectors:
   create_button:
@@ -223,6 +225,13 @@ selectors:
   device_desktop:
     - "role=checkbox[name=/Desktop/i]"
     - "text=Desktop"
+
+# ACL-2787: блок идентичности нового объявления (tests/fixtures/ads_manager/simple_create_2026_09_27.html):
+# role=heading "Facebook Page" + span с именем Страницы + role=heading "Instagram profile" + span "Use Facebook Page".
+identity_block:
+  page_heading: ["Facebook Page"]
+  instagram_heading: ["Instagram profile"]
+  use_page_button: ["Use Facebook Page"]
 
 timing:
   navigation_timeout_ms: 90000
