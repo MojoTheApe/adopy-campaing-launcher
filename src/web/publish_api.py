@@ -370,6 +370,8 @@ class ApiPublisher:
         self._load_before: dict[str, Any] | None = None
         #: ACL-2353: снимок ревью (имя кампании -> отпечаток, Page, пиксель); None - задание без ревью.
         self.reviewed: dict[str, Any] | None = None
+        #: ACL-2787: (кабинет, Страница), для которых «Use Facebook Page» уже пробовали в этом прогоне (все объявления).
+        self.ig_pressed: set[tuple[str, str]] = set()
         #: ACL-2593: the job will upload a form-background picture: its work lease runs on the Ads Manager tab.
         self.needs_form_photo = False
         #: ACL-2593: why the lease left the light mode (telemetry `fallback_reason`); "" - it did not.
@@ -834,7 +836,7 @@ class ApiPublisher:
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
                                   live_progress=lambda text: self.progress(f"{name}: {text}"),
-                                  journal=journal,
+                                  journal=journal, pressed=self.ig_pressed,
                                   # one submit holds several campaigns: the key is bound to the draft position
                                   # in the submit (not to the name, which two drafts can share)
                                   request_key=(f"{self.request_id}#{slot}" if self.request_id else ""), slot=slot)
