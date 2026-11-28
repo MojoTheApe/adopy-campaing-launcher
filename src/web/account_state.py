@@ -92,6 +92,9 @@ def _status_line(code: str, text: str, res: dict, st: dict, label: str, tried_la
         if res["stale"]:
             line += " · not refreshed"
         return line
+    if res.get("last") and label:
+        # ACL-2649: тяжёлый статус без свежего чтения — слово и дата, но не как факт.
+        return f"unknown · last status {_heavy_word(res['last'], text)} {label} · not refreshed"
     if tried_label:
         return f"unknown · read failed {tried_label}"
     if code and label:
@@ -111,6 +114,9 @@ def _status_tip(code: str, res: dict, st: dict, label: str, by_spend: bool = Fal
         return f"No warning on the account page, read {label}. Not the same as a verified active status."
     if res["known"] and res["stale"]:
         return "Last known status. The latest read did not refresh it."
+    if not res["known"] and res.get("last"):
+        return (f"The last known status was {res['last']}, read {label}. It is older than the freshness limit "
+                "and is not shown as a current problem until it is read again. " + str(st.get("tried_error") or "")).strip()
     if not res["known"] and code:
         failure = str(st.get("tried_error") or "")
         base = ("The status was not refreshed in the last 24 hours. It is not shown as "
@@ -193,12 +199,16 @@ def account_state(row: dict, today: date | None = None) -> dict:
 
     lock = _person_lock(row.get("hold"))
     by_spend = False
-    if code in DEAD_STATUSES:
+    # ACL-2649: тяжёлый статус старше срока свежести — не факт, а «unknown» с прежним словом и датой.
+    old_heavy = (code in DEAD_STATUSES or code in ISSUE_STATUSES) and not res["known"]
+    if old_heavy and not lock:
+        key = "unknown"
+    elif code in DEAD_STATUSES and not old_heavy:
         key = "dead"
     elif lock:
         # ACL-2653: the person's Facebook user is locked. A saved `clear`, however fresh, says nothing about it.
         key = "issue"
-    elif code in ISSUE_STATUSES:
+    elif code in ISSUE_STATUSES and not old_heavy:
         key = "issue"
     elif res["known"] and code == "clear":
         key = "active"
@@ -226,14 +236,16 @@ def account_state(row: dict, today: date | None = None) -> dict:
     elsewhere = row.get("elsewhere") or {}
     label = read_label(at, now)
     tried_label = read_label(st.get("tried_at") or "", now) if (st.get("tried_at") or st.get("tried_error")) else ""
-    if lock and key == "issue" and code not in ISSUE_STATUSES:
+    if lock and key == "issue" and (code not in ISSUE_STATUSES or old_heavy):
         reason = lock["word"]
     elif key in ("issue", "dead"):
         reason = text or short_reason(code, text)
     elif key == "unknown":
         tried = _short_date(st.get("tried_at") or "")
         err = str(st.get("tried_error") or "")
-        if tried or err:
+        if old_heavy:
+            reason = f"last status {short_reason(code, text)} {label}".strip() + " · not refreshed"
+        elif tried or err:
             reason = f"last read failed {tried}".strip()
         elif has_status and label:
             reason = f"last status {label}"
@@ -251,7 +263,7 @@ def account_state(row: dict, today: date | None = None) -> dict:
     status_line = _status_line(code, text, res, st, label, tried_label,
                                bool(row.get("act_id") or row.get("profile_id")), key, by_spend)
     status_tip = _status_tip(code, res, st, label, by_spend, tried_label)
-    if lock and key == "issue" and code not in ISSUE_STATUSES:
+    if lock and key == "issue" and (code not in ISSUE_STATUSES or old_heavy):
         status_line, status_tip = lock["line"], lock["tip"]
     return {
         "key": key,
