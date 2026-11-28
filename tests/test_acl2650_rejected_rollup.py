@@ -170,3 +170,12 @@ def test_template_wires_neutral_chip_not_ads_state_and_sort():
     assert 'class="hc-chip note"' in chip and "alert" not in chip.replace("rejected", "")
     assert 'data-sort="rejected"' in html and "S.rejFirst" in html
     assert "sum.rejected" in html
+
+
+def test_account_row_suffix_only_when_there_is_something_to_say():
+    """Чистый аккаунт (0 отклонённых, уровень прочитан) строку снимка не удлиняет."""
+    html = TEMPLATE.read_text(encoding="utf-8")
+    block = html[html.index("ACL-2650: число отклонённых"):html.index("S.holds && S.holds[account] && !pending")]
+    assert "rj.count > 0 || rj.state === 'partial'" in block
+    assert "' — ads not read'" in block
+    assert "text += ' — ' + rj.count" not in block.split("else if")[0]

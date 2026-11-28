@@ -738,7 +738,8 @@
     // ACL-2650: число отклонённых объявлений — справка в той же строке, цвет не меняет (`data-tone` остаётся как есть).
     if (!pending && !bad && sum.state && sum.state !== 'idle' && sum.rejected) {
       var rj = sum.rejected;
-      text += rj.state === 'not_read' ? ' — ads not read' : ' — ' + rj.count + ' rejected ad' + (rj.count === 1 ? '' : 's') + (rj.state === 'partial' ? ' (partial)' : '');
+      if (rj.state === 'not_read') text += ' — ads not read';
+      else if (rj.count > 0 || rj.state === 'partial') text += ' — ' + rj.count + ' rejected ad' + (rj.count === 1 ? '' : 's') + (rj.state === 'partial' ? ' (partial)' : '');
     }
     if (S.holds && S.holds[account] && !pending && !bad) text += ' — ' + S.holds[account].reason + (S.holds[account].at ? ' since ' + new Date(S.holds[account].at * 1000).toLocaleDateString() : '');
     if (h.snap) { h.snap.textContent = text; h.snap.title = row.error || att && att.error || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
