@@ -414,7 +414,9 @@ def capabilities(ruleset: RuleSet | None = None) -> dict[str, Any]:
             billing_by_goal.setdefault(_norm(goal), []).extend(allowed)
     goal_enum = _uniq(a for _, al in _ga_lists(rs, "optimization_goal_enum") for a in al)
     billing_enum = _uniq(a for _, al in _ga_lists(rs, "billing_event_enum") for a in al)
-    cta_enum = _uniq(a for _, al in _ga_lists(rs, "cta_enum") for a in al)
+    # Только общие (без applies_to) значения: правило с условием (ACL-2527: SEE_DETAILS только для
+    # Instant Form) не должно попадать в список кнопок любого другого objective/сайта.
+    cta_enum = _uniq(a for r, al in _ga_lists(rs, "cta_enum") if not r["applies_to"] for a in al)
     dest_enum = _uniq(a for _, al in _ga_lists(rs, "destination_type_enum") for a in al)
     objectives: dict[str, Any] = {}
     for r, allowed in _ga_lists(rs, "objective"):

@@ -198,3 +198,20 @@ def test_page_without_capabilities_restricts_nothing(tmp_path):
         "d": {"fn": "destinationAllowed", "args": ["instant_form"]},
     })
     assert out["v"] == [] and out["d"] is True
+
+
+def test_scoped_cta_rule_is_not_offered_as_a_general_button():
+    """ACL-2527: SEE_DETAILS живёт в правиле с условием (только Instant Form) - общий список кнопок его не содержит."""
+    rs = _ruleset([
+        _rule("o", "objective", ["OUTCOME_LEADS", "OUTCOME_TRAFFIC"]),
+        _rule("c.enum", "cta_enum", ["LEARN_MORE", "SIGN_UP"]),
+        _rule("c.live", "cta_enum", ["SEE_DETAILS"],
+              applies={"objective": "OUTCOME_LEADS", "destination_type": "ON_AD"}),
+    ])
+    for entry in meta_rules.capabilities(rs)["objectives"].values():
+        assert entry["ctas"] == ["LEARN_MORE", "SIGN_UP"]
+
+
+def test_real_registry_never_offers_see_details_outside_the_form_rule():
+    caps = meta_rules.capabilities()
+    assert all("SEE_DETAILS" not in e["ctas"] for e in caps["objectives"].values())
