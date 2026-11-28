@@ -15,6 +15,7 @@ import logging
 import threading
 import time
 import uuid
+from datetime import datetime
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -545,6 +546,36 @@ def note_tab_lock(label: str, *, urls=None, action: str = "Open profile") -> boo
 
 #: label -> why the Open's status read was not queued (empty: it was). Read once by `_on_open_result`.
 _SKIP_REASON: dict[str, str] = {}
+#: label -> the sentence the row shows about this Open's status read (ACL-2649); read once by `_on_open_result`.
+_OPEN_NOTE: dict[str, str] = {}
+
+_SKIP_TEXT = {
+    "removed": "The account is not in the account list any more.",
+    "invalid_account_map": "The account map entry is not valid; check the account connection.",
+    "fresh": "The status was read a moment ago.",
+    "profile_held": "This profile is on hold; press Retry on this profile.",
+}
+
+
+def open_read_note(got: dict) -> str:
+    """ACL-2649: one English sentence for the row about the Open's status read, or "" when nothing needs saying.
+
+    A read that is already running, a paused queue (with the time it may read again) and a skipped request are
+    named instead of the generic "not read now". Pure text: nothing is read or timed here."""
+    reason = str((got or {}).get("reason") or "")
+    if reason == "running":
+        return "A status read is already running for this account; the status updates when it ends."
+    if reason == "halted":
+        until = (got or {}).get("until")
+        try:
+            when = datetime.fromtimestamp(float(until)).strftime("%H:%M") if until else ""
+        except (TypeError, ValueError, OverflowError, OSError):
+            when = ""
+        return (f"Reads are paused until {when}; this status read starts then." if when
+                else "Reads are paused on this machine; this status read starts as soon as they resume.")
+    if got and not got.get("queued"):
+        return _SKIP_TEXT.get(reason, "")
+    return ""
 _SKIP_LOCK = threading.Lock()
 
 
@@ -570,8 +601,14 @@ def request_status_read(label: str) -> str:
         # ACL-2668/2653: Open profile is the person's own press: the `open` read passes a held profile like Retry.
         got = account_refresh.queue().request(label, "open", force=True)
         reason = str(got.get("reason") or "")
+        if reason == "halted":
+            try:
+                got = {**got, "until": ((account_refresh.queue().state() or {}).get("halt") or {}).get("until")}
+            except Exception:  # noqa: BLE001 - the time is only a nicety for the note
+                log.debug("The queue pause time could not be read", exc_info=True)
         with _SKIP_LOCK:
             _SKIP_REASON[label] = "" if got.get("queued") else reason
+            _OPEN_NOTE[label] = open_read_note(got)
         # A read that is already running for this account answers the Open as well.
         return "queued" if got.get("queued") or reason == "running" else "skipped"
     except Exception:  # noqa: BLE001 — открытие профиля уже удалось, статус вторичен
@@ -589,6 +626,7 @@ def _on_open_result(job_id: str, label: str, result: dict) -> None:
         result["status_read"] = request_status_read(label)
         with _SKIP_LOCK:
             result["status_reason"] = _SKIP_REASON.pop(label, "")
+            result["status_note"] = _OPEN_NOTE.pop(label, "")
     else:
         result["status_read"] = "n/a"
     _set_result(job_id, label, result)

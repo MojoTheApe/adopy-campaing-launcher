@@ -254,7 +254,8 @@ def test_the_row_is_red_facebook_locked_since_the_date(monkeypatch):
     assert "locked" in state["status_tip"]
     # An ad account restriction keeps its own words.
     restricted = astate.account_state({"account": LABEL, "has_data": False, "hold": hold,
-                                       "status": {"status": "restricted", "status_text": "Restricted", "at": "2026-11-15"}})
+                                       "status": {"status": "restricted", "status_text": "Restricted", "source": "api",
+                                  "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}})
     assert restricted["key"] == "issue" and "locked" not in restricted["status_line"]
 
 
