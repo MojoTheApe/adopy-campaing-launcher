@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2649 — A stale restricted status no longer keeps an account yellow — 2026-11-28
+
+A heavy status (restricted, disabled) older than 24 h (6 h when it came from page text) is shown as unknown, dim, with its date; any newer API read replaces a page status; Open names why its status read did not start (already running, queue paused until a time).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1649).
+
 ## ACL-2787 — Use Facebook Page for a Page without Instagram — 2026-11-19
 
 Check plan and publish now press the native "Use Facebook Page" control once per Page when the Page identity is `none`: a new unsaved ad is opened in the account's own browser profile, the "Instagram profile" block is checked to show exactly that Page, the control is clicked, the tab is closed (Meta may keep a leftover draft: pending owner decision), and the identity is read again, once per Page per run. Nothing is published; any failure keeps the existing manual message on that account's row.
