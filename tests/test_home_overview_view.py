@@ -31,7 +31,8 @@ def test_states_counts_and_active_countries_first(monkeypatch):
     for acc, c in (("FbIdle", "Chile"), ("FbSpend", "Kuwait"), ("FbDead", "Kuwait")):
         links.link(acc, "country", c)
     monkeypatch.setattr(account_spend, "get_status",
-                        lambda a: {"status": "disabled", "status_text": "disabled", "at": "2026-11-01T10:00:00"}
+                        lambda a: {"status": "disabled", "status_text": "disabled", "source": "api",
+                                   "at": __import__("datetime").datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
                         if a == "FbDead" else {})
     view = _build_account_map_view(_report())
     names = [mc["country"] for mc in view["countries"]]
