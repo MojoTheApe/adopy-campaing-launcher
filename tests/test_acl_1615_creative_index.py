@@ -44,12 +44,23 @@ def tree(tmp_path):
     return tmp_path
 
 
-def _count_scandir(monkeypatch):
+def _count_scandir(monkeypatch, tree):
+    """Считает только обходы внутри `tree`: os.scandir глобален, и чужой поток
+    (фоновое обновление другого теста) иначе попадал бы в счёт."""
     calls = []
     real = os.scandir
+    root = os.path.realpath(str(tree))
+
+    def inside(path):
+        try:
+            p = os.path.realpath(os.fspath(path))
+            return os.path.commonpath([root, p]) == root
+        except (TypeError, ValueError):
+            return False
 
     def counting(*a, **k):
-        calls.append(a)
+        if a and inside(a[0]):
+            calls.append(a)
         return real(*a, **k)
 
     monkeypatch.setattr(cf.os, "scandir", counting)
@@ -57,7 +68,7 @@ def _count_scandir(monkeypatch):
 
 
 def test_one_tree_walk_serves_many_lookups(tree, monkeypatch):
-    calls = _count_scandir(monkeypatch)
+    calls = _count_scandir(monkeypatch, tree)
     for _ in range(20):
         assert find_creative_file(tree, "solo.mp4").name == "solo.mp4"
         assert find_creative_file(tree, "SOLO.MP4").name == "solo.mp4"
@@ -110,7 +121,7 @@ def test_stale_entry_rebuilds_once_even_when_mtime_unchanged(tree, monkeypatch):
     # Имитируем, что проверка mtime ничего не заметила, а файл уже исчез.
     monkeypatch.setattr(cf, "_dirs_changed", lambda snap: False)
     (tree / "A" / "solo.mp4").unlink()
-    calls = _count_scandir(monkeypatch)
+    calls = _count_scandir(monkeypatch, tree)
     with pytest.raises(CreativeNotFoundError):
         find_creative_file(tree, "solo.mp4")
     assert len(calls) == 3  # ровно одна перестройка
@@ -142,7 +153,7 @@ def test_real_symlink_pointing_outside_is_rejected(tree, tmp_path_factory):
 
 
 def test_concurrent_lookups_build_the_index_once(tree, monkeypatch):
-    calls = _count_scandir(monkeypatch)
+    calls = _count_scandir(monkeypatch, tree)
     errors, results = [], []
 
     def work():
