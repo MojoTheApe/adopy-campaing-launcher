@@ -1858,14 +1858,16 @@ def _installed_release() -> dict[str, str]:
         return {"sha": "", "short": "", "tag": ""}
 
 
-def _stage_status() -> dict:
-    """STAGE-значок шапки (ACL-1267). Шапка не должна ломать отчёт."""
+def _release_badge() -> dict:
+    """Значок версии шапки (ACL-2638). Шапка не должна ломать отчёт."""
     try:
         from src.web import acl_update
 
-        return acl_update.stage_status()
+        return acl_update.release_badge()
     except Exception:  # pragma: no cover - defensive
-        return {"channel": "stage", "known": False, "ahead": None, "why": "status unavailable"}
+        return {"channel": "source", "known": False, "text": "release unknown",
+                "tooltip": "The latest release could not be determined: status unavailable.",
+                "why": "status unavailable"}
 
 
 def mlx_instance_labels() -> dict[str, str]:
@@ -2362,7 +2364,7 @@ def _render_report(
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
-            "stage_status": _stage_status(),
+            "release_badge": _release_badge(),
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             # ACL-1827: плитки «Вы / Другие» над картой аккаунтов на Home.

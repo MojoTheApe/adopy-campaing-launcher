@@ -478,3 +478,24 @@ def _plan_verdict_cache_empty_per_test():
     plan_cache.reset_for_tests()
     yield
     plan_cache.reset_for_tests()
+
+
+# ACL-2638: страница считает значок версии фоновым потоком "acl-release-gap".
+# Тест, который рисует шапку, не должен ходить в сеть и оставлять поток живым
+# (его os.scandir/time иначе виден соседним тестам процесса). Тесты самого значка
+# управляют сетью сами.
+@pytest.fixture(autouse=True)
+def _release_badge_offline_and_joined(request, monkeypatch):
+    import threading
+
+    from src.web import acl_update
+
+    if request.module.__name__.rsplit(".", 1)[-1] != "test_release_badge":
+        def _offline():
+            raise OSError("offline in tests")
+
+        monkeypatch.setattr(acl_update, "_latest_release_tag", _offline)
+    yield
+    for t in threading.enumerate():
+        if t.name == "acl-release-gap":
+            t.join(timeout=10)

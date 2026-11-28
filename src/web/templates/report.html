@@ -7,7 +7,7 @@
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   {#- ACL-1267: вкладку версии владельца не спутать со сборкой менеджеров. #}
   {#- ACL-1778: во вкладке — просто Adopy; период и дата обновления есть в шапке. #}
-  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy</title>
+  <title>Adopy</title>
   <script>
     // Apply before paint. Only a click pins the theme; otherwise follow the OS.
     (function () {
@@ -559,17 +559,16 @@
       margin: 0; color: var(--text); font-weight: 500;
       font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
     }
-    /* ACL-1267: версия владельца (запуск из исходников) — STAGE и сколько
-       правок в ней ещё нет в ветке stage. У сборки менеджеров значка нет. */
-    .brand-meta dd.acl-stage {
+    /* ACL-2638: сборка из исходников — выпуск или сколько задач в нём ещё нет.
+       У сборки менеджеров значка нет. */
+    .brand-meta dd.acl-release-gap {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 1px 6px; border-radius: 5px;
       border: 1px solid transparent;
       background: var(--warn-soft); color: var(--stage-ink);
     }
-    .brand-meta dd.acl-stage b { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
-    .brand-meta dd.acl-stage .acl-stage-gap { font-weight: 500; letter-spacing: 0; }
-    .brand-meta dd.acl-stage.unknown { border: 1px dashed var(--stage-ink); }
+    .brand-meta dd.acl-release-gap .acl-release-gap-text { font-weight: 500; letter-spacing: 0; }
+    .brand-meta dd.acl-release-gap.unknown { border: 1px dashed var(--stage-ink); }
 
     /* Средняя ширина (открытый билдер на ноутбуке): служебные кнопки уходят
        на нижнюю полку, справа от техники. */
@@ -4549,11 +4548,10 @@
       {%- endif %}
       <div><dt>Version:</dt>
       <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd></div>
-      {%- set st = stage_status or {} %}
-      {%- if st.channel == 'stage' %}
-      <div><dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
-          title="{% if st.known %}This is the stage version you work on, run from source. {{ st.ahead }} change(s) here are not on {{ st.ref }} yet. Campaign managers get updates only from a release.{% else %}This is the stage version you work on, run from source. How far it is from stage is unknown: {{ st.why }}.{% endif %}"><b>STAGE</b>
-        <span class="acl-stage-gap">{% if st.known %}+{{ st.ahead }} not on stage{% else %}stage unknown{% endif %}</span></dd></div>
+      {%- set st = release_badge or {} %}
+      {%- if st.channel == 'source' %}
+      <div><dd id="acl-release-gap" class="acl-release-gap{% if not st.known %} unknown{% endif %}"
+          title="{{ st.tooltip }}"><span class="acl-release-gap-text">{{ st.text }}</span></dd></div>
       {%- endif %}
     </dl>
   </div>
