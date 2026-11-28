@@ -38,6 +38,10 @@ def build_amap(web, links, monkeypatch, spec: dict[str, list[tuple]], status_ext
             if status:
                 statuses[acc] = {"status": status, "status_text": text, "at": iso(ago),
                                  "at_short": "", "stale": "", "tried_at": "", "tried_error": ""}
+                if status in ("restricted", "disabled", "review", "blocked"):
+                    # ACL-2649: a heavy status is a fact only while fresh. The fixture keeps "red, read before
+                    # the last failed read": a fresh API read stamped today, marked as not refreshed.
+                    statuses[acc].update({"at": iso(0), "source": "api", "stale": "1" if ago else ""})
             if acc in not_in_book:
                 continue  # книга аккаунт не знает — в её строках его нет
             rows.append({"account_label": acc, "account_excel": {

@@ -18,7 +18,7 @@ def test_disabled_is_dead_even_with_spend():
 
 def test_issue_statuses():
     for code in ("restricted", "blocked", "review"):
-        assert A.account_state(row({"status": code}, 10, True), TODAY)["key"] == "issue"
+        assert A.account_state(row({"status": code, "at": "2026-11-04 10:00:00", "source": "api"}, 10, True), TODAY)["key"] == "issue"
 
 
 def test_spend_is_active():
@@ -145,7 +145,7 @@ def test_read_ago_words():
 
 
 def test_heavy_status_still_beats_spend_even_when_read_failed():
-    st = _fail(status="restricted", at="2026-11-03 10:00:00")
+    st = _fail(status="restricted", at="2026-11-04 08:00:00", source="api")   # ACL-2649: fresh enough to be a fact
     s = A.account_state(row(st, 50, True, act_id="act_1"), TODAY)
     assert s["key"] == "issue"
     assert "not refreshed" in s["status_line"]

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -56,9 +56,10 @@ def test_clear_older_than_a_day_is_unknown_even_without_a_failed_read():
     assert r["shown"] == "unknown" and not r["fresh"]
 
 
-def test_old_disabled_stays_disabled_but_not_refreshed():
+def test_old_disabled_is_not_a_fact_any_more():
+    # ACL-2649: a heavy status older than the freshness limit is unknown/stale, with the old word kept in `last`.
     r = R.resolve_status({"status": "disabled", "at": "2026-10-24 08:00:00"}, "", NOW)
-    assert r["shown"] == "disabled" and r["known"] and r["stale"]
+    assert r["shown"] == "unknown" and not r["known"] and r["stale"] and r["last"] == "disabled"
 
 
 def test_unrecognised_api_status_is_unknown():
@@ -73,9 +74,16 @@ def test_read_label_year_only_when_not_this_year():
 # ── слияние API и страницы ──────────────────────────────────────────────
 
 def test_heavier_status_wins_inside_one_cycle():
-    old = {"status": "disabled", "at": "2026-11-06 08:00:00", "source": "page"}
-    new = {"status": "clear", "at": "2026-11-06 08:05:00", "source": "api"}
+    # ACL-2649: a heavy status of the SAME source still wins inside one cycle only against another source
+    # when the new read is the page one; any newer API read replaces a page status (see below).
+    old = {"status": "disabled", "at": "2026-11-06 08:00:00", "source": "api"}
+    new = {"status": "clear", "at": "2026-11-06 08:05:00", "source": "page"}
     assert R.should_replace(old, new) is False
+
+
+def test_newer_api_read_replaces_a_page_status_even_inside_one_cycle():
+    old = {"status": "disabled", "at": "2026-11-06 08:00:00", "source": "page"}
+    assert R.should_replace(old, {"status": "clear", "at": "2026-11-06 08:05:00", "source": "api"}) is True
 
 
 def test_newer_api_clear_replaces_an_old_page_disabled():
@@ -101,12 +109,13 @@ def store(monkeypatch):
 
 
 def test_put_status_then_get_status_carries_the_new_fields(store):
+    fresh = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")      # ACL-2649: heavy status must be fresh to be a fact
     assert sp.put_status(ACC, "disabled", "Ad account is disabled", source="api",
-                         at="2026-11-05 14:02:11", disable_reason="ADS_INTEGRITY_POLICY", account_status=2)
+                         at=fresh, disable_reason="ADS_INTEGRITY_POLICY", account_status=2)
     got = sp.get_status(ACC)
     assert got["status"] == "disabled" and got["source"] == "api" and got["shown"] == "disabled"
-    assert got["disable_reason"] == "ads integrity policy" and got["read_label"].startswith("05.11 14:02")
-    assert got["account_status"] == "2" and got["not_refreshed"] == "1"
+    assert got["disable_reason"] == "ads integrity policy" and got["read_label"].startswith(fresh[8:10] + "." + fresh[5:7])
+    assert got["account_status"] == "2" and got["not_refreshed"] == ""
     for key in ("status_text", "at", "at_short", "stale", "tried_at", "tried_error", "next_step", "shot_id", "shot_at"):
         assert key in got, "прежний набор ключей не уменьшается (publish_preflight читает его)"
 
@@ -127,7 +136,8 @@ def test_spend_reader_status_goes_through_the_merge(store):
     rec = sp.SpendReading(account=ACC, date_from="2026-11-06", date_to="2026-11-06", source="api",
                           state="ok", status="clear", finished_at="2026-11-06 08:03:00")
     sp._put(rec)
-    assert sp.get_status(ACC)["status"] == "disabled"             # тот же цикл: весомый выигрывает
+    # ACL-2649: любое более новое чтение из API заменяет статус из текста страницы, даже в одном цикле.
+    assert sp.get_status(ACC)["status"] == "clear"
 
 
 # ── чтение списка отдаёт статус без лишних запросов ─────────────────────
@@ -191,7 +201,7 @@ def test_disabled_with_spend_stays_dead_and_shows_time_and_reason():
     assert s["key"] == "dead"
     assert s["status_line"] == "disabled · 05.11 14:02 · ads integrity policy"
     old = A.account_state(row({"status": "disabled", "at": "2026-10-20 14:02:11"}), TODAY)
-    assert old["key"] == "dead" and old["status_line"].endswith(" · not refreshed")
+    assert old["key"] == "unknown" and old["status_line"].endswith(" · not refreshed")   # ACL-2649: 2-week-old heavy is not a fact
 
 
 def test_stale_clear_with_spend_is_active_not_refreshed():
@@ -267,9 +277,18 @@ def test_manage_cell_fresh_api_clear_is_active_and_page_clear_is_no_warning():
     assert ">no warning</span>" in _manage_cell({**base, "source": "page"})
 
 
-def test_manage_cell_old_disabled_is_red_and_marked():
-    cell = _manage_cell({"status": "disabled", "shown": "disabled", "status_text": "Ad account is disabled",
+def test_manage_cell_old_disabled_is_dim_unknown_with_its_date():
+    # ACL-2649: the old heavy word is not shown as a live red status any more.
+    cell = _manage_cell({"status": "disabled", "shown": "unknown", "status_text": "Ad account is disabled",
                          "at": "2026-10-23 14:02:11", "at_short": "23.10.26", "read_label": "23.10 14:02",
+                         "stale": "", "not_refreshed": "1", "source": "api"})
+    assert "amap-st dim" in cell and ">unknown</span>" in cell and "amap-st bad" not in cell
+    assert "23.10 14:02" in cell and "not refreshed" in cell
+
+
+def test_manage_cell_fresh_disabled_is_red_and_marked():
+    cell = _manage_cell({"status": "disabled", "shown": "disabled", "status_text": "Ad account is disabled",
+                         "at": "2026-11-06 08:00:00", "at_short": "06.11.26", "read_label": "06.11 08:00",
                          "stale": "", "not_refreshed": "1", "source": "api"})
     assert "amap-st bad" in cell and ">disabled</span>" in cell and "· not refreshed" in cell
 

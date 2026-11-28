@@ -11,9 +11,12 @@ from datetime import datetime
 
 #: Старше стольких часов `clear`/`unknown` перестаёт быть фактом.
 STATUS_FRESH_HOURS = 24
+#: ACL-2649: статус из текста страницы устаревает быстрее статуса из Graph API: текст страницы
+#: читается грубее, и неверно прочитанное слово не должно висеть сутками.
+PAGE_STATUS_FRESH_HOURS = 6
 #: Два чтения не дальше друг от друга считаются одним циклом (API и текст страницы).
 SAME_CYCLE_MINUTES = 10
-#: Тяжёлые статусы не прячем из-за возраста: отключённый кабинет сам не оживает.
+#: ACL-2649: тяжёлый статус старше срока свежести тоже не факт (кабинет могли вылечить в Ads Manager).
 HEAVY = frozenset({"disabled", "restricted", "review", "blocked"})
 #: Чем меньше число, тем весомее статус (порядок спеки §2.4).
 RANK = {"disabled": 0, "restricted": 1, "review": 2, "blocked": 3, "clear": 4, "unknown": 5}
@@ -65,7 +68,11 @@ def should_replace(old: dict | None, new: dict) -> bool:
     gap = abs((new_at - old_at).total_seconds()) / 60
     # Весомый статус держится только между РАЗНЫМИ источниками (API и страница); два чтения
     # одного источника — новое выигрывает: кабинет мог выздороветь, а повторное чтение это видит.
-    if gap <= SAME_CYCLE_MINUTES and (old.get("source") or "page") != (new.get("source") or "page"):
+    new_src, old_src = (new.get("source") or "page"), (old.get("source") or "page")
+    if new_src == "api" and old_src == "page":
+        # ACL-2649: любое более новое чтение из API заменяет статус, прочитанный из текста страницы.
+        return new_at >= old_at
+    if gap <= SAME_CYCLE_MINUTES and old_src != new_src:
         return RANK.get(str(new.get("status")), 5) <= RANK.get(str(old.get("status")), 5)
     return new_at >= old_at
 
@@ -85,14 +92,18 @@ def resolve_status(raw: dict, attempt_failed_at: str = "", now: datetime | None 
     status = str((raw or {}).get("status") or "")
     stamp = parse_stamp((raw or {}).get("at"))
     age = (now - stamp).total_seconds() / 3600 if stamp else None
-    fresh = age is not None and age <= STATUS_FRESH_HOURS
+    limit = STATUS_FRESH_HOURS if str((raw or {}).get("source") or "page") == "api" else PAGE_STATUS_FRESH_HOURS
+    fresh = age is not None and age <= limit
     failed_after = bool(attempt_failed_at)
+    if status in HEAVY and fresh:
+        # Свежий тяжёлый статус остаётся фактом; после неудачного чтения помечается «не обновлён».
+        return {"shown": status, "known": True, "fresh": True, "stale": failed_after, "age_hours": age}
     if status in HEAVY:
-        # Тяжёлый статус остаётся, но помечается «не обновлён».
-        return {"shown": status, "known": True, "fresh": fresh,
-                "stale": failed_after or not fresh, "age_hours": age}
+        # ACL-2649: устаревший тяжёлый статус — не факт: «unknown», прежнее слово в `last`.
+        return {"shown": "unknown", "known": False, "fresh": False, "stale": True, "age_hours": age,
+                "last": status}
     if status == "clear" and fresh and not failed_after:
         return {"shown": "clear", "known": True, "fresh": True, "stale": False, "age_hours": age}
-    # `clear` старше суток или после неудачного чтения, `unknown`, пусто: не факт.
+    # `clear` старше срока или после неудачного чтения, `unknown`, пусто: не факт.
     return {"shown": "unknown", "known": False, "fresh": fresh,
             "stale": bool(status) and (failed_after or not fresh), "age_hours": age}

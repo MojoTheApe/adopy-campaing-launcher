@@ -446,8 +446,9 @@
         var r = (job.results || {})[account] || {};
         if (r.state === 'ok' || r.ok) {
           var queued = r.status_read === 'queued';
-          homeFinish(btn, queued ? 'Opened. Checking the account status…'
-            : 'Opened. The status was not read: ' + (r.status_reason || 'it could not be queued') + '.', !queued);
+          var note = r.status_note ? ' ' + r.status_note : '';   // ACL-2649: running / paused / skipped, named
+          homeFinish(btn, queued ? 'Opened. Checking the account status…' + note
+            : 'Opened. The status was not read:' + (r.status_note ? note : ' ' + (r.status_reason || 'it could not be queued') + '.'), !queued);
           if (queued) homeAwaitStatus(btn, account, 0, before);
           else homeRepaint(account);
           return;
