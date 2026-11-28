@@ -334,11 +334,13 @@ def test_minimum_os_version_must_be_one_meta_lists(tmp_path):
         cr.plan_from_draft(_with_fields(tmp_path, os="iOS", os_min="99"))
 
 
-def test_instant_form_offers_exactly_the_six_buttons_meta_documents(tmp_path):
+def test_instant_form_offers_the_six_documented_buttons_and_the_live_one(tmp_path):
     """Meta (Lead Ads, link_data + lead_gen_form_id): APPLY_NOW, DOWNLOAD, GET_QUOTE, LEARN_MORE,
-    SIGN_UP, SUBSCRIBE. CONTACT_US / GET_OFFER / BOOK_NOW / REQUEST_TIME are not offered for a form
+    SIGN_UP, SUBSCRIBE; плюс SEE_DETAILS (ACL-2056, живые объявления, не документация).
+    CONTACT_US / GET_OFFER / BOOK_NOW / REQUEST_TIME are not offered for a form
     and are refused, never swapped for another button."""
-    assert set(wp.CTA_FORM) == {"APPLY_NOW", "DOWNLOAD", "GET_QUOTE", "LEARN_MORE", "SIGN_UP", "SUBSCRIBE"}
+    assert set(wp.CTA_FORM) == {"APPLY_NOW", "DOWNLOAD", "GET_QUOTE", "LEARN_MORE", "SIGN_UP", "SUBSCRIBE",
+                                "SEE_DETAILS"}
     assert wp.CTA_FORM[0] == "LEARN_MORE"
     for extra in ("CONTACT_US", "GET_OFFER", "BOOK_NOW", "REQUEST_TIME"):
         form = _with_fields(tmp_path, cta=extra)
@@ -352,9 +354,11 @@ def test_instant_form_offers_exactly_the_six_buttons_meta_documents(tmp_path):
 
 def test_every_cta_the_creator_offers_passes_the_write_policy():
     assert set(cr.CTA_WEBSITE) | set(cr.CTA_FORM) == set(wp.CTA_TYPES)
-    for cta in wp.CTA_TYPES:
-        spec = {"page_id": "1", "link_data": {"call_to_action": {"type": cta, "value": {"link": "https://x.invalid/"}}}}
-        assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", {"name": "x", "object_story_spec": spec})
+    # Без назначения политика знает только список сайта; кнопки формы (в т.ч. SEE_DETAILS) - с `on_ad` (ACL-2056).
+    for on_ad, offered in ((False, wp.CTA_WEBSITE), (True, wp.CTA_FORM)):
+        for cta in offered:
+            spec = {"page_id": "1", "link_data": {"call_to_action": {"type": cta, "value": {"link": "https://x.invalid/"}}}}
+            assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", {"name": "x", "object_story_spec": spec}, on_ad=on_ad)
     assert pf.ALLOWED_CTA["leads"] == wp.CTA_WEBSITE and pf.ALLOWED_CTA["leads_instant_form"] == wp.CTA_FORM
 
 
