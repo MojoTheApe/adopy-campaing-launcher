@@ -247,12 +247,55 @@ def parse_inventory(rows: list[dict], level: str) -> tuple[list[dict], int]:
         updated = _iso_utc(row.get("updated_time"))
         if updated:
             obj["updated_time"] = updated
+        if level == "ad":
+            # ACL-2650: причина отказа Meta (`issues_info` уже запрошен) — только у объявлений.
+            reasons = _issue_reasons(row)
+            if reasons:
+                obj["issues"] = reasons
         if level == "campaign":
             obj["campaign_id"] = obj["adset_id"] = ""
         elif level == "adset":
             obj["adset_id"] = ""
         out.append(obj)
     return out, dropped
+
+
+#: ACL-2650: что считается «отклонённым» объявлением (то же слово «Rejected» в `_DELIVERY`).
+REJECTED_STATES = frozenset({"DISAPPROVED", "WITH_ISSUES"})
+#: Сколько объявлений называет подсказка и сколько причин хранится у одного объявления.
+REJECTED_TIP_ADS = 5
+REJECTED_REASONS = 3
+
+
+def _issue_reasons(row: dict) -> list[str]:
+    """`issues_info` одного объявления → до трёх коротких строк. Нет поля, не список, мусор — пусто."""
+    from src.analysis_agent import account_spend_api as _api
+
+    out: list[str] = []
+    for rec in _api.compact_issues([row], "AD"):
+        text = rec.get("summary") or rec.get("message") or ""
+        if text and text not in out:
+            out.append(text)
+    return out[:REJECTED_REASONS]
+
+
+def is_rejected(obj: dict) -> bool:
+    return str((obj or {}).get("effective_status") or "").upper() in REJECTED_STATES
+
+
+def _rejected_rollup(snap: "Snapshot", ads: list[dict]) -> dict:
+    """Сводка по отклонённым объявлениям из списка `ads`: `{state, count, ads:[{name, reason}]}`.
+
+    Информация, не тревога: ни цвета аккаунта, ни блокировки публикации. Уровень объявлений
+    не читался — `not_read` (это НЕ «отклонённых нет»).
+    """
+    state = child_state(snap, "ad")
+    if state == "not_read":
+        return {"state": "not_read", "count": 0, "ads": []}
+    bad = [a for a in ads if is_rejected(a)]
+    return {"state": state, "count": len(bad),
+            "ads": [{"name": a.get("name") or "(no name)", "reason": "; ".join(a.get("issues") or [])}
+                    for a in bad[:REJECTED_TIP_ADS]]}
 
 
 def parse_insights(rows: list[dict], level: str) -> tuple[dict[str, dict], int]:
@@ -327,8 +370,17 @@ def build_tree(snap: Snapshot) -> dict[str, Any]:
             ads_of[ad["adset_id"]].append(ad)
         else:
             orphan_ads.append(ad)
+    # ACL-2650: отклонённые объявления по кампании/ad set — по id самого объявления, без новых вызовов.
+    ads_by_campaign: dict[str, list[dict]] = {}
+    ads_by_adset: dict[str, list[dict]] = {}
+    for ad in snap.ads:
+        if ad.get("campaign_id"):
+            ads_by_campaign.setdefault(ad["campaign_id"], []).append(ad)
+        if ad.get("adset_id"):
+            ads_by_adset.setdefault(ad["adset_id"], []).append(ad)
     return {"campaigns": campaigns, "adsets": adsets, "adsets_of": adsets_of, "ads_of": ads_of,
-            "orphan_adsets": orphan_adsets, "orphan_ads": orphan_ads}
+            "orphan_adsets": orphan_adsets, "orphan_ads": orphan_ads,
+            "ads_by_campaign": ads_by_campaign, "ads_by_adset": ads_by_adset}
 
 
 def child_state(snap: Snapshot, level: str) -> str:
@@ -439,6 +491,8 @@ def row_payload(snap: Snapshot, tree: dict, level: str, obj: dict, bi: dict | No
                                         (obj.get("bid_strategy") or "").replace("_", " ").capitalize()) or None,
         "objective": (obj.get("objective") or "").replace("_", " ").capitalize() or None if level == "campaign" else None,
         "meta": _meta_cells(snap, level, obj["id"]),
+        "rejected": (_rejected_rollup(snap, tree["ads_by_campaign" if level == "campaign" else "ads_by_adset"]
+                                      .get(obj["id"], [])) if level in ("campaign", "adset") else None),
         "bi": (bi or {}).get(f"{level}:{obj['id']}") or {"match": "none"},
         "synced_at": snap.finished_at,
         "currency": snap.currency,
@@ -765,6 +819,7 @@ def summary(snap: Snapshot | None, attempt: dict | None = None, *, now: float | 
         "problems": list(snap.problems), "steps": dict(snap.steps), "error": snap.error,
         "counts": {"campaigns": len(snap.campaigns), "adsets": len(snap.adsets), "ads": len(snap.ads)},
         "calls": snap.calls,
+        "rejected": _rejected_rollup(snap, snap.ads) | {"ads": []},
     })
     return out
 

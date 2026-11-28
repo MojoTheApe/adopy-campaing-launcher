@@ -210,6 +210,7 @@
   .hc-cmd-txt { font-size: 0.75rem !important; white-space: nowrap; }
   .hc-chip { display: inline-block; padding: 1px 8px; border-radius: var(--adopy-radius-sm); font-size: 0.75rem; font-weight: 500; cursor: help; }
   .hc-chip.alert { background: var(--adopy-warning-bg); color: var(--adopy-warning); }
+  .hc-table th.hc-sortable { cursor: pointer; user-select: none; }
   .hc-chip.note { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
   .hc-hint-ok { color: var(--adopy-success); font-weight: 500; } .hc-hint-warn { color: var(--adopy-warning); font-weight: 500; } .hc-hint-neutral { color: var(--adopy-text); }
   .hc-pstate { flex: none; padding: 1px 8px; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-pill); font-size: 0.6875rem; color: var(--adopy-text-muted); cursor: help; }
@@ -330,6 +331,7 @@
 
   /* ── состояние ── */
   var S = {
+    rejFirst: false,                 // ACL-2650: «с отклонёнными объявлениями сверху» (клик по заголовку Alerts)
     countries: seed,                 // [{country, accounts:[]}]
     accountCountries: {},            // account -> [country, ...]
     summaries: {},                   // account -> сводка снимка
@@ -440,6 +442,25 @@
     if ((r.bi || {}).match === 'partial') out.push({kind: 'note', text: 'Workbook rows match only part of this campaign'});
     return out;
   }
+  /* ACL-2650: отклонённые объявления — только справка, нейтральный чип; цвет алертов и статус аккаунта они не трогают. */
+  function rejectedChip(r) {
+    var j = r.rejected;
+    if (!j || (r.level !== 'campaign' && r.level !== 'adset')) return '';
+    if (j.state === 'not_read') return '<span class="hc-chip note" title="The ad level of this account was not read, so rejected ads are unknown">ads not read</span>';
+    if (!j.count) return j.state === 'partial' ? '<span class="hc-chip note" title="The ads list was cut at the page limit; rejected ads may be missing">ads partly read</span>' : '';
+    var tip = (j.ads || []).map(function (a) { return a.name + (a.reason ? ': ' + a.reason : ''); });
+    if (j.count > tip.length) tip.push('and ' + (j.count - tip.length) + ' more');
+    if (j.state === 'partial') tip.push('The ads list was cut at the page limit; more may exist');
+    return '<span class="hc-chip note" data-rejected="' + Number(j.count) + '" title="' + esc(tip.join('\n')) + '">' + Number(j.count) + ' rejected</span>';
+  }
+  /* Сортировка «с отклонёнными сверху»: клик по заголовку Alerts (стабильная, остальной порядок сохраняется). */
+  function rejectedFirst(rows) {
+    if (!S.rejFirst) return rows;
+    return rows.map(function (r, i) { return [r, i]; }).sort(function (a, b) {
+      var x = a[0].rejected && a[0].rejected.count > 0 ? 1 : 0, y = b[0].rejected && b[0].rejected.count > 0 ? 1 : 0;
+      return y - x || a[1] - b[1];
+    }).map(function (p) { return p[0]; });
+  }
   function countryOf(account) { return (S.accountCountries[account] || [])[0] || ''; }
   function ctxCell(field, note) {
     return function (r) {
@@ -491,11 +512,11 @@
       return '<td class="hc-gl" title="Advisory text from the numbers on screen; nothing is changed automatically"><span class="hc-hint-' + esc(h.tone) + '">' + esc(h.label) + '</span><span class="hc-sub2">' + esc(h.sub) + '</span></td>';
     }},
     {k: 'alerts', g: 'controls', h: 'Alerts', w: 104, cell: function (r) {
-      var list = alertsOf(r);
-      if (!list.length) return '<td class="hc-gl">' + na('No alerts from the data on screen') + '</td>';
+      var list = alertsOf(r), rej = rejectedChip(r);
+      if (!list.length) return rej ? '<td class="hc-gl">' + rej + '</td>' : '<td class="hc-gl">' + na('No alerts from the data on screen') + '</td>';
       var al = list.filter(function (x) { return x.kind === 'alert'; }).length;
       var txt = al ? al + ' alert' + (al === 1 ? '' : 's') : list.length + ' note' + (list.length === 1 ? '' : 's');
-      return '<td class="hc-gl"><span class="hc-chip ' + (al ? 'alert' : 'note') + '" title="' + esc(list.map(function (x) { return x.text; }).join('\n')) + '">' + esc(txt) + '</span></td>';
+      return '<td class="hc-gl"><span class="hc-chip ' + (al ? 'alert' : 'note') + '" title="' + esc(list.map(function (x) { return x.text; }).join('\n')) + '">' + esc(txt) + '</span>' + (rej ? ' ' + rej : '') + '</td>';
     }},
     {k: 'goal', g: 'controls', h: 'Goal CPA', w: 112, num: 1, cell: ctxCell('goal_cpa', 'goal_note')},
     {k: 'bench', g: 'controls', h: 'Benchmark CPA', w: 124, num: 1, cell: ctxCell('benchmark_cpa', 'benchmark_note')},
@@ -561,7 +582,10 @@
   }
   function headHtml(cols) {
     var heads = '<tr class="hc-heads"><th class="p1" title="' + esc(STATUS_NOTE) + '">Status · Campaign / Ad set / Ad<span class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the name column. Arrow keys change the width, double-click resets it." aria-valuemin="' + PIN_MIN + '" aria-valuemax="' + pinMax() + '" aria-valuenow="' + effPin() + '" title="Drag to resize · double-click to reset"></span></th>' +
-      cols.map(function (c) { return '<th class="' + (c.num ? 'num' : '') + '">' + esc(c.h) + '</th>'; }).join('') + '</tr>';
+      cols.map(function (c) {
+        if (c.k === 'alerts') return '<th class="hc-sortable" data-sort="rejected" tabindex="0" aria-sort="' + (S.rejFirst ? 'descending' : 'none') + '" title="Click to list campaigns and ad sets with rejected ads first">' + esc(c.h) + (S.rejFirst ? ' ▾ rejected first' : '') + '</th>';
+        return '<th class="' + (c.num ? 'num' : '') + '">' + esc(c.h) + '</th>';
+      }).join('') + '</tr>';
     return '<thead>' + heads + '</thead>';
   }
   /* Предел: не шире 60% видимой ширины таблицы и так, чтобы справа оставалось 160px прокручиваемых колонок. */
@@ -691,7 +715,7 @@
     if (k.state === 'error') return msg('hc-bad', 'Could not load ' + noun + ': ' + esc(k.note) + ' <button type="button" data-retry="' + esc(r.key) + '">Retry</button>', span);
     if (k.state === 'not_read') return msg('hc-warn', 'The ' + noun + ' of this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + ' were not read — ' + esc(k.note || 'Retry this account list') + '. This is not the same as having none.', span);
     if (k.state === 'empty') return msg('', 'No ' + noun + ' in the saved inventory for this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + '.', span);
-    var out = (k.rows || []).map(function (c) { return rowHtml(c, cols); }).join('');
+    var out = rejectedFirst(k.rows || []).map(function (c) { return rowHtml(c, cols); }).join('');
     if (k.state === 'partial') out += msg('hc-warn', 'Partial: ' + esc(k.note), span);
     return out;
   }
@@ -711,6 +735,12 @@
       else { text = 'list failed — ' + noteFrom(failText, 'bad').text; bad = true; }
     }
     else text = sum.finished_at ? 'list ' + sum.finished_at.slice(11, 16) : 'list not read';
+    // ACL-2650: число отклонённых объявлений — справка в той же строке, цвет не меняет (`data-tone` остаётся как есть).
+    if (!pending && !bad && sum.state && sum.state !== 'idle' && sum.rejected) {
+      var rj = sum.rejected;
+      if (rj.state === 'not_read') text += ' — ads not read';
+      else if (rj.count > 0 || rj.state === 'partial') text += ' — ' + rj.count + ' rejected ad' + (rj.count === 1 ? '' : 's') + (rj.state === 'partial' ? ' (partial)' : '');
+    }
     if (S.holds && S.holds[account] && !pending && !bad) text += ' — ' + S.holds[account].reason + (S.holds[account].at ? ' since ' + new Date(S.holds[account].at * 1000).toLocaleDateString() : '');
     if (h.snap) { h.snap.textContent = text; h.snap.title = row.error || att && att.error || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
     if (h.readBtn) {
@@ -786,7 +816,7 @@
     var cols = visibleCols(), pin = effPin();
     scopeAccounts().forEach(function (a) {
       var rows = S.rows[a.account] || [], h = handles[a.account];
-      var vis = rows;
+      var vis = rejectedFirst(rows);
       if (!h) return;
       decorate(a.account, h);
       var open = !!S.acctOpen[a.account];
@@ -1080,6 +1110,8 @@
     if (ev.target && ev.target.closest && ev.target.closest('.hc-resize')) { setPin(PIN_DEFAULT, true); }
   };
   var onKey = function (ev) {
+    var sh = ev.target && ev.target.closest ? ev.target.closest('th[data-sort="rejected"]') : null;
+    if (sh && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); S.rejFirst = !S.rejFirst; render(); return; }
     var h = ev.target && ev.target.closest ? ev.target.closest('.hc-resize') : null;
     if (!h) return;
     var step = ev.shiftKey ? 64 : 16, cur = effPin(), next = null;
@@ -1110,6 +1142,8 @@
       }
       return;
     }
+    var th = t.closest ? t.closest('th[data-sort="rejected"]') : null;
+    if (th) { S.rejFirst = !S.rejFirst; render(); return; }
     var cb = t.closest ? t.closest('button[data-action]') : null;
     if (cb) { if (!cb.disabled) onCommand(cb); return; }
     var b = t.closest ? t.closest('[data-exp],[data-retry],[data-details]') : null;
