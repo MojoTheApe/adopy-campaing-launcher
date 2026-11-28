@@ -203,29 +203,49 @@ def test_the_managers_build_shows_no_badge(monkeypatch):
     assert u.release_badge() == {"channel": "release"}
 
 
+def _join_refresh_threads():
+    """Фоновые потоки значка не должны переживать тест."""
+    import threading
+
+    for t in threading.enumerate():
+        if t.name == "acl-release-gap":
+            t.join(timeout=10)
+            assert not t.is_alive()
+
+
 def test_the_header_never_waits_for_the_network(repo, monkeypatch):
-    monkeypatch.setattr(u, "_badge_refresh", lambda: time.sleep(5))
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(u, "_badge_refresh", lambda: release.wait(10))
     started = time.monotonic()
     got = u.release_badge()
-    assert time.monotonic() - started < 2, "шапка ждала сеть"
+    waited = time.monotonic() - started
+    release.set()
+    _join_refresh_threads()
+    assert waited < 2, "шапка ждала сеть"
     assert got["channel"] == "source" and got["text"] == "release unknown"
 
 
 def test_the_first_call_after_start_refreshes_at_once(repo, monkeypatch):
     started = []
     monkeypatch.setattr(u, "_badge_refresh", lambda: started.append(1))
-    monkeypatch.setattr(u.time, "monotonic", lambda: 5.0)
+    assert u._badge_state["checked"] is None
     u.release_badge()
-    time.sleep(0.2)
+    _join_refresh_threads()
     assert started == [1]
 
 
 def test_a_second_call_while_fetching_does_not_start_another(repo, monkeypatch):
+    import threading
+
+    release = threading.Event()
     started = []
-    monkeypatch.setattr(u, "_badge_refresh", lambda: started.append(1))
+    monkeypatch.setattr(u, "_badge_refresh", lambda: (started.append(1), release.wait(10)))
     u.release_badge()
     u.release_badge()
-    time.sleep(0.2)
+    release.set()
+    _join_refresh_threads()
     assert started == [1]
 
 
